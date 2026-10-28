@@ -56,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav }) =>
                 Hotel RJ
               </span>
               <span className="text-[10px] tracking-[0.3em] text-sand-300/60 uppercase -mt-0.5">
-                Emerald Bay
+                Happy Place
               </span>
             </div>
           </a>
