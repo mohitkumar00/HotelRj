@@ -41,8 +41,9 @@
 }
 
 /* =========================================================================
-   LIGHT THEME OVERRIDES (Luxury Ivory, Travertine & Warm Sand)
+   LIGHT THEME OVERRIDES (Comprehensive WCAG AA High Contrast)
    ========================================================================= */
+
 html.light body {
   background-color: #faf8f5 !important;
   color: #1c1917 !important;
@@ -62,13 +63,25 @@ html.light .min-h-screen.bg-\[\#090a0c\] {
 
 /* Navbar in light mode */
 html.light header.bg-\[\#0a0c10\]\/90 {
-  background-color: rgba(255, 255, 255, 0.94) !important;
+  background-color: rgba(255, 255, 255, 0.95) !important;
   border-bottom-color: rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06) !important;
 }
 
-html.light header.bg-gradient-to-b {
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%) !important;
+html.light header.bg-\[\#0a0c10\]\/90 nav button {
+  color: #292524 !important;
+}
+
+html.light header.bg-\[\#0a0c10\]\/90 nav button:hover {
+  color: #92400e !important;
+}
+
+html.light header.bg-\[\#0a0c10\]\/90 a .text-sand-50 {
+  color: #18181b !important;
+}
+
+html.light header.bg-\[\#0a0c10\]\/90 a .text-sand-300\/60 {
+  color: #78716c !important;
 }
 
 /* Sections backgrounds */
@@ -78,11 +91,11 @@ html.light .bg-\[\#090a0c\] {
 
 html.light .bg-\[\#0c0e14\],
 html.light .bg-\[\#0b0d13\] {
-  background-color: #f3ede2 !important;
+  background-color: #f5efe6 !important;
 }
 
 html.light .bg-\[\#06070a\] {
-  background-color: #eae2d3 !important;
+  background-color: #ebe3d5 !important;
 }
 
 /* Cards & Surfaces */
@@ -90,56 +103,184 @@ html.light .bg-\[\#12141c\],
 html.light .bg-\[\#10121a\],
 html.light .bg-\[\#0e1017\] {
   background-color: #ffffff !important;
-  box-shadow: 0 10px 30px -5px rgba(30, 20, 10, 0.06);
+  border-color: #e7e0d3 !important;
+  box-shadow: 0 10px 30px -5px rgba(28, 25, 23, 0.08) !important;
 }
 
+/* Filter pills & secondary elements */
 html.light .bg-zinc-900,
 html.light .bg-zinc-900\/40,
 html.light .bg-zinc-900\/50,
 html.light .bg-zinc-900\/60,
 html.light .bg-zinc-900\/80,
 html.light .bg-zinc-950\/40 {
-  background-color: rgba(243, 237, 226, 0.85) !important;
+  background-color: #f5eee3 !important;
+  border-color: #ded6c8 !important;
 }
 
 html.light .bg-zinc-800,
 html.light .bg-zinc-800\/90 {
-  background-color: #e5dac9 !important;
+  background-color: #ebe2d3 !important;
 }
 
-html.light .bg-black\/60,
-html.light .bg-black\/40 {
-  background-color: rgba(240, 233, 220, 0.75) !important;
+/* =========================================================================
+   HIGH-CONTRAST TYPOGRAPHY IN LIGHT MODE
+   Targeting all text elements across cards, catalog, and sections
+   ========================================================================= */
+
+/* All headings, titles, and prices */
+html.light #suites h2,
+html.light #suites h3,
+html.light #suites .font-serif,
+html.light #suites [class*="text-white"],
+html.light #dining h2,
+html.light #dining h3,
+html.light #dining [class*="text-white"],
+html.light #location h2,
+html.light #location h4,
+html.light #location [class*="text-white"],
+html.light #reviews h2,
+html.light #reviews h3,
+html.light #reviews [class*="text-white"],
+html.light footer [class*="text-white"],
+html.light .glass-panel [class*="text-white"],
+html.light .glass-dropdown [class*="text-white"] {
+  color: #18181b !important;
 }
 
-/* Text overrides in light mode (excluding hero) */
-html.light #main-content section:not(:first-of-type) .text-white,
-html.light footer .text-white,
-html.light .glass-panel .text-white,
-html.light .glass-dropdown .text-white {
+/* Body copy, descriptions, specs, and amenity list items */
+html.light #suites [class*="text-sand-"],
+html.light #dining [class*="text-sand-"],
+html.light #location [class*="text-sand-"],
+html.light #reviews [class*="text-sand-"],
+html.light footer [class*="text-sand-"],
+html.light .glass-panel [class*="text-sand-"],
+html.light .glass-dropdown [class*="text-sand-"] {
+  color: #292524 !important;
+}
+
+/* Specifically for room card amenities, descriptions, and specs */
+html.light #suites ul li span,
+html.light #suites ul li,
+html.light #suites p,
+html.light #suites span.truncate,
+html.light #suites div[class*="text-sand-"] span {
+  color: #292524 !important;
+  font-weight: 500 !important;
+}
+
+/* Sub-labels like / night, uppercase tags, meta info */
+html.light #suites .text-\[11px\],
+html.light #suites .text-\[10px\],
+html.light #dining .text-\[11px\],
+html.light #dining .text-\[10px\],
+html.light #location .text-\[10px\],
+html.light #reviews .text-\[11px\],
+html.light #reviews .text-\[10px\],
+html.light footer .text-\[11px\],
+html.light footer .text-\[10px\] {
+  color: #57534e !important;
+}
+
+/* Collection badge (e.g. DELUXE COLLECTION) and gold accents */
+html.light #suites [class*="text-gold-400"],
+html.light #dining [class*="text-gold-400"],
+html.light #location [class*="text-gold-400"],
+html.light #reviews [class*="text-gold-400"] {
+  color: #92400e !important;
+  font-weight: 600 !important;
+}
+
+html.light #suites [class*="text-gold-300"],
+html.light #suites [class*="text-gold-200"],
+html.light #dining [class*="text-gold-300"] {
+  color: #a16207 !important;
+}
+
+/* Filter buttons in Suites catalog */
+html.light #suites .no-scrollbar button:not(.bg-gradient-to-r) {
+  background-color: #ebe3d5 !important;
+  color: #44403c !important;
+  border-color: #d6ccba !important;
+}
+
+html.light #suites .no-scrollbar button:not(.bg-gradient-to-r):hover {
+  background-color: #dfd5c4 !important;
   color: #1c1917 !important;
 }
 
-html.light #main-content section:not(:first-of-type) .text-sand-100,
-html.light #main-content section:not(:first-of-type) .text-sand-200,
-html.light footer .text-sand-100,
-html.light footer .text-sand-200 {
-  color: #2e2823 !important;
+/* Sort dropdown */
+html.light #sort-by-select {
+  background-color: #ffffff !important;
+  color: #1c1917 !important;
+  border-color: #d6ccba !important;
 }
 
-html.light #main-content section:not(:first-of-type) .text-sand-300,
-html.light #main-content section:not(:first-of-type) .text-sand-400,
-html.light footer .text-sand-300,
-html.light footer .text-sand-400 {
-  color: #5c5248 !important;
+/* "Residency Details" secondary button on Room Card */
+html.light #suites .group button.bg-white\/5,
+html.light #suites .group button[class*="bg-white\/5"] {
+  background-color: #f5eee3 !important;
+  color: #1c1917 !important;
+  border-color: #d6ccba !important;
 }
 
-html.light #main-content section:not(:first-of-type) .text-gold-200 {
-  color: #8c5b24 !important;
+html.light #suites .group button.bg-white\/5:hover,
+html.light #suites .group button[class*="bg-white\/5"]:hover {
+  background-color: #ebe2d3 !important;
+  color: #000000 !important;
 }
 
-html.light #main-content section:not(:first-of-type) .text-gold-300 {
-  color: #996225 !important;
+/* Dialog / Modal when opened */
+html.light .fixed [class*="bg-\[\#10121a\]"] {
+  background-color: #ffffff !important;
+  border-color: #e7e0d3 !important;
+}
+
+html.light .fixed [class*="bg-\[\#10121a\]"] h2,
+html.light .fixed [class*="bg-\[\#10121a\]"] h3,
+html.light .fixed [class*="bg-\[\#10121a\]"] p,
+html.light .fixed [class*="bg-\[\#10121a\]"] span,
+html.light .fixed [class*="bg-\[\#10121a\]"] li {
+  color: #1c1917 !important;
+}
+
+html.light .fixed [class*="bg-\[\#10121a\]"] .bg-zinc-900\/60 {
+  background-color: #f7f3ec !important;
+  border-color: #ded6c8 !important;
+}
+
+/* Reservation Drawer when opened */
+html.light .fixed [class*="bg-\[\#0e1017\]"] {
+  background-color: #ffffff !important;
+  color: #1c1917 !important;
+}
+
+html.light .fixed [class*="bg-\[\#0e1017\]"] h2,
+html.light .fixed [class*="bg-\[\#0e1017\]"] p,
+html.light .fixed [class*="bg-\[\#0e1017\]"] label,
+html.light .fixed [class*="bg-\[\#0e1017\]"] span {
+  color: #1c1917 !important;
+}
+
+html.light .fixed [class*="bg-\[\#0e1017\]"] .text-sand-400 {
+  color: #57534e !important;
+}
+
+html.light .fixed [class*="bg-\[\#0e1017\]"] .bg-black\/60 {
+  background-color: #f7f3ec !important;
+  border-color: #ded6c8 !important;
+}
+
+html.light .fixed [class*="bg-\[\#0e1017\]"] .bg-zinc-900\/50,
+html.light .fixed [class*="bg-\[\#0e1017\]"] .bg-zinc-900\/60,
+html.light .fixed [class*="bg-\[\#0e1017\]"] .bg-zinc-900\/80 {
+  background-color: #fbf8f3 !important;
+  border-color: #ded6c8 !important;
+}
+
+html.light .fixed [class*="bg-\[\#0e1017\]"] .bg-zinc-800\/90 {
+  background-color: #f2e9db !important;
+  border-color: #c58a38 !important;
 }
 
 /* Borders in light mode */
@@ -147,23 +288,23 @@ html.light .border-white\/5,
 html.light .border-white\/10,
 html.light .border-white\/15,
 html.light .border-white\/20 {
-  border-color: rgba(140, 100, 60, 0.14) !important;
+  border-color: #e5dccf !important;
 }
 
 /* Glassmorphism in light mode */
 html.light .glass-panel {
-  background: rgba(255, 255, 255, 0.94) !important;
-  border-color: rgba(160, 120, 70, 0.18) !important;
-  box-shadow: 0 20px 45px -10px rgba(50, 30, 10, 0.08) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border-color: #ded6c8 !important;
+  box-shadow: 0 20px 45px -10px rgba(50, 30, 10, 0.1) !important;
 }
 
 html.light .glass-dropdown {
-  background: rgba(255, 255, 255, 0.98) !important;
-  border-color: rgba(160, 120, 70, 0.22) !important;
-  box-shadow: 0 20px 50px -10px rgba(50, 30, 10, 0.15) !important;
+  background: rgba(255, 255, 255, 0.99) !important;
+  border-color: #ded6c8 !important;
+  box-shadow: 0 20px 50px -10px rgba(50, 30, 10, 0.18) !important;
 }
 
-/* Inputs in light mode */
+/* Form inputs in light mode */
 html.light input[type="date"],
 html.light input[type="text"],
 html.light input[type="email"],
@@ -171,7 +312,23 @@ html.light input[type="tel"],
 html.light textarea,
 html.light select {
   color-scheme: light !important;
-  color: #1c1917 !important;
-  background-color: #f7f3ec !important;
-  border-color: rgba(140, 100, 60, 0.2) !important;
+  color: #18181b !important;
+  background-color: #fbf9f5 !important;
+  border-color: #d6ccba !important;
+}
+
+/* Important: In Hero & Bento Cards with dark photo background, preserve white contrast */
+html.light #main-content section:first-of-type h1,
+html.light #main-content section:first-of-type p,
+html.light #main-content section:first-of-type span,
+html.light #main-content section:first-of-type .text-white,
+html.light #amenities .group h3,
+html.light #amenities .group p,
+html.light #amenities .group span {
+  color: #ffffff !important;
+}
+
+html.light #amenities .group span.text-gold-300,
+html.light #amenities .group div.text-gold-300 {
+  color: #dfbc7d !important;
 }
