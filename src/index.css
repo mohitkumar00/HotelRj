@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-[#090a0c] text-[#fbf9f5] font-sans antialiased overflow-x-hidden;
+    @apply bg-[#090a0c] text-[#fbf9f5] font-sans antialiased overflow-x-hidden transition-colors duration-300;
   }
 }
 
@@ -38,4 +38,140 @@
   background: rgba(14, 16, 22, 0.94);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* =========================================================================
+   LIGHT THEME OVERRIDES (Luxury Ivory, Travertine & Warm Sand)
+   ========================================================================= */
+html.light body {
+  background-color: #faf8f5 !important;
+  color: #1c1917 !important;
+}
+
+html.light ::-webkit-scrollbar-track {
+  background: #faf8f5;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #d6cbba;
+}
+
+html.light .min-h-screen.bg-\[\#090a0c\] {
+  background-color: #faf8f5 !important;
+}
+
+/* Navbar in light mode */
+html.light header.bg-\[\#0a0c10\]\/90 {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light header.bg-gradient-to-b {
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%) !important;
+}
+
+/* Sections backgrounds */
+html.light .bg-\[\#090a0c\] {
+  background-color: #faf8f5 !important;
+}
+
+html.light .bg-\[\#0c0e14\],
+html.light .bg-\[\#0b0d13\] {
+  background-color: #f3ede2 !important;
+}
+
+html.light .bg-\[\#06070a\] {
+  background-color: #eae2d3 !important;
+}
+
+/* Cards & Surfaces */
+html.light .bg-\[\#12141c\],
+html.light .bg-\[\#10121a\],
+html.light .bg-\[\#0e1017\] {
+  background-color: #ffffff !important;
+  box-shadow: 0 10px 30px -5px rgba(30, 20, 10, 0.06);
+}
+
+html.light .bg-zinc-900,
+html.light .bg-zinc-900\/40,
+html.light .bg-zinc-900\/50,
+html.light .bg-zinc-900\/60,
+html.light .bg-zinc-900\/80,
+html.light .bg-zinc-950\/40 {
+  background-color: rgba(243, 237, 226, 0.85) !important;
+}
+
+html.light .bg-zinc-800,
+html.light .bg-zinc-800\/90 {
+  background-color: #e5dac9 !important;
+}
+
+html.light .bg-black\/60,
+html.light .bg-black\/40 {
+  background-color: rgba(240, 233, 220, 0.75) !important;
+}
+
+/* Text overrides in light mode (excluding hero) */
+html.light #main-content section:not(:first-of-type) .text-white,
+html.light footer .text-white,
+html.light .glass-panel .text-white,
+html.light .glass-dropdown .text-white {
+  color: #1c1917 !important;
+}
+
+html.light #main-content section:not(:first-of-type) .text-sand-100,
+html.light #main-content section:not(:first-of-type) .text-sand-200,
+html.light footer .text-sand-100,
+html.light footer .text-sand-200 {
+  color: #2e2823 !important;
+}
+
+html.light #main-content section:not(:first-of-type) .text-sand-300,
+html.light #main-content section:not(:first-of-type) .text-sand-400,
+html.light footer .text-sand-300,
+html.light footer .text-sand-400 {
+  color: #5c5248 !important;
+}
+
+html.light #main-content section:not(:first-of-type) .text-gold-200 {
+  color: #8c5b24 !important;
+}
+
+html.light #main-content section:not(:first-of-type) .text-gold-300 {
+  color: #996225 !important;
+}
+
+/* Borders in light mode */
+html.light .border-white\/5,
+html.light .border-white\/10,
+html.light .border-white\/15,
+html.light .border-white\/20 {
+  border-color: rgba(140, 100, 60, 0.14) !important;
+}
+
+/* Glassmorphism in light mode */
+html.light .glass-panel {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(160, 120, 70, 0.18) !important;
+  box-shadow: 0 20px 45px -10px rgba(50, 30, 10, 0.08) !important;
+}
+
+html.light .glass-dropdown {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(160, 120, 70, 0.22) !important;
+  box-shadow: 0 20px 50px -10px rgba(50, 30, 10, 0.15) !important;
+}
+
+/* Inputs in light mode */
+html.light input[type="date"],
+html.light input[type="text"],
+html.light input[type="email"],
+html.light input[type="tel"],
+html.light textarea,
+html.light select {
+  color-scheme: light !important;
+  color: #1c1917 !important;
+  background-color: #f7f3ec !important;
+  border-color: rgba(140, 100, 60, 0.2) !important;
 }

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Phone, Calendar, Sparkles } from 'lucide-react';
+import { Menu, X, Phone, Calendar, Sparkles, Sun, Moon } from 'lucide-react';
 import { HOTEL_INFO } from '../data/hotelData';
 
 interface NavbarProps {
   onOpenBooking: () => void;
   onSelectNav: (sectionId: string) => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, theme, onToggleTheme }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -75,7 +77,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav }) =>
           </nav>
 
           {/* Right Action Buttons */}
-          <div className="hidden sm:flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-3">
+            {/* Theme Toggle Button */}
+            <button
+              onClick={onToggleTheme}
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              className="w-9 h-9 rounded-full border border-white/15 hover:border-gold-400/50 bg-white/5 hover:bg-white/10 flex items-center justify-center text-sand-200 hover:text-gold-300 transition-all active:scale-90"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-gold-300 transition-transform hover:rotate-45" />
+              ) : (
+                <Moon className="w-4 h-4 text-gold-600 transition-transform -rotate-12" />
+              )}
+            </button>
+
             <a
               href={`tel:${HOTEL_INFO.phone}`}
               className="text-xs text-sand-300/80 hover:text-white flex items-center gap-2 transition-colors px-2 py-1"
@@ -96,6 +112,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav }) =>
 
           {/* Mobile Menu Hamburger */}
           <div className="flex items-center gap-2 lg:hidden">
+            {/* Mobile Theme Toggle */}
+            <button
+              onClick={onToggleTheme}
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              className="w-8 h-8 rounded-full border border-white/15 bg-white/5 flex items-center justify-center text-sand-200"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-3.5 h-3.5 text-gold-300" />
+              ) : (
+                <Moon className="w-3.5 h-3.5 text-gold-600" />
+              )}
+            </button>
+
             <button
               onClick={onOpenBooking}
               className="px-3 py-1.5 rounded-full text-[11px] font-semibold tracking-wider uppercase text-black bg-gold-400 hover:bg-gold-300 transition-colors flex items-center gap-1.5"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { BookingBar } from './components/BookingBar';
@@ -15,6 +15,23 @@ import { ROOMS } from './data/hotelData';
 import { Room, RoomTier, BookingDetails } from './types';
 
 export const App: React.FC = () => {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('hotel_theme') as 'dark' | 'light') || 'dark';
+  });
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+    localStorage.setItem('hotel_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedRoomModal, setSelectedRoomModal] = useState<Room | null>(null);
   const [selectedTier, setSelectedTier] = useState<RoomTier | 'all'>('all');
@@ -66,6 +83,8 @@ export const App: React.FC = () => {
       <Navbar
         onOpenBooking={() => setIsBookingOpen(true)}
         onSelectNav={handleNavigateSection}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content */}
