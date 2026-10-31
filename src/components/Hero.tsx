@@ -10,23 +10,22 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ onExploreSuites, onOpenBooking }) => {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-24 pb-16">
-      {/* Background Image with Cinematic Dark Gradient Overlays */}
+      {/* Real Front View Background with Cinematic Dark Gradient Overlays */}
       <div className="absolute inset-0 z-0">
         <img
-          src="https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=2200&q=85"
-          alt="Hotel RJ Hospitality & Luxury Rooms"
-          className="w-full h-full object-cover object-center scale-105 animate-pulse duration-1000"
-          style={{ animationDuration: '8s' }}
+          src="./images/hotel-rj-exterior-front.jpg"
+          alt="Hotel RJ Building Front View - Banquet Hall, Guest House & Restaurant"
+          className="w-full h-full object-cover object-[center_32%] scale-100"
         />
-        {/* Multi-layered cinematic gradient overlays */}
+        {/* Multi-layered cinematic gradient overlays ensuring high-contrast readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#090a0c] via-[#090a0c]/65 to-black/75" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-transparent to-black/65" />
+        <div className="absolute inset-0 bg-black/40" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gold-500/10 via-transparent to-transparent opacity-60" />
       </div>
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center">
         {/* Top Location Pill */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gold-400/30 bg-black/50 backdrop-blur-md mb-8 shadow-lg shadow-black/50">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gold-400/30 bg-black/60 backdrop-blur-md mb-8 shadow-lg shadow-black/50">
           <Sparkles className="w-3.5 h-3.5 text-gold-400" />
           <span className="text-[11px] font-medium tracking-[0.2em] uppercase text-sand-200">
             Welcome to Bagodar, Giridih • Jharkhand
