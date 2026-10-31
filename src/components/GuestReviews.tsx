@@ -10,10 +10,10 @@ export const GuestReviews: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto mb-16">
           <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-gold-400 mb-3">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Accolades & Testimonials</span>
+            <span>Guest Experiences</span>
           </div>
           <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-white font-medium">
-            Acclaimed by Guests & Design Critics
+            Loved by Travelers & Local Families
           </h2>
           <div className="mt-4 flex items-center justify-center gap-2">
             <div className="flex text-gold-400">
@@ -22,13 +22,17 @@ export const GuestReviews: React.FC = () => {
               ))}
             </div>
             <span className="text-xs text-sand-300 font-semibold font-mono ml-1">{HOTEL_INFO.rating} / 5.0</span>
-            <span className="text-xs text-sand-400">({HOTEL_INFO.reviewCount} Reviews)</span>
+            <span className="text-xs text-sand-400">({HOTEL_INFO.reviewCount} Verified Reviews)</span>
           </div>
         </div>
 
-        {/* Press Awards Ribbon */}
+        {/* Accolades Ribbon */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-          {HOTEL_INFO.awards.map((award, idx) => (
+          {[
+            'Top Rated Lodging in Bagodar',
+            'Fresh Multi-Cuisine Family Dining',
+            'Grand Banquet & Event Services',
+          ].map((highlight, idx) => (
             <div
               key={idx}
               className="p-5 rounded-2xl bg-zinc-900/40 border border-white/10 flex items-center gap-4 hover:border-gold-400/30 transition-colors"
@@ -36,7 +40,7 @@ export const GuestReviews: React.FC = () => {
               <div className="w-10 h-10 rounded-xl bg-gold-400/10 border border-gold-400/20 flex items-center justify-center text-gold-400 shrink-0">
                 <Award className="w-5 h-5" />
               </div>
-              <span className="font-serif text-sm text-sand-100 font-medium">{award}</span>
+              <span className="font-serif text-sm text-sand-100 font-medium">{highlight}</span>
             </div>
           ))}
         </div>

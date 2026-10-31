@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
 import { AMENITIES } from '../data/hotelData';
-import { Waves, Sparkles, Utensils, Compass, Dumbbell, ArrowUpRight } from 'lucide-react';
+import { Sparkles, Utensils, Compass, ShieldCheck, HeartPulse, ArrowUpRight } from 'lucide-react';
 
 export const AmenitiesBento: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState<'all' | 'wellness' | 'dining' | 'service' | 'leisure'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'comfort' | 'dining' | 'service' | 'events'>('all');
 
   const getIcon = (name: string) => {
     switch (name) {
-      case 'Waves':
-        return <Waves className="w-5 h-5 text-gold-300" />;
-      case 'Sparkles':
-        return <Sparkles className="w-5 h-5 text-gold-300" />;
       case 'Utensils':
         return <Utensils className="w-5 h-5 text-gold-300" />;
+      case 'Sparkles':
+        return <Sparkles className="w-5 h-5 text-gold-300" />;
+      case 'ShieldCheck':
+        return <ShieldCheck className="w-5 h-5 text-gold-300" />;
       case 'Compass':
         return <Compass className="w-5 h-5 text-gold-300" />;
-      case 'Dumbbell':
-        return <Dumbbell className="w-5 h-5 text-gold-300" />;
+      case 'HeartPulse':
+        return <HeartPulse className="w-5 h-5 text-rose-400" />;
       default:
         return <Sparkles className="w-5 h-5 text-gold-300" />;
     }
@@ -33,23 +33,23 @@ export const AmenitiesBento: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto mb-14">
           <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-gold-400 mb-3">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>The Guest Journey</span>
+            <span>Facilities & Features</span>
           </div>
           <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-white font-medium">
-            Amenities Designed for Complete Well-Being
+            Amenities Designed for Pure Comfort
           </h2>
           <p className="mt-4 text-sand-300/80 text-sm sm:text-base font-light">
-            Every facility at Hotel RJ is conceived as a tranquil sanctuary. From suspended ocean pools to private sound-bath meditation chambers.
+            Everything you need for a comfortable stay and memorable gathering in Bagodar — from our multi-cuisine restaurant to uninterrupted power and ample parking.
           </p>
 
           {/* Filter Chips */}
           <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
             {[
               { label: 'All Highlights', value: 'all' },
-              { label: 'Wellness & Spa', value: 'wellness' },
-              { label: 'Ocean Leisure', value: 'leisure' },
-              { label: 'Gastronomy', value: 'dining' },
-              { label: 'VIP Services', value: 'service' },
+              { label: 'Restaurant & Dining', value: 'dining' },
+              { label: 'Banquet & Events', value: 'events' },
+              { label: 'Power & Comfort', value: 'comfort' },
+              { label: 'Services & Security', value: 'service' },
             ].map((tab) => (
               <button
                 key={tab.value}
@@ -117,7 +117,7 @@ export const AmenitiesBento: React.FC = () => {
                   </p>
 
                   <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-1.5 text-xs font-semibold text-gold-300 uppercase tracking-wider group-hover:translate-x-1 transition-transform">
-                    <span>Explore Experience</span>
+                    <span>Learn More</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </div>
                 </div>

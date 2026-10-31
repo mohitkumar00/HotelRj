@@ -7,10 +7,9 @@ interface BookingBarProps {
 }
 
 export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
-  // Default to today + 2 days and today + 5 days
   const today = new Date();
-  const defaultCheckIn = new Date(today.setDate(today.getDate() + 7)).toISOString().split('T')[0];
-  const defaultCheckOut = new Date(today.setDate(today.getDate() + 3)).toISOString().split('T')[0];
+  const defaultCheckIn = new Date(today.setDate(today.getDate() + 1)).toISOString().split('T')[0];
+  const defaultCheckOut = new Date(today.setDate(today.getDate() + 2)).toISOString().split('T')[0];
 
   const [checkIn, setCheckIn] = useState(defaultCheckIn);
   const [checkOut, setCheckOut] = useState(defaultCheckOut);
@@ -69,9 +68,9 @@ export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
               <div className="flex items-center gap-3">
                 <Users className="w-4 h-4 text-gold-400 shrink-0" />
                 <div className="flex flex-col">
-                  <span className="text-[10px] uppercase tracking-wider text-sand-400 font-medium">Guests & Tier</span>
+                  <span className="text-[10px] uppercase tracking-wider text-sand-400 font-medium">Guests & Category</span>
                   <span className="text-xs sm:text-sm font-medium text-white">
-                    {guests} {guests === 1 ? 'Guest' : 'Guests'} • {tier === 'all' ? 'All Classes' : tier}
+                    {guests} {guests === 1 ? 'Guest' : 'Guests'} • {tier === 'all' ? 'All Rooms' : tier}
                   </span>
                 </div>
               </div>
@@ -104,7 +103,7 @@ export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
 
                 <div className="pt-3">
                   <label htmlFor="preferred-room-tier" className="text-[11px] uppercase tracking-wider text-sand-400 font-medium block mb-2">
-                    Preferred Collection
+                    Room Category
                   </label>
                   <select
                     id="preferred-room-tier"
@@ -112,11 +111,11 @@ export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
                     onChange={(e) => setTier(e.target.value as any)}
                     className="w-full bg-[#181a22] text-xs text-white p-2.5 rounded-lg border border-white/10 focus:outline-none focus:border-gold-400"
                   >
-                    <option value="all">All Suites & Villas</option>
-                    <option value="deluxe">Deluxe Rooms</option>
-                    <option value="suite">Horizon Suites</option>
-                    <option value="villa">Cliffside Villas</option>
-                    <option value="penthouse">The Sky Penthouse</option>
+                    <option value="all">All Rooms & Suites</option>
+                    <option value="suite">Executive AC Suite</option>
+                    <option value="deluxe">Deluxe AC Room</option>
+                    <option value="family">Family Luxury Suite</option>
+                    <option value="standard">Standard Comfort Room</option>
                   </select>
                 </div>
 
@@ -138,7 +137,7 @@ export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
               className="w-full py-3.5 px-6 rounded-xl md:rounded-full bg-gradient-to-r from-gold-400 to-gold-500 hover:from-gold-300 hover:to-gold-400 text-black font-semibold text-xs tracking-[0.18em] uppercase flex items-center justify-center gap-2 shadow-lg shadow-gold-500/25 active:scale-95 transition-all duration-200"
             >
               <Search className="w-4 h-4" />
-              <span>Check Rates</span>
+              <span>Check Tariff</span>
             </button>
           </div>
         </form>

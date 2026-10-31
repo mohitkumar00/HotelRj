@@ -20,11 +20,11 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
   const [sortBy, setSortBy] = useState<'recommended' | 'price-asc' | 'price-desc' | 'size'>('recommended');
 
   const filterTabs: { label: string; value: RoomTier | 'all' }[] = [
-    { label: 'All Residences', value: 'all' },
-    { label: 'The Penthouse', value: 'penthouse' },
-    { label: 'Cliffside Villas', value: 'villa' },
-    { label: 'Horizon Suites', value: 'suite' },
-    { label: 'Deluxe Rooms', value: 'deluxe' },
+    { label: 'All Rooms & Suites', value: 'all' },
+    { label: 'Executive Suites', value: 'suite' },
+    { label: 'Deluxe AC Rooms', value: 'deluxe' },
+    { label: 'Family Suites', value: 'family' },
+    { label: 'Standard Comfort', value: 'standard' },
   ];
 
   const filteredRooms = useMemo(() => {
@@ -49,13 +49,13 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
           <div>
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-gold-400 mb-3">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Residences & Sanctuaries</span>
+              <span>Accommodation & Lodging</span>
             </div>
             <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-white font-medium">
-              Curated Suites & Private Villas
+              Comfortable AC Rooms & Family Suites
             </h2>
             <p className="mt-3 text-sand-300/70 text-sm max-w-xl">
-              Each accommodation is individually designed with bespoke furnishings, tactile natural materials, and expansive glass portals framing the Pacific.
+              Equipped with modern air conditioning, 24/7 power backup, high-speed Wi-Fi, clean attached washrooms, and round-the-clock room service.
             </p>
           </div>
 
@@ -69,9 +69,9 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
               className="bg-zinc-900 text-xs text-white px-3.5 py-2 rounded-xl border border-white/10 focus:outline-none focus:border-gold-400"
             >
               <option value="recommended">Featured Order</option>
-              <option value="price-asc">Price: Low to High</option>
-              <option value="price-desc">Price: High to Low</option>
-              <option value="size">Residency Size (Sq Ft)</option>
+              <option value="price-asc">Tariff: Low to High</option>
+              <option value="price-desc">Tariff: High to Low</option>
+              <option value="size">Room Size (Sq Ft)</option>
             </select>
           </div>
         </div>
@@ -95,14 +95,13 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
 
         {/* Rooms Grid */}
         {filteredRooms.length === 0 ? (
-          /* Empty State */
           <div className="py-20 text-center rounded-3xl border border-dashed border-white/10 bg-zinc-950/40">
-            <p className="text-sand-300 text-base font-serif">No residences found matching this category.</p>
+            <p className="text-sand-300 text-base font-serif">No rooms found matching this category.</p>
             <button
               onClick={() => onSelectTier('all')}
               className="mt-4 px-6 py-2.5 rounded-full bg-gold-400 text-black text-xs font-semibold uppercase tracking-wider"
             >
-              Show All Suites
+              Show All Rooms
             </button>
           </div>
         ) : (
@@ -128,7 +127,7 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
                     </span>
                     {room.featured && (
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-gold-400 text-black shadow-md">
-                        Signature
+                        Popular Choice
                       </span>
                     )}
                   </div>
@@ -139,7 +138,7 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
                     className="absolute bottom-4 right-4 px-3.5 py-1.5 rounded-full bg-black/70 hover:bg-black text-sand-100 backdrop-blur-md text-xs font-medium border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1.5"
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    <span>Quick View</span>
+                    <span>Quick Details</span>
                   </button>
                 </div>
 
@@ -148,11 +147,11 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
                   <div>
                     <div className="flex items-baseline justify-between mb-2">
                       <span className="text-[10px] uppercase tracking-widest text-gold-400 font-semibold">
-                        {room.tier} collection
+                        {room.tier} category
                       </span>
                       <div className="text-right">
                         <span className="font-mono text-2xl font-bold text-white tracking-tight">
-                          ${room.pricePerNight.toLocaleString()}
+                          ₹{room.pricePerNight.toLocaleString()}
                         </span>
                         <span className="text-[11px] text-sand-400/80 ml-1">/ night</span>
                       </div>
@@ -177,7 +176,7 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5">
                         <Bed className="w-3.5 h-3.5 text-gold-400 shrink-0" />
-                        <span className="truncate">King</span>
+                        <span className="truncate">{room.bedType.split(' ')[0]}</span>
                       </div>
                     </div>
 
@@ -198,13 +197,13 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
                       onClick={() => onOpenRoomModal(room)}
                       className="flex-1 py-3 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider text-sand-200 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-colors text-center"
                     >
-                      Residency Details
+                      Room Details
                     </button>
                     <button
                       onClick={() => onReserveRoom(room)}
                       className="flex-1 py-3 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider text-black bg-gradient-to-r from-gold-300 to-gold-400 hover:from-gold-200 hover:to-gold-300 shadow-md shadow-gold-500/10 active:scale-95 transition-all text-center flex items-center justify-center gap-1.5"
                     >
-                      <span>Reserve</span>
+                      <span>Book Now</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>

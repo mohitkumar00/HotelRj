@@ -1,4 +1,4 @@
-export type RoomTier = 'deluxe' | 'suite' | 'villa' | 'penthouse';
+export type RoomTier = 'deluxe' | 'suite' | 'standard' | 'family';
 
 export interface Room {
   id: string;
@@ -22,10 +22,10 @@ export interface AmenityHighlight {
   title: string;
   subtitle: string;
   description: string;
-  category: 'wellness' | 'dining' | 'service' | 'leisure';
+  category: 'comfort' | 'dining' | 'service' | 'events';
   iconName: string;
   imageUrl: string;
-  colSpan?: string; // For bento grid layout
+  colSpan?: string;
   badge?: string;
 }
 

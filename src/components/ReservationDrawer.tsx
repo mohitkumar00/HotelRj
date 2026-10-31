@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Room, BookingDetails } from '../types';
-import { X, Users, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { X, Users, ShieldCheck, CheckCircle2, ArrowRight, Phone, MessageSquare } from 'lucide-react';
+import { HOTEL_INFO } from '../data/hotelData';
 
 interface ReservationDrawerProps {
   isOpen: boolean;
@@ -17,24 +18,21 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  // State
   const defaultCheckIn = initialBookingDetails?.checkIn || new Date().toISOString().split('T')[0];
   const [checkIn, setCheckIn] = useState(defaultCheckIn);
   
-  // Default checkout 3 days later
-  const nextDate = new Date(new Date(defaultCheckIn).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const nextDate = new Date(new Date(defaultCheckIn).getTime() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const [checkOut, setCheckOut] = useState(initialBookingDetails?.checkOut || nextDate);
   const [guests, setGuests] = useState(initialBookingDetails?.guests || 2);
 
-  // Selected room
   const [selectedRoomId, setSelectedRoomId] = useState<string>(
     initialBookingDetails?.selectedRoomId || rooms[0]?.id || ''
   );
 
   // Add-ons
-  const [addOnChauffeur, setAddOnChauffeur] = useState(false);
-  const [addOnDinner, setAddOnDinner] = useState(false);
-  const [addOnSpa, setAddOnSpa] = useState(false);
+  const [addOnTransfer, setAddOnTransfer] = useState(false);
+  const [addOnDinnerThali, setAddOnDinnerThali] = useState(false);
+  const [addOnExtraBed, setAddOnExtraBed] = useState(false);
 
   // Contact form
   const [guestName, setGuestName] = useState('');
@@ -58,12 +56,12 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
   }, [checkIn, checkOut]);
 
   const roomSubtotal = selectedRoom ? selectedRoom.pricePerNight * nights : 0;
-  const chauffeurFee = addOnChauffeur ? 180 : 0;
-  const dinnerFee = addOnDinner ? 320 : 0;
-  const spaFee = addOnSpa ? 140 : 0;
-  const addOnsTotal = chauffeurFee + dinnerFee + spaFee;
+  const transferFee = addOnTransfer ? 350 : 0;
+  const dinnerFee = addOnDinnerThali ? 450 : 0;
+  const extraBedFee = addOnExtraBed ? 300 : 0;
+  const addOnsTotal = transferFee + dinnerFee + extraBedFee;
 
-  const taxesAndFees = Math.round((roomSubtotal + addOnsTotal) * 0.14);
+  const taxesAndFees = Math.round((roomSubtotal + addOnsTotal) * 0.12);
   const grandTotal = roomSubtotal + addOnsTotal + taxesAndFees;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -81,16 +79,18 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/80 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
       <div className="relative w-full max-w-xl bg-[#0e1017] border-l border-white/10 h-full overflow-y-auto flex flex-col justify-between shadow-2xl p-6 sm:p-8">
-        {/* Header */}
         <div>
+          {/* Header */}
           <div className="flex items-center justify-between pb-6 border-b border-white/10">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full border border-gold-400/40 bg-gold-400/10 flex items-center justify-center text-gold-300 font-serif font-bold text-sm">
-                RJ
-              </div>
+            <div className="flex items-center gap-3">
+              <img
+                src="./icons/hotel-rj-emblem.png"
+                alt="Hotel RJ Emblem"
+                className="w-10 h-10 object-contain"
+              />
               <div>
-                <h2 className="font-serif text-lg font-semibold text-white">Direct Reservation</h2>
-                <p className="text-[10px] uppercase tracking-wider text-sand-400">Best Rate Guarantee • Direct Concierge Service</p>
+                <h2 className="font-serif text-lg font-semibold text-white">Direct Room Reservation</h2>
+                <p className="text-[10px] uppercase tracking-wider text-sand-400">Best Rate Guarantee • Instant Confirmation</p>
               </div>
             </div>
             <button
@@ -104,42 +104,63 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
 
           {isSubmitted ? (
             /* Success / Confirmation State */
-            <div className="py-16 text-center animate-in zoom-in-95 duration-200">
+            <div className="py-12 text-center animate-in zoom-in-95 duration-200">
               <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto mb-6">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <span className="text-xs uppercase tracking-widest text-gold-400 font-semibold block mb-2">
-                Reservation Confirmed
+                Booking Request Received
               </span>
-              <h3 className="font-serif text-3xl text-white font-medium">We Await Your Arrival</h3>
+              <h3 className="font-serif text-3xl text-white font-medium">We Look Forward to Welcoming You</h3>
               <p className="mt-3 text-xs sm:text-sm text-sand-300 max-w-md mx-auto leading-relaxed">
-                Thank you, <strong className="text-white">{guestName || 'Guest'}</strong>. A formal confirmation itinerary and concierge questionnaire have been dispatched to <strong className="text-white">{guestEmail || 'your email'}</strong>.
+                Thank you, <strong className="text-white">{guestName || 'Valued Guest'}</strong>. Our front desk has reserved your room request. We have recorded your mobile number <strong className="text-white">{guestPhone}</strong>.
               </p>
 
               {/* Confirmation Code Card */}
-              <div className="my-8 p-6 rounded-2xl bg-zinc-900 border border-white/10 max-w-sm mx-auto text-center">
-                <span className="text-[10px] uppercase tracking-widest text-sand-400 block mb-1">Confirmation Reference</span>
+              <div className="my-6 p-6 rounded-2xl bg-zinc-900 border border-white/10 max-w-sm mx-auto text-center">
+                <span className="text-[10px] uppercase tracking-widest text-sand-400 block mb-1">Booking Reference</span>
                 <span className="font-mono text-2xl font-bold text-gold-300 tracking-wider">{reservationCode}</span>
-                <div className="mt-3 pt-3 border-t border-white/5 text-xs text-sand-400">
-                  {nights} Nights • {selectedRoom?.name}
+                <div className="mt-3 pt-3 border-t border-white/5 text-xs text-sand-300 space-y-1">
+                  <p>{nights} Night(s) • {selectedRoom?.name}</p>
+                  <p className="font-semibold text-white">Estimated Amount: ₹{grandTotal.toLocaleString()}</p>
                 </div>
+              </div>
+
+              {/* Direct Call / WhatsApp Actions */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-sm mx-auto mb-6">
+                <a
+                  href={`tel:${HOTEL_INFO.phone}`}
+                  className="w-full sm:w-auto flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2"
+                >
+                  <Phone className="w-4 h-4 text-gold-400" />
+                  <span>Call Reception</span>
+                </a>
+                <a
+                  href={`https://wa.me/917004865824?text=Hello%20Hotel%20RJ,%20I%20have%20submitted%20booking%20reference%20${reservationCode}%20for%20${encodeURIComponent(guestName)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-2"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Confirm on WhatsApp</span>
+                </a>
               </div>
 
               <button
                 onClick={handleReset}
                 className="px-8 py-3 rounded-full bg-gold-400 text-black text-xs font-semibold uppercase tracking-wider shadow-lg hover:bg-gold-300 transition-colors"
               >
-                Return to Sanctuary
+                Return to Site
               </button>
             </div>
           ) : (
             /* Reservation Form */
             <form onSubmit={handleSubmit} className="py-6 space-y-6">
-              {/* Date & Guest Pickers */}
+              {/* Date Pickers */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-2xl bg-zinc-900/80 border border-white/10">
                   <label htmlFor="drawer-check-in" className="text-[10px] uppercase tracking-wider text-sand-400 font-medium block mb-1">
-                    Check-In
+                    Check-In Date
                   </label>
                   <input
                     id="drawer-check-in"
@@ -153,7 +174,7 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
 
                 <div className="p-3 rounded-2xl bg-zinc-900/80 border border-white/10">
                   <label htmlFor="drawer-check-out" className="text-[10px] uppercase tracking-wider text-sand-400 font-medium block mb-1">
-                    Check-Out
+                    Check-Out Date
                   </label>
                   <input
                     id="drawer-check-out"
@@ -173,7 +194,7 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
                   <Users className="w-4 h-4 text-gold-400" />
                   <div>
                     <p className="text-xs font-medium text-white">Number of Guests</p>
-                    <p className="text-[10px] text-sand-400">Adults and children</p>
+                    <p className="text-[10px] text-sand-400">Adults & Children</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -195,10 +216,10 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Residence Selection */}
+              {/* Room Selection */}
               <div>
                 <label className="text-[11px] uppercase tracking-wider text-sand-400 font-semibold block mb-3">
-                  Select Residence
+                  Select Room Type
                 </label>
                 <div className="space-y-2.5">
                   {rooms.map((room) => {
@@ -221,13 +242,13 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
                           />
                           <div>
                             <p className="text-xs font-semibold text-white">{room.name}</p>
-                            <p className="text-[10px] text-sand-400">{room.view} • {room.sizeSqFt} sq ft</p>
+                            <p className="text-[10px] text-sand-400">{room.bedType} • {room.sizeSqFt} sq ft</p>
                           </div>
                         </div>
 
                         <div className="text-right shrink-0">
                           <span className="font-mono text-xs font-bold text-gold-300">
-                            ${room.pricePerNight.toLocaleString()}
+                            ₹{room.pricePerNight.toLocaleString()}
                           </span>
                           <span className="text-[10px] text-sand-400 block">/ night</span>
                         </div>
@@ -237,49 +258,49 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Bespoke Add-Ons */}
+              {/* Helpful Add-Ons */}
               <div>
                 <label className="text-[11px] uppercase tracking-wider text-sand-400 font-semibold block mb-3">
-                  Enhance Your Stay (Optional)
+                  Additional Services (Optional)
                 </label>
                 <div className="space-y-2">
                   <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 border border-white/5 cursor-pointer hover:border-white/10">
                     <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
-                        checked={addOnChauffeur}
-                        onChange={(e) => setAddOnChauffeur(e.target.checked)}
+                        checked={addOnTransfer}
+                        onChange={(e) => setAddOnTransfer(e.target.checked)}
                         className="rounded border-white/20 text-gold-400 focus:ring-0 bg-zinc-800"
                       />
-                      <span className="text-xs text-sand-200">Private Airport Chauffeur Transfer (Roundtrip)</span>
+                      <span className="text-xs text-sand-200">Suriya Station / GT Road Pickup Assistance</span>
                     </div>
-                    <span className="font-mono text-xs text-gold-300">+$180</span>
+                    <span className="font-mono text-xs text-gold-300">+₹350</span>
                   </label>
 
                   <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 border border-white/5 cursor-pointer hover:border-white/10">
                     <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
-                        checked={addOnDinner}
-                        onChange={(e) => setAddOnDinner(e.target.checked)}
+                        checked={addOnDinnerThali}
+                        onChange={(e) => setAddOnDinnerThali(e.target.checked)}
                         className="rounded border-white/20 text-gold-400 focus:ring-0 bg-zinc-800"
                       />
-                      <span className="text-xs text-sand-200">Aura 8-Course Tasting Menu for Two</span>
+                      <span className="text-xs text-sand-200">Special Multi-Cuisine Family Dinner Thali</span>
                     </div>
-                    <span className="font-mono text-xs text-gold-300">+$320</span>
+                    <span className="font-mono text-xs text-gold-300">+₹450</span>
                   </label>
 
                   <label className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 border border-white/5 cursor-pointer hover:border-white/10">
                     <div className="flex items-center gap-2.5">
                       <input
                         type="checkbox"
-                        checked={addOnSpa}
-                        onChange={(e) => setAddOnSpa(e.target.checked)}
+                        checked={addOnExtraBed}
+                        onChange={(e) => setAddOnExtraBed(e.target.checked)}
                         className="rounded border-white/20 text-gold-400 focus:ring-0 bg-zinc-800"
                       />
-                      <span className="text-xs text-sand-200">Sōma Hydrothermal Spa Circuit Passes</span>
+                      <span className="text-xs text-sand-200">Extra Mattress / Bedding Set</span>
                     </div>
-                    <span className="font-mono text-xs text-gold-300">+$140</span>
+                    <span className="font-mono text-xs text-gold-300">+₹300</span>
                   </label>
                 </div>
               </div>
@@ -287,12 +308,12 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
               {/* Guest Details */}
               <div className="pt-4 border-t border-white/10 space-y-3">
                 <label className="text-[11px] uppercase tracking-wider text-sand-400 font-semibold block">
-                  Lead Guest Details
+                  Guest Contact Details
                 </label>
                 <div>
                   <input
                     type="text"
-                    placeholder="Full Legal Name"
+                    placeholder="Guest Full Name *"
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
                     required
@@ -301,26 +322,25 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <input
-                    type="email"
-                    placeholder="Email Address"
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
+                    type="tel"
+                    placeholder="Mobile Number (e.g. 7004865824) *"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
                     required
                     className="w-full bg-zinc-900 text-xs text-white p-3 rounded-xl border border-white/10 focus:outline-none focus:border-gold-400"
                   />
                   <input
-                    type="tel"
-                    placeholder="Mobile Phone"
-                    value={guestPhone}
-                    onChange={(e) => setGuestPhone(e.target.value)}
-                    required
+                    type="email"
+                    placeholder="Email Address"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
                     className="w-full bg-zinc-900 text-xs text-white p-3 rounded-xl border border-white/10 focus:outline-none focus:border-gold-400"
                   />
                 </div>
                 <div>
                   <textarea
                     rows={2}
-                    placeholder="Special requests, dietary preferences, or arrival notes"
+                    placeholder="Special requests, arrival time, or dietary preferences"
                     value={specialRequests}
                     onChange={(e) => setSpecialRequests(e.target.value)}
                     className="w-full bg-zinc-900 text-xs text-white p-3 rounded-xl border border-white/10 focus:outline-none focus:border-gold-400 resize-none"
@@ -331,25 +351,25 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
               {/* Price Breakdown Calculation Card */}
               <div className="p-4 rounded-2xl bg-black/60 border border-white/10 space-y-2 text-xs">
                 <div className="flex justify-between text-sand-300">
-                  <span>${selectedRoom?.pricePerNight.toLocaleString()} × {nights} {nights === 1 ? 'Night' : 'Nights'}</span>
-                  <span className="font-mono">${roomSubtotal.toLocaleString()}</span>
+                  <span>₹{selectedRoom?.pricePerNight.toLocaleString()} × {nights} {nights === 1 ? 'Night' : 'Nights'}</span>
+                  <span className="font-mono">₹{roomSubtotal.toLocaleString()}</span>
                 </div>
 
                 {addOnsTotal > 0 && (
                   <div className="flex justify-between text-sand-300">
-                    <span>Curated Add-ons</span>
-                    <span className="font-mono">+${addOnsTotal.toLocaleString()}</span>
+                    <span>Selected Add-ons</span>
+                    <span className="font-mono">+₹{addOnsTotal.toLocaleString()}</span>
                   </div>
                 )}
 
                 <div className="flex justify-between text-sand-400 text-[11px]">
-                  <span>Local Occupancy Taxes & Eco-Resort Fee (14%)</span>
-                  <span className="font-mono">${taxesAndFees.toLocaleString()}</span>
+                  <span>GST & Service Charges (12%)</span>
+                  <span className="font-mono">₹{taxesAndFees.toLocaleString()}</span>
                 </div>
 
                 <div className="pt-2 border-t border-white/10 flex justify-between items-baseline text-sm font-semibold text-white">
-                  <span>Estimated Total Stay</span>
-                  <span className="font-mono text-xl text-gold-300 font-bold">${grandTotal.toLocaleString()}</span>
+                  <span>Estimated Total Tariff</span>
+                  <span className="font-mono text-xl text-gold-300 font-bold">₹{grandTotal.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -358,13 +378,13 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
                 type="submit"
                 className="w-full py-4 rounded-full bg-gradient-to-r from-gold-300 via-gold-400 to-gold-500 hover:from-gold-200 hover:to-gold-300 text-black font-semibold text-xs tracking-[0.2em] uppercase shadow-xl shadow-gold-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
-                <span>Confirm Direct Reservation</span>
+                <span>Confirm Room Reservation</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center justify-center gap-2 text-[10px] text-sand-400/70 text-center">
+              <div className="flex items-center justify-center gap-2 text-[10px] text-sand-400/80 text-center">
                 <ShieldCheck className="w-3.5 h-3.5 text-gold-400" />
-                <span>Zero cancellation fees up to 48 hours before check-in.</span>
+                <span>Pay at Hotel Available • Free cancellation up to 24 hrs prior</span>
               </div>
             </form>
           )}

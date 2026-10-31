@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Phone, Calendar, Sparkles, Sun, Moon } from 'lucide-react';
+import { Menu, X, Phone, Calendar, Sparkles, Sun, Moon, MapPin } from 'lucide-react';
 import { HOTEL_INFO } from '../data/hotelData';
 
 interface NavbarProps {
@@ -12,6 +12,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, theme, onToggleTheme }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [phoneDropdownOpen, setPhoneDropdownOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,11 +23,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
   }, []);
 
   const navLinks = [
-    { label: 'Suites & Villas', id: 'suites' },
+    { label: 'Rooms & Suites', id: 'suites' },
+    { label: 'Restaurant & Dining', id: 'dining' },
+    { label: 'Banquet & Events', id: 'amenities' },
     { label: 'Amenities', id: 'amenities' },
-    { label: 'Dining & Lounge', id: 'dining' },
-    { label: 'Wellness & Spa', id: 'amenities' },
-    { label: 'Location', id: 'location' },
+    { label: 'Location & Guide', id: 'location' },
     { label: 'Reviews', id: 'reviews' },
   ];
 
@@ -39,8 +40,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
     <header
       className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
         scrolled
-          ? 'bg-[#0a0c10]/90 backdrop-blur-md border-b border-white/10 py-3.5 shadow-2xl'
-          : 'bg-gradient-to-b from-black/80 via-black/40 to-transparent py-5'
+          ? 'bg-[#0a0c10]/95 backdrop-blur-md border-b border-white/10 py-3 shadow-2xl'
+          : 'bg-gradient-to-b from-black/85 via-black/50 to-transparent py-4'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -48,28 +49,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
           {/* Logo / Brand */}
           <a
             href="#"
-            className="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 rounded-lg p-1"
+            className="flex items-center gap-2 group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 rounded-lg py-1"
           >
-            <div className="w-10 h-10 rounded-full border border-gold-400/40 bg-gradient-to-br from-gold-500/20 to-transparent flex items-center justify-center text-gold-300 font-serif font-bold text-lg tracking-wider group-hover:border-gold-300 transition-colors">
-              RJ
-            </div>
-            <div className="flex flex-col">
-              <span className="font-serif text-lg tracking-[0.25em] font-semibold text-sand-50 uppercase group-hover:text-gold-200 transition-colors">
-                Hotel RJ
-              </span>
-              <span className="text-[10px] tracking-[0.3em] text-sand-300/60 uppercase -mt-0.5">
-                Happy Place
-              </span>
-            </div>
+            <img
+              src={theme === 'dark' ? './images/hotel-rj-logo-white.png' : './images/hotel-rj-logo-gold.png'}
+              alt="Hotel RJ - Where Comfort Meets Great Taste"
+              className="h-10 sm:h-12 w-auto object-contain transition-all duration-200 group-hover:scale-105"
+            />
           </a>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center space-x-8" aria-label="Main Navigation">
+          <nav className="hidden lg:flex items-center space-x-7" aria-label="Main Navigation">
             {navLinks.map((link) => (
               <button
                 key={link.label}
                 onClick={() => handleLinkClick(link.id)}
-                className="text-xs uppercase tracking-[0.18em] text-sand-200/80 hover:text-gold-300 transition-colors duration-150 py-1 font-medium hover:scale-[1.02] focus:outline-none focus-visible:text-gold-300"
+                className="text-xs uppercase tracking-[0.16em] text-sand-200/85 hover:text-gold-300 transition-colors duration-150 py-1 font-medium hover:scale-[1.02] focus:outline-none focus-visible:text-gold-300"
               >
                 {link.label}
               </button>
@@ -92,25 +87,58 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
               )}
             </button>
 
-            <a
-              href={`tel:${HOTEL_INFO.phone}`}
-              className="text-xs text-sand-300/80 hover:text-white flex items-center gap-2 transition-colors px-2 py-1"
-              title="Call Concierge"
-            >
-              <Phone className="w-3.5 h-3.5 text-gold-400" />
-              <span className="hidden xl:inline text-[11px] tracking-wider">{HOTEL_INFO.phone}</span>
-            </a>
+            {/* Direct Phone Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setPhoneDropdownOpen(!phoneDropdownOpen)}
+                className="text-xs text-sand-300/90 hover:text-white flex items-center gap-2 transition-colors px-2.5 py-1.5 rounded-full hover:bg-white/5 border border-transparent hover:border-white/10"
+                title="Call Hotel RJ Reception"
+              >
+                <Phone className="w-3.5 h-3.5 text-gold-400" />
+                <span className="text-[11px] font-mono tracking-wider font-semibold">{HOTEL_INFO.phone}</span>
+              </button>
+
+              {phoneDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-56 p-3 glass-dropdown rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <span className="text-[10px] uppercase tracking-wider text-sand-400 block mb-2 px-1">
+                    Direct Contact Lines
+                  </span>
+                  <a
+                    href={`tel:${HOTEL_INFO.phone}`}
+                    className="flex items-center gap-2 p-2 rounded-xl hover:bg-white/10 text-xs font-mono font-medium text-white transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-gold-400" />
+                    <span>{HOTEL_INFO.phone}</span>
+                  </a>
+                  <a
+                    href={`tel:${HOTEL_INFO.secondaryPhone}`}
+                    className="flex items-center gap-2 p-2 rounded-xl hover:bg-white/10 text-xs font-mono font-medium text-white transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-gold-400" />
+                    <span>{HOTEL_INFO.secondaryPhone}</span>
+                  </a>
+                  <a
+                    href={`https://wa.me/917004865824?text=Hello%20Hotel%20RJ,%20I%20would%20like%20to%20inquire%20about%20room%20availability`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 pt-2 border-t border-white/10 flex items-center gap-2 p-2 rounded-xl hover:bg-emerald-500/20 text-xs font-medium text-emerald-400 transition-colors"
+                  >
+                    <span>💬 Chat on WhatsApp</span>
+                  </a>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={onOpenBooking}
-              className="relative inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase text-black bg-gradient-to-r from-gold-300 via-gold-400 to-gold-500 hover:from-gold-200 hover:to-gold-400 shadow-md shadow-gold-500/10 active:scale-95 transition-all duration-200"
+              className="relative inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-semibold tracking-wider uppercase text-black bg-gradient-to-r from-gold-300 via-gold-400 to-gold-500 hover:from-gold-200 hover:to-gold-400 shadow-md shadow-gold-500/10 active:scale-95 transition-all duration-200"
             >
               <Calendar className="w-3.5 h-3.5" />
-              <span>Reserve Stay</span>
+              <span>Book Room</span>
             </button>
           </div>
 
-          {/* Mobile Menu Hamburger */}
+          {/* Mobile Menu Controls */}
           <div className="flex items-center gap-2 lg:hidden">
             {/* Mobile Theme Toggle */}
             <button
@@ -132,6 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
               <Calendar className="w-3 h-3" />
               <span>Book</span>
             </button>
+
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded-lg text-sand-200 hover:text-white hover:bg-white/10 transition-colors focus:outline-none"
@@ -149,10 +178,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
           <div className="flex flex-col space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-white/5">
               <span className="text-xs tracking-widest uppercase text-gold-400 font-semibold flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> Experience Hotel RJ
+                <Sparkles className="w-3.5 h-3.5" /> Where Comfort Meets Great Taste
               </span>
-              <span className="text-xs text-sand-400">{HOTEL_INFO.location}</span>
             </div>
+
+            <div className="flex items-center gap-2 text-xs text-sand-400">
+              <MapPin className="w-3.5 h-3.5 text-gold-400 shrink-0" />
+              <span>Suriya Road, Bagodar (Giridih)</span>
+            </div>
+
             {navLinks.map((link) => (
               <button
                 key={link.label}
@@ -162,20 +196,41 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
                 {link.label}
               </button>
             ))}
-            <div className="pt-2 flex flex-col gap-3">
+
+            <div className="pt-2 flex flex-col gap-2.5">
+              <span className="text-[10px] uppercase tracking-wider text-sand-400 font-medium">Contact Numbers</span>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={`tel:${HOTEL_INFO.phone}`}
+                  className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-mono font-semibold text-white flex items-center justify-center gap-1.5"
+                >
+                  <Phone className="w-3.5 h-3.5 text-gold-400" />
+                  <span>{HOTEL_INFO.phone}</span>
+                </a>
+                <a
+                  href={`tel:${HOTEL_INFO.secondaryPhone}`}
+                  className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-mono font-semibold text-white flex items-center justify-center gap-1.5"
+                >
+                  <Phone className="w-3.5 h-3.5 text-gold-400" />
+                  <span>{HOTEL_INFO.secondaryPhone}</span>
+                </a>
+              </div>
+
               <a
-                href={`tel:${HOTEL_INFO.phone}`}
-                className="text-xs text-sand-300 flex items-center gap-2 py-2"
+                href={`https://wa.me/917004865824?text=Hello%20Hotel%20RJ,%20I%20would%20like%20to%20inquire%20about%20booking`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2.5 rounded-xl bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-medium text-xs tracking-wider uppercase flex items-center justify-center gap-2"
               >
-                <Phone className="w-4 h-4 text-gold-400" />
-                <span>Direct Concierge: {HOTEL_INFO.phone}</span>
+                <span>WhatsApp Instant Inquiry</span>
               </a>
+
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
                   onOpenBooking();
                 }}
-                className="w-full py-3 rounded-xl bg-gold-400 text-black font-semibold text-xs tracking-widest uppercase flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-transform"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-gold-300 to-gold-400 text-black font-semibold text-xs tracking-widest uppercase flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-transform"
               >
                 <Calendar className="w-4 h-4" />
                 Check Rates & Availability

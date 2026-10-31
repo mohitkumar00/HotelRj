@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DINING_VENUES } from '../data/hotelData';
-import { Clock, Sparkles, Check, Calendar } from 'lucide-react';
+import { Clock, Sparkles, Check, Calendar, Phone } from 'lucide-react';
+import { HOTEL_INFO } from '../data/hotelData';
 
 export const DiningSection: React.FC = () => {
   const [activeVenueId, setActiveVenueId] = useState(DINING_VENUES[0].id);
@@ -20,13 +21,13 @@ export const DiningSection: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto mb-14">
           <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-gold-400 mb-3">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Gastronomic Artistry</span>
+            <span>Culinary Experience</span>
           </div>
           <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-white font-medium">
-            Culinary Craft Inspired by the Pacific
+            Where Comfort Meets Great Taste
           </h2>
           <p className="mt-4 text-sand-300/80 text-sm sm:text-base font-light">
-            Hyper-seasonal ingredients sourced from local fishermen, regenerative biodynamic estates, and our own cliffside botanical garden.
+            Indulge in freshly prepared Indian, Chinese, Tandoori, and local specialties in our hygienic, air-conditioned family restaurant or celebrate with royal banquet catering.
           </p>
 
           {/* Venue Tabs */}
@@ -58,7 +59,7 @@ export const DiningSection: React.FC = () => {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
             <div className="absolute bottom-6 left-6 right-6">
-              <span className="text-[10px] uppercase tracking-widest text-gold-400 font-semibold block">Atmosphere</span>
+              <span className="text-[10px] uppercase tracking-widest text-gold-400 font-semibold block">Quality & Taste</span>
               <p className="font-serif text-lg text-white font-light italic mt-1">{activeVenue.chefQuote}</p>
             </div>
           </div>
@@ -72,7 +73,7 @@ export const DiningSection: React.FC = () => {
                   <h3 className="font-serif text-3xl text-white font-medium mt-1">{activeVenue.name}</h3>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] uppercase tracking-wider text-sand-400 block">Dress Code</span>
+                  <span className="text-[10px] uppercase tracking-wider text-sand-400 block">Ambiance</span>
                   <span className="text-xs font-medium text-white">{activeVenue.dressCode}</span>
                 </div>
               </div>
@@ -89,7 +90,7 @@ export const DiningSection: React.FC = () => {
               {/* Signature Dishes */}
               <div className="mt-6 pt-6 border-t border-white/10">
                 <h4 className="text-xs uppercase tracking-widest text-sand-400 font-semibold mb-3">
-                  Signature Selections
+                  Signature Menu Highlights
                 </h4>
                 <div className="space-y-3">
                   {activeVenue.signatureDishes.map((dish, idx) => (
@@ -105,27 +106,36 @@ export const DiningSection: React.FC = () => {
               </div>
             </div>
 
-            {/* Reservation Button */}
+            {/* Table / Event Booking Actions */}
             <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
               <span className="text-[11px] text-sand-400">
-                Private dining salons & sommelier pairings available upon request.
+                Call for table reservations, home delivery, or party hall inquiries.
               </span>
-              <button
-                onClick={handleBookTable}
-                className="w-full sm:w-auto px-6 py-3 rounded-full bg-gold-400 hover:bg-gold-300 text-black text-xs font-semibold tracking-wider uppercase transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
-              >
-                {tableBooked ? (
-                  <>
-                    <Check className="w-4 h-4 text-black" />
-                    <span>Table Inquiry Sent!</span>
-                  </>
-                ) : (
-                  <>
-                    <Calendar className="w-4 h-4" />
-                    <span>Reserve a Table</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <a
+                  href={`tel:${HOTEL_INFO.phone}`}
+                  className="w-full sm:w-auto px-5 py-3 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Phone className="w-3.5 h-3.5 text-gold-400" />
+                  <span>Call Us</span>
+                </a>
+                <button
+                  onClick={handleBookTable}
+                  className="w-full sm:w-auto px-6 py-3 rounded-full bg-gold-400 hover:bg-gold-300 text-black text-xs font-semibold tracking-wider uppercase transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {tableBooked ? (
+                    <>
+                      <Check className="w-4 h-4 text-black" />
+                      <span>Table Inquiry Sent!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4" />
+                      <span>Reserve Table</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

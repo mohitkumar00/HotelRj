@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { HOTEL_INFO } from '../data/hotelData';
-import { Mail, Phone, MapPin, ChevronDown, Check } from 'lucide-react';
+import { Mail, Phone, MapPin, ChevronDown, Check, Navigation } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   const [emailSubscribed, setEmailSubscribed] = useState(false);
@@ -8,20 +8,20 @@ export const Footer: React.FC = () => {
 
   const faqs = [
     {
-      q: 'What are the check-in and check-out times?',
-      a: 'Check-in commences at 3:00 PM and check-out is at 12:00 PM. Early arrival and late departures can be coordinated with your private concierge subject to availability.',
+      q: 'What are the check-in and check-out timings?',
+      a: 'Standard check-in is from 12:00 PM and check-out is by 11:00 AM. Early check-in or late check-out can be accommodated based on room availability upon speaking with our front desk.',
     },
     {
-      q: 'How do airport and helipad transfers work?',
-      a: 'We offer complimentary luxury electric SUV transfers from Emerald Regional Airport. Helicopter charter landing clearances can be arranged directly with our flight liaison.',
+      q: 'How can I book the Banquet Hall for a wedding, birthday, or family event?',
+      a: 'Our AC Banquet Hall comfortably hosts 25 to 300+ guests. You can call us directly at 7004865824 or 7004153034 to view the venue and customize catering packages for your special occasion.',
     },
     {
-      q: 'Are children and pets permitted at Hotel RJ?',
-      a: 'We welcome guests of all ages. Small companion pets up to 25 lbs are welcome in designated Cliffside Villas with bespoke pet amenities.',
+      q: 'Is there safe parking and continuous power backup available?',
+      a: 'Yes, Hotel RJ provides ample on-premise secure parking with 24/7 CCTV surveillance and security staff. We also operate a heavy-duty silent generator ensuring 100% continuous power backup for ACs, elevators, and lights.',
     },
     {
-      q: 'What is the cancellation and deposit policy?',
-      a: 'Reservations may be modified or cancelled with full deposit refund up to 48 hours prior to arrival date.',
+      q: 'How far is Hotel RJ from Harihar Dham Temple and Parasnath?',
+      a: 'Harihar Dham is just 5 minutes (2.5 km) away on Suriya Road. Parasnath / Shri Sammed Shikharji is approximately 35 minutes (32 km) drive, making Hotel RJ a convenient stopover.',
     },
   ];
 
@@ -36,7 +36,7 @@ export const Footer: React.FC = () => {
         {/* FAQs Section */}
         <div className="mb-20 pb-16 border-b border-white/10 max-w-4xl mx-auto">
           <h3 className="font-serif text-2xl sm:text-3xl text-white text-center font-medium mb-10">
-            Frequently Inquired Questions
+            Frequently Asked Questions
           </h3>
           <div className="space-y-3">
             {faqs.map((faq, idx) => {
@@ -68,34 +68,37 @@ export const Footer: React.FC = () => {
           </div>
         </div>
 
-        {/* Newsletter & Brand */}
+        {/* Brand & Contact Info */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 pb-16 border-b border-white/10">
           {/* Brand Info */}
           <div className="md:col-span-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-9 h-9 rounded-full border border-gold-400/40 bg-gold-400/10 flex items-center justify-center text-gold-300 font-serif font-bold text-sm">
-                RJ
-              </div>
-              <span className="font-serif text-xl tracking-[0.2em] font-semibold text-white uppercase">
-                Hotel RJ
-              </span>
+              <img
+                src="./images/hotel-rj-logo-white.png"
+                alt="Hotel RJ Logo"
+                className="h-11 w-auto object-contain"
+              />
             </div>
             <p className="text-xs text-sand-400 leading-relaxed max-w-sm mb-6">
-              A private coastal sanctuary suspended above Emerald Bay. Honoring architectural purity, deep restoration, and world-class culinary craft.
+              Where Comfort Meets Great Taste. Offering premier AC accommodation, multi-cuisine family dining, and grand banquet facilities on Suriya Road, Bagodar (Giridih).
             </p>
 
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center gap-2 text-sand-300">
-                <MapPin className="w-3.5 h-3.5 text-gold-400 shrink-0" />
-                <span>{HOTEL_INFO.location}</span>
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-start gap-2.5 text-sand-300">
+                <MapPin className="w-4 h-4 text-gold-400 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{HOTEL_INFO.location}</span>
               </div>
-              <div className="flex items-center gap-2 text-sand-300">
-                <Phone className="w-3.5 h-3.5 text-gold-400 shrink-0" />
-                <span>{HOTEL_INFO.phone}</span>
+              <div className="flex items-center gap-2.5 text-sand-300">
+                <Phone className="w-4 h-4 text-gold-400 shrink-0" />
+                <div className="flex items-center gap-3 font-mono">
+                  <a href={`tel:${HOTEL_INFO.phone}`} className="hover:text-white transition-colors">{HOTEL_INFO.phone}</a>
+                  <span>•</span>
+                  <a href={`tel:${HOTEL_INFO.secondaryPhone}`} className="hover:text-white transition-colors">{HOTEL_INFO.secondaryPhone}</a>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sand-300">
-                <Mail className="w-3.5 h-3.5 text-gold-400 shrink-0" />
-                <span>{HOTEL_INFO.email}</span>
+              <div className="flex items-center gap-2.5 text-sand-300">
+                <Mail className="w-4 h-4 text-gold-400 shrink-0" />
+                <a href={`mailto:${HOTEL_INFO.email}`} className="hover:text-white transition-colors font-mono">{HOTEL_INFO.email}</a>
               </div>
             </div>
           </div>
@@ -106,28 +109,28 @@ export const Footer: React.FC = () => {
               Explore Hotel RJ
             </span>
             <ul className="space-y-2.5 text-xs">
-              <li><a href="#suites" className="hover:text-gold-300 transition-colors">Residences & Suites</a></li>
-              <li><a href="#amenities" className="hover:text-gold-300 transition-colors">Amenities & Pool</a></li>
-              <li><a href="#dining" className="hover:text-gold-300 transition-colors">Aura Fine Dining</a></li>
-              <li><a href="#amenities" className="hover:text-gold-300 transition-colors">Sōma Holistic Spa</a></li>
-              <li><a href="#location" className="hover:text-gold-300 transition-colors">Emerald Bay & Guide</a></li>
-              <li><a href="#reviews" className="hover:text-gold-300 transition-colors">Accreditations & Press</a></li>
+              <li><a href="#suites" className="hover:text-gold-300 transition-colors">AC Rooms & Suites</a></li>
+              <li><a href="#dining" className="hover:text-gold-300 transition-colors">Multi-Cuisine Restaurant</a></li>
+              <li><a href="#amenities" className="hover:text-gold-300 transition-colors">Banquet Hall & Events</a></li>
+              <li><a href="#amenities" className="hover:text-gold-300 transition-colors">24/7 Power Backup & Parking</a></li>
+              <li><a href="#location" className="hover:text-gold-300 transition-colors">Location & Landmarks</a></li>
+              <li><a href="#reviews" className="hover:text-gold-300 transition-colors">Guest Reviews</a></li>
             </ul>
           </div>
 
-          {/* Newsletter Box */}
+          {/* Newsletter / Direct Inquiry Box */}
           <div className="md:col-span-4">
             <span className="text-[11px] uppercase tracking-widest text-gold-400 font-semibold block mb-2">
-              Private Invitations
+              Stay Connected
             </span>
             <p className="text-xs text-sand-400 leading-relaxed mb-4">
-              Subscribe to receive exclusive access to seasonal residency releases, private winemaker dinners, and wellness retreats.
+              Reach out for festival offers, room packages, or banquet catering quotations for your upcoming events.
             </p>
 
             {emailSubscribed ? (
               <div className="p-3.5 rounded-xl bg-gold-400/10 border border-gold-400/30 flex items-center gap-2 text-xs text-gold-300">
                 <Check className="w-4 h-4 text-gold-400" />
-                <span>You have been added to our private guest registry.</span>
+                <span>Thank you! We will get in touch with you shortly.</span>
               </div>
             ) : (
               <form onSubmit={handleSubscribe} className="flex gap-2">
@@ -141,20 +144,41 @@ export const Footer: React.FC = () => {
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-gold-400 text-black text-xs font-semibold uppercase tracking-wider hover:bg-gold-300 transition-colors shrink-0"
                 >
-                  Join
+                  Send
                 </button>
               </form>
             )}
+
+            <div className="mt-4 pt-4 border-t border-white/5 flex items-center gap-3">
+              <a
+                href={HOTEL_INFO.mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-gold-400 hover:underline flex items-center gap-1"
+              >
+                <Navigation className="w-3 h-3" />
+                <span>Open in Google Maps</span>
+              </a>
+              <span className="text-sand-500">•</span>
+              <a
+                href="https://wa.me/917004865824"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-emerald-400 hover:underline"
+              >
+                WhatsApp Us
+              </a>
+            </div>
           </div>
         </div>
 
         {/* Bottom copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-[11px] text-sand-400/60 gap-4">
-          <p>© {new Date().getFullYear()} Hotel RJ Hospitality Group. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Hotel RJ, Bagodar. All rights reserved.</p>
           <div className="flex items-center space-x-6">
-            <a href="#" className="hover:text-sand-200 transition-colors">Privacy Notice</a>
-            <a href="#" className="hover:text-sand-200 transition-colors">Terms of Hospitality</a>
-            <a href="#" className="hover:text-sand-200 transition-colors">Accessibility Standards</a>
+            <a href="#" className="hover:text-sand-200 transition-colors">Privacy Policy</a>
+            <a href="#" className="hover:text-sand-200 transition-colors">Terms of Stay</a>
+            <a href={HOTEL_INFO.mapUrl} target="_blank" rel="noopener noreferrer" className="hover:text-sand-200 transition-colors">Suriya Road, Bagodar</a>
           </div>
         </div>
       </div>

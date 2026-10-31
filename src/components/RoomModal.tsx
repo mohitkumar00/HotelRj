@@ -78,7 +78,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }
           {/* Badges */}
           <div className="absolute top-4 left-4 flex items-center gap-2">
             <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-black/70 backdrop-blur-md text-gold-300 border border-white/10">
-              {room.tier} collection
+              {room.tier} category
             </span>
             <span className="px-3 py-1 rounded-full text-xs font-medium bg-black/50 backdrop-blur-md text-white border border-white/10">
               {room.view}
@@ -95,9 +95,9 @@ export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }
             </div>
             <div className="text-left md:text-right">
               <span className="font-mono text-3xl font-bold text-white tracking-tight">
-                ${room.pricePerNight.toLocaleString()}
+                ₹{room.pricePerNight.toLocaleString()}
               </span>
-              <span className="text-xs text-sand-400/80 ml-1.5">/ night (excl. taxes)</span>
+              <span className="text-xs text-sand-400/80 ml-1.5">/ night</span>
             </div>
           </div>
 
@@ -106,23 +106,23 @@ export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }
             <div className="p-3 rounded-2xl bg-zinc-900/60 border border-white/5">
               <div className="flex items-center gap-2 text-gold-400 text-xs mb-1">
                 <Maximize2 className="w-4 h-4" />
-                <span className="uppercase tracking-wider text-[10px]">Living Area</span>
+                <span className="uppercase tracking-wider text-[10px]">Room Area</span>
               </div>
-              <span className="font-mono text-sm font-semibold text-white">{room.sizeSqFt} sq ft / {Math.round(room.sizeSqFt * 0.0929)} m²</span>
+              <span className="font-mono text-sm font-semibold text-white">{room.sizeSqFt} sq ft</span>
             </div>
 
             <div className="p-3 rounded-2xl bg-zinc-900/60 border border-white/5">
               <div className="flex items-center gap-2 text-gold-400 text-xs mb-1">
                 <Users className="w-4 h-4" />
-                <span className="uppercase tracking-wider text-[10px]">Max Guests</span>
+                <span className="uppercase tracking-wider text-[10px]">Guest Capacity</span>
               </div>
-              <span className="font-mono text-sm font-semibold text-white">{room.maxGuests} Adults</span>
+              <span className="font-mono text-sm font-semibold text-white">Up to {room.maxGuests} Guests</span>
             </div>
 
             <div className="p-3 rounded-2xl bg-zinc-900/60 border border-white/5">
               <div className="flex items-center gap-2 text-gold-400 text-xs mb-1">
                 <Bed className="w-4 h-4" />
-                <span className="uppercase tracking-wider text-[10px]">Bedding</span>
+                <span className="uppercase tracking-wider text-[10px]">Bed Type</span>
               </div>
               <span className="font-mono text-sm font-semibold text-white">{room.bedType}</span>
             </div>
@@ -130,7 +130,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }
             <div className="p-3 rounded-2xl bg-zinc-900/60 border border-white/5">
               <div className="flex items-center gap-2 text-gold-400 text-xs mb-1">
                 <Sparkles className="w-4 h-4" />
-                <span className="uppercase tracking-wider text-[10px]">Floor / View</span>
+                <span className="uppercase tracking-wider text-[10px]">Orientation</span>
               </div>
               <span className="font-mono text-sm font-semibold text-white">{room.view}</span>
             </div>
@@ -138,20 +138,20 @@ export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }
 
           {/* Description */}
           <div className="py-6">
-            <h3 className="text-xs uppercase tracking-widest text-sand-400 font-semibold mb-2">Residency Architecture</h3>
+            <h3 className="text-xs uppercase tracking-widest text-sand-400 font-semibold mb-2">Room Overview</h3>
             <p className="text-sm text-sand-200/90 leading-relaxed font-light">{room.description}</p>
           </div>
 
           {/* All Amenities */}
           <div className="py-6 border-t border-white/10">
             <h3 className="text-xs uppercase tracking-widest text-sand-400 font-semibold mb-4">
-              Included In-Suite Amenities & Services
+              Included Amenities & Services
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {room.amenities.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-2.5 text-xs text-sand-200">
                   <div className="w-5 h-5 rounded-full bg-gold-400/10 border border-gold-400/30 flex items-center justify-center text-gold-400 shrink-0">
-                    <Check className="w-3 h-3" />
+                    <Check className="w-3 3-3" />
                   </div>
                   <span>{item}</span>
                 </div>
@@ -162,7 +162,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }
           {/* Footer CTAs */}
           <div className="pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
             <span className="text-xs text-sand-400">
-              Complimentary airport chauffeur & daily breakfast included with direct booking.
+              24/7 power backup, secure parking & prompt room service included.
             </span>
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <button
@@ -179,7 +179,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }
                 className="px-7 py-3 rounded-full text-xs font-semibold uppercase tracking-wider text-black bg-gradient-to-r from-gold-300 to-gold-400 hover:from-gold-200 hover:to-gold-300 shadow-lg shadow-gold-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
               >
                 <Calendar className="w-4 h-4" />
-                <span>Reserve Residence</span>
+                <span>Book This Room</span>
               </button>
             </div>
           </div>
