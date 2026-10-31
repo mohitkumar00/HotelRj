@@ -20,9 +20,10 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
   const [sortBy, setSortBy] = useState<'recommended' | 'price-asc' | 'price-desc' | 'size'>('recommended');
 
   const filterTabs: { label: string; value: RoomTier | 'all' }[] = [
-    { label: 'All Rooms (2)', value: 'all' },
-    { label: 'Deluxe King Room (₹1,600)', value: 'deluxe' },
-    { label: 'Executive Family Suite (₹3,000)', value: 'family' },
+    { label: 'All Rooms (3)', value: 'all' },
+    { label: 'Deluxe King (₹1,600)', value: 'deluxe' },
+    { label: 'Super Deluxe King (₹2,200)', value: 'executive' },
+    { label: 'Family Suite (₹3,000)', value: 'family' },
   ];
 
   const filteredRooms = useMemo(() => {
@@ -103,7 +104,7 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
             {filteredRooms.map((room) => (
               <div
                 key={room.id}

@@ -16,8 +16,8 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
       a: 'Standard check-in is from 12:00 PM and check-out is by 11:00 AM. Early check-in or late check-out can be accommodated based on room availability upon speaking with our front desk.',
     },
     {
-      q: 'What are the two room accommodation options?',
-      a: 'Hotel RJ provides two distinct room choices: (1) Deluxe King AC Room for 2 guests (120 sq ft, 1 King bed, ₹1,600 + GST), and (2) Executive Family Suite for up to 4 guests (400 sq ft, 2 double beds, sofa lounge, ₹3,000 + GST).',
+      q: 'What are the available room accommodation options?',
+      a: 'Hotel RJ provides three distinct room choices: (1) Deluxe King AC Room for 2 guests (120 sq ft, 1 King bed, ₹1,600 + GST), (2) Super Deluxe King Room for 2 guests (180 sq ft, 1 King bed with executive seating, ₹2,200 + GST), and (3) Executive Family Suite for up to 4 guests (400 sq ft, 2 double beds, 4-seater dining lounge, ₹3,000 + GST).',
     },
     {
       q: 'How can I book the Banquet Hall for a wedding, birthday, or family event?',
@@ -39,7 +39,7 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
   };
 
   return (
-    <footer className="bg-[#06070a] border-t border-white/10 pt-20 pb-12 text-sand-300">
+    <footer data-theme={theme} className="bg-[#06070a] border-t border-white/10 pt-20 pb-12 text-sand-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* FAQs Section */}
         <div className="mb-20 pb-16 border-b border-white/10 max-w-4xl mx-auto">
@@ -80,12 +80,22 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-12 pb-16 border-b border-white/10">
           {/* Brand Info */}
           <div className="md:col-span-5">
-            <div className="flex items-center gap-3 mb-4">
-              <img
-                src={theme === 'dark' ? './images/hotel-rj-logo-white.png' : './images/hotel-rj-logo-gold.png'}
-                alt="Hotel RJ Logo"
-                className="h-11 w-auto object-contain"
-              />
+            <div className="flex items-center gap-3 mb-4 select-none">
+              <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full overflow-hidden shrink-0 shadow-md ring-1 ring-gold-400/30">
+                <img
+                  src="./icons/hotel-rj-emblem.png"
+                  alt="Hotel RJ Emblem"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex flex-col text-left">
+                <span className="font-serif text-xl sm:text-2xl font-bold tracking-[0.16em] leading-none text-white">
+                  HOTEL RJ
+                </span>
+                <span className="text-[9.5px] sm:text-[10px] tracking-wide uppercase font-medium text-gold-400 mt-1 leading-none font-sans">
+                  Where Comfort Meets Great Taste
+                </span>
+              </div>
             </div>
             <p className="text-xs text-sand-400 leading-relaxed max-w-sm mb-6">
               Where Comfort Meets Great Taste. Offering premier AC accommodation, multi-cuisine family dining, and grand banquet facilities on Suriya Road, Bagodar (Giridih).

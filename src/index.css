@@ -77,6 +77,25 @@ html.light header nav button:hover {
   color: #92400e !important;
 }
 
+html.light header a .font-serif,
+html.light header a span.font-serif,
+html.light header a .text-white {
+  color: #18181b !important;
+}
+
+html.light header a span.text-gold-400 {
+  color: #92400e !important;
+}
+
+html.light footer .font-serif.text-white,
+html.light footer span.font-serif {
+  color: #18181b !important;
+}
+
+html.light footer span.text-gold-400 {
+  color: #92400e !important;
+}
+
 /* Sections backgrounds in light mode */
 html.light .bg-\[\#090a0c\] {
   background-color: #faf8f5 !important;

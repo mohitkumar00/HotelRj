@@ -1,4 +1,4 @@
-export type RoomTier = 'deluxe' | 'family';
+export type RoomTier = 'deluxe' | 'executive' | 'family';
 
 export interface Room {
   id: string;

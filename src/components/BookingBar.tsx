@@ -70,7 +70,14 @@ export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
                 <div className="flex flex-col">
                   <span className="text-[10px] uppercase tracking-wider text-sand-400 font-medium">Guests & Room Option</span>
                   <span className="text-xs sm:text-sm font-medium text-white">
-                    {guests} {guests === 1 ? 'Guest' : 'Guests'} • {tier === 'all' ? 'All Options' : tier === 'deluxe' ? 'King Bed (₹1600)' : 'Family Suite (₹3000)'}
+                    {guests} {guests === 1 ? 'Guest' : 'Guests'} •{' '}
+                    {tier === 'all'
+                      ? 'All Options'
+                      : tier === 'deluxe'
+                      ? 'Deluxe King (₹1600)'
+                      : tier === 'executive'
+                      ? 'Super Deluxe (₹2200)'
+                      : 'Family Suite (₹3000)'}
                   </span>
                 </div>
               </div>
@@ -111,8 +118,9 @@ export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
                     onChange={(e) => setTier(e.target.value as any)}
                     className="w-full bg-[#181a22] text-xs text-white p-2.5 rounded-lg border border-white/10 focus:outline-none focus:border-gold-400"
                   >
-                    <option value="all">Both Room Options</option>
+                    <option value="all">All Room Options (3)</option>
                     <option value="deluxe">Deluxe King Room (1 King Bed • 2 Guests • ₹1,600 + GST)</option>
+                    <option value="executive">Super Deluxe King (1 King Bed • 2 Guests • ₹2,200 + GST)</option>
                     <option value="family">Executive Family Suite (2 Beds • 4 Guests • ₹3,000 + GST)</option>
                   </select>
                 </div>

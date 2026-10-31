@@ -11,21 +11,22 @@ export const StoryPhilosophy: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
           {/* Left Column: Real Hotel Exterior Architecture Card */}
           <div className="lg:col-span-6 relative">
-            <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-zinc-950">
+            <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-zinc-950 aspect-[3/4] max-h-[640px] sm:max-h-[700px] mx-auto group">
               <img
                 src="./images/hotel-rj-exterior-front.jpg"
                 alt="Hotel RJ Building - Banquet Hall, Guest House & Restaurant in Bagodar"
-                className="w-full h-[500px] sm:h-[580px] object-cover object-center hover:scale-105 transition-transform duration-700"
+                className="w-full h-full object-cover object-top group-hover:scale-[1.02] transition-transform duration-700"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              {/* Subtle bottom gradient for card legibility, preserving full roofline & illuminated HOTEL RJ sign */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 via-30% to-transparent pointer-events-none" />
 
               {/* Floating Stat Overlay */}
-              <div className="absolute bottom-6 left-6 right-6 p-6 rounded-2xl bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-between">
+              <div className="absolute bottom-6 left-6 right-6 p-5 sm:p-6 rounded-2xl bg-black/70 backdrop-blur-md border border-white/10 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] uppercase tracking-widest text-gold-400 font-semibold block">Modern Architecture</span>
-                  <span className="font-serif text-lg font-medium text-white">Banquet Hall • Guest House • Restaurant</span>
+                  <span className="font-serif text-base sm:text-lg font-medium text-white">Banquet Hall • Guest House • Restaurant</span>
                 </div>
-                <div className="w-10 h-10 rounded-full border border-gold-400/40 flex items-center justify-center text-gold-400">
+                <div className="w-10 h-10 rounded-full border border-gold-400/40 flex items-center justify-center text-gold-400 shrink-0 ml-3">
                   <Compass className="w-5 h-5" />
                 </div>
               </div>

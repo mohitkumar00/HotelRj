@@ -46,16 +46,26 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
-          {/* Logo / Brand */}
+          {/* Logo / Brand - Vector Typography & Smooth Anti-Aliased Emblem (Zero Pixel Tearing) */}
           <a
             href="#"
-            className="flex items-center gap-2 group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 rounded-lg py-1"
+            className="flex items-center gap-2.5 sm:gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 rounded-xl py-1 select-none"
           >
-            <img
-              src={theme === 'dark' ? './images/hotel-rj-logo-white.png' : './images/hotel-rj-logo-gold.png'}
-              alt="Hotel RJ - Where Comfort Meets Great Taste"
-              className="h-10 sm:h-12 w-auto object-contain transition-all duration-200 group-hover:scale-105"
-            />
+            <div className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden shrink-0 shadow-md ring-1 ring-gold-400/30 group-hover:ring-gold-400/60 transition-all duration-200">
+              <img
+                src="./icons/hotel-rj-emblem.png"
+                alt="Hotel RJ Emblem"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex flex-col text-left">
+              <span className="font-serif text-lg sm:text-xl md:text-2xl font-bold tracking-[0.15em] leading-none text-white group-hover:text-gold-200 transition-colors">
+                HOTEL RJ
+              </span>
+              <span className="text-[8px] sm:text-[9.5px] md:text-[10px] tracking-wide uppercase font-medium text-gold-400 mt-1 leading-none font-sans">
+                Where Comfort Meets Great Taste
+              </span>
+            </div>
           </a>
 
           {/* Desktop Navigation Links */}
