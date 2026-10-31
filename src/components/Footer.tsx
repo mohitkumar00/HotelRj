@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { HOTEL_INFO } from '../data/hotelData';
 import { Mail, Phone, MapPin, ChevronDown, Check, Navigation } from 'lucide-react';
 
-export const Footer: React.FC = () => {
+interface FooterProps {
+  theme?: 'dark' | 'light';
+}
+
+export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
   const [emailSubscribed, setEmailSubscribed] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
@@ -10,6 +14,10 @@ export const Footer: React.FC = () => {
     {
       q: 'What are the check-in and check-out timings?',
       a: 'Standard check-in is from 12:00 PM and check-out is by 11:00 AM. Early check-in or late check-out can be accommodated based on room availability upon speaking with our front desk.',
+    },
+    {
+      q: 'What are the two room accommodation options?',
+      a: 'Hotel RJ provides two distinct room choices: (1) Deluxe King AC Room for 2 guests (120 sq ft, 1 King bed, ₹1,600 + GST), and (2) Executive Family Suite for up to 4 guests (400 sq ft, 2 double beds, sofa lounge, ₹3,000 + GST).',
     },
     {
       q: 'How can I book the Banquet Hall for a wedding, birthday, or family event?',
@@ -74,7 +82,7 @@ export const Footer: React.FC = () => {
           <div className="md:col-span-5">
             <div className="flex items-center gap-3 mb-4">
               <img
-                src="./images/hotel-rj-logo-white.png"
+                src={theme === 'dark' ? './images/hotel-rj-logo-white.png' : './images/hotel-rj-logo-gold.png'}
                 alt="Hotel RJ Logo"
                 className="h-11 w-auto object-contain"
               />
@@ -109,7 +117,8 @@ export const Footer: React.FC = () => {
               Explore Hotel RJ
             </span>
             <ul className="space-y-2.5 text-xs">
-              <li><a href="#suites" className="hover:text-gold-300 transition-colors">AC Rooms & Suites</a></li>
+              <li><a href="#suites" className="hover:text-gold-300 transition-colors">Deluxe King Room (₹1,600)</a></li>
+              <li><a href="#suites" className="hover:text-gold-300 transition-colors">Executive Family Suite (₹3,000)</a></li>
               <li><a href="#dining" className="hover:text-gold-300 transition-colors">Multi-Cuisine Restaurant</a></li>
               <li><a href="#amenities" className="hover:text-gold-300 transition-colors">Banquet Hall & Events</a></li>
               <li><a href="#amenities" className="hover:text-gold-300 transition-colors">24/7 Power Backup & Parking</a></li>

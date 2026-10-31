@@ -124,7 +124,7 @@ export const App: React.FC = () => {
       </main>
 
       {/* Footer & FAQs */}
-      <Footer />
+      <Footer theme={theme} />
 
       {/* Room Detail Modal */}
       <RoomModal

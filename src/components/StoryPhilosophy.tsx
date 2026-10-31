@@ -3,7 +3,7 @@ import { Sparkles, Compass, HeartPulse } from 'lucide-react';
 
 export const StoryPhilosophy: React.FC = () => {
   return (
-    <section className="py-24 sm:py-32 relative overflow-hidden bg-[#090a0c]">
+    <section id="about" className="py-24 sm:py-32 relative overflow-hidden bg-[#090a0c]">
       {/* Decorative ambient background glow */}
       <div className="absolute top-1/2 left-0 w-96 h-96 bg-gold-600/5 rounded-full blur-3xl -translate-y-1/2 pointer-events-none" />
 
@@ -13,7 +13,7 @@ export const StoryPhilosophy: React.FC = () => {
           <div className="lg:col-span-6 relative">
             <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
               <img
-                src="https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80"
+                src="./images/family-suite-room-1.jpg"
                 alt="Hotel RJ Rooms and Hospitality in Bagodar"
                 className="w-full h-[460px] sm:h-[520px] object-cover hover:scale-105 transition-transform duration-700"
               />

@@ -62,29 +62,22 @@ html.light .min-h-screen.bg-\[\#090a0c\] {
 }
 
 /* Navbar in light mode */
+html.light header.bg-\[\#0a0c10\]\/95,
 html.light header.bg-\[\#0a0c10\]\/90 {
-  background-color: rgba(255, 255, 255, 0.95) !important;
+  background-color: rgba(255, 255, 255, 0.96) !important;
   border-bottom-color: rgba(0, 0, 0, 0.08) !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.06) !important;
 }
 
-html.light header.bg-\[\#0a0c10\]\/90 nav button {
+html.light header nav button {
   color: #292524 !important;
 }
 
-html.light header.bg-\[\#0a0c10\]\/90 nav button:hover {
+html.light header nav button:hover {
   color: #92400e !important;
 }
 
-html.light header.bg-\[\#0a0c10\]\/90 a .text-sand-50 {
-  color: #18181b !important;
-}
-
-html.light header.bg-\[\#0a0c10\]\/90 a .text-sand-300\/60 {
-  color: #78716c !important;
-}
-
-/* Sections backgrounds */
+/* Sections backgrounds in light mode */
 html.light .bg-\[\#090a0c\] {
   background-color: #faf8f5 !important;
 }
@@ -98,7 +91,7 @@ html.light .bg-\[\#06070a\] {
   background-color: #ebe3d5 !important;
 }
 
-/* Cards & Surfaces */
+/* Cards & Surfaces in light mode */
 html.light .bg-\[\#12141c\],
 html.light .bg-\[\#10121a\],
 html.light .bg-\[\#0e1017\] {
@@ -124,17 +117,26 @@ html.light .bg-zinc-800\/90 {
 }
 
 /* =========================================================================
-   HIGH-CONTRAST TYPOGRAPHY IN LIGHT MODE
-   Targeting all text elements across cards, catalog, and sections
+   UNIVERSAL HIGH-CONTRAST TYPOGRAPHY IN LIGHT MODE
+   Covers About Hotel RJ, Facilities & Features, Suites, Dining, Location, Reviews & Footer
    ========================================================================= */
 
-/* All headings, titles, and prices */
+/* All headings across all sections */
+html.light #about h2,
+html.light #about h3,
+html.light #about .font-serif,
+html.light #about [class*="text-white"],
+html.light #amenities h2,
+html.light #amenities .font-serif,
+html.light #amenities > div > div:first-child h2,
+html.light #amenities [class*="text-white"]:not(.group *),
 html.light #suites h2,
 html.light #suites h3,
 html.light #suites .font-serif,
 html.light #suites [class*="text-white"],
 html.light #dining h2,
 html.light #dining h3,
+html.light #dining .font-serif,
 html.light #dining [class*="text-white"],
 html.light #location h2,
 html.light #location h4,
@@ -142,71 +144,128 @@ html.light #location [class*="text-white"],
 html.light #reviews h2,
 html.light #reviews h3,
 html.light #reviews [class*="text-white"],
+html.light footer h3,
 html.light footer [class*="text-white"],
 html.light .glass-panel [class*="text-white"],
 html.light .glass-dropdown [class*="text-white"] {
   color: #18181b !important;
 }
 
-/* Body copy, descriptions, specs, and amenity list items */
+/* All paragraphs, descriptions, subtext, and body copy */
+html.light #about p,
+html.light #about span:not(.text-gold-400):not(.text-gold-300),
+html.light #about [class*="text-sand-"],
+html.light #amenities > div > div:first-child p,
+html.light #amenities [class*="text-sand-"]:not(.group *),
+html.light #suites p,
+html.light #suites span.truncate,
 html.light #suites [class*="text-sand-"],
+html.light #dining p,
 html.light #dining [class*="text-sand-"],
+html.light #location p,
 html.light #location [class*="text-sand-"],
+html.light #reviews p,
 html.light #reviews [class*="text-sand-"],
+html.light footer,
+html.light footer p,
+html.light footer span:not(.text-gold-400):not(.text-emerald-400),
 html.light footer [class*="text-sand-"],
 html.light .glass-panel [class*="text-sand-"],
 html.light .glass-dropdown [class*="text-sand-"] {
   color: #292524 !important;
 }
 
-/* Specifically for room card amenities, descriptions, and specs */
-html.light #suites ul li span,
-html.light #suites ul li,
-html.light #suites p,
-html.light #suites span.truncate,
-html.light #suites div[class*="text-sand-"] span {
+/* Specifically for Explore Hotel RJ Links in Footer */
+html.light footer ul li a {
   color: #292524 !important;
   font-weight: 500 !important;
 }
 
-/* Sub-labels like / night, uppercase tags, meta info */
-html.light #suites .text-\[11px\],
-html.light #suites .text-\[10px\],
-html.light #dining .text-\[11px\],
-html.light #dining .text-\[10px\],
-html.light #location .text-\[10px\],
-html.light #reviews .text-\[11px\],
-html.light #reviews .text-\[10px\],
-html.light footer .text-\[11px\],
-html.light footer .text-\[10px\] {
-  color: #57534e !important;
+html.light footer ul li a:hover {
+  color: #92400e !important;
 }
 
-/* Collection badge (e.g. DELUXE COLLECTION) and gold accents */
+html.light footer a:not(.hover\:underline) {
+  color: #292524 !important;
+}
+
+html.light footer a:hover {
+  color: #92400e !important;
+}
+
+/* Section Tagline & Accents (e.g. Facilities & Features, About Hotel RJ) */
+html.light #about [class*="text-gold-400"],
+html.light #amenities [class*="text-gold-400"],
 html.light #suites [class*="text-gold-400"],
 html.light #dining [class*="text-gold-400"],
 html.light #location [class*="text-gold-400"],
-html.light #reviews [class*="text-gold-400"] {
+html.light #reviews [class*="text-gold-400"],
+html.light footer [class*="text-gold-400"] {
   color: #92400e !important;
   font-weight: 600 !important;
 }
 
+html.light #about [class*="text-gold-300"],
+html.light #amenities [class*="text-gold-300"],
 html.light #suites [class*="text-gold-300"],
-html.light #suites [class*="text-gold-200"],
 html.light #dining [class*="text-gold-300"] {
   color: #a16207 !important;
+}
+
+/* About Hotel RJ floating cards & stats */
+html.light #about .rounded-2xl.bg-black\/60 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #d6ccba !important;
+}
+
+html.light #about .rounded-2xl.bg-black\/60 span,
+html.light #about .rounded-2xl.bg-black\/60 p {
+  color: #18181b !important;
+}
+
+html.light #about .rounded-2xl.bg-zinc-900\/90 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-color: #d6ccba !important;
+}
+
+/* Facilities & Features Bento Grid */
+html.light #amenities .group h3 {
+  color: #ffffff !important;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+}
+
+html.light #amenities .group p {
+  color: #f5f5f4 !important;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+html.light #amenities .group span.text-gold-300,
+html.light #amenities .group div.text-gold-300 {
+  color: #dfbc7d !important;
+}
+
+/* Category filter buttons in Amenities */
+html.light #amenities button:not(.bg-gold-400) {
+  background-color: #ebe3d5 !important;
+  color: #292524 !important;
+  border-color: #d6ccba !important;
+}
+
+html.light #amenities button:not(.bg-gold-400):hover {
+  background-color: #dfd5c4 !important;
+  color: #000000 !important;
 }
 
 /* Filter buttons in Suites catalog */
 html.light #suites .no-scrollbar button:not(.bg-gradient-to-r) {
   background-color: #ebe3d5 !important;
-  color: #44403c !important;
+  color: #292524 !important;
   border-color: #d6ccba !important;
 }
 
 html.light #suites .no-scrollbar button:not(.bg-gradient-to-r):hover {
   background-color: #dfd5c4 !important;
-  color: #1c1917 !important;
+  color: #000000 !important;
 }
 
 /* Sort dropdown */
@@ -216,7 +275,7 @@ html.light #sort-by-select {
   border-color: #d6ccba !important;
 }
 
-/* "Residency Details" secondary button on Room Card */
+/* Room card secondary button */
 html.light #suites .group button.bg-white\/5,
 html.light #suites .group button[class*="bg-white\/5"] {
   background-color: #f5eee3 !important;
@@ -230,7 +289,7 @@ html.light #suites .group button[class*="bg-white\/5"]:hover {
   color: #000000 !important;
 }
 
-/* Dialog / Modal when opened */
+/* Room details modal */
 html.light .fixed [class*="bg-\[\#10121a\]"] {
   background-color: #ffffff !important;
   border-color: #e7e0d3 !important;
@@ -249,7 +308,7 @@ html.light .fixed [class*="bg-\[\#10121a\]"] .bg-zinc-900\/60 {
   border-color: #ded6c8 !important;
 }
 
-/* Reservation Drawer when opened */
+/* Reservation drawer */
 html.light .fixed [class*="bg-\[\#0e1017\]"] {
   background-color: #ffffff !important;
   color: #1c1917 !important;
@@ -317,18 +376,25 @@ html.light select {
   border-color: #d6ccba !important;
 }
 
-/* Important: In Hero & Bento Cards with dark photo background, preserve white contrast */
+/* FAQs in light mode */
+html.light footer .rounded-2xl.border {
+  background-color: #f7f3ec !important;
+  border-color: #d6ccba !important;
+}
+
+html.light footer button span {
+  color: #1c1917 !important;
+}
+
+html.light footer .border-t.border-white\/5 {
+  color: #44403c !important;
+  border-color: #e5dccf !important;
+}
+
+/* Hero Section text preservation in light mode */
 html.light #main-content section:first-of-type h1,
 html.light #main-content section:first-of-type p,
 html.light #main-content section:first-of-type span,
-html.light #main-content section:first-of-type .text-white,
-html.light #amenities .group h3,
-html.light #amenities .group p,
-html.light #amenities .group span {
+html.light #main-content section:first-of-type .text-white {
   color: #ffffff !important;
-}
-
-html.light #amenities .group span.text-gold-300,
-html.light #amenities .group div.text-gold-300 {
-  color: #dfbc7d !important;
 }
