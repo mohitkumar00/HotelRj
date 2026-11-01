@@ -165,7 +165,7 @@ export const AMENITIES: AmenityHighlight[] = [
     description: 'Peace of mind with immediate medical assistance available on call, conveniently located right next to Devi Durga Nursing Home on Suriya Road.',
     category: 'service',
     iconName: 'HeartPulse',
-    imageUrl: './images/hotel-rj-features-poster.jpg',
+    imageUrl: './images/doctor-healthcare-service.png',
     colSpan: 'md:col-span-1 md:row-span-1',
   },
 ];
