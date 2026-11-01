@@ -155,7 +155,7 @@ export const AMENITIES: AmenityHighlight[] = [
     description: 'Spacious on-site parking monitored 24/7 with CCTV surveillance and security staff, providing peace of mind for highway travelers and banquet guests.',
     category: 'service',
     iconName: 'Compass',
-    imageUrl: './images/hotel-rj-exterior-front.jpg',
+    imageUrl: './images/hotel-rj-parking.jpg',
     colSpan: 'md:col-span-1 md:row-span-1',
   },
   {
