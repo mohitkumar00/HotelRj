@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { MENU_CATEGORIES, TOTAL_MENU_ITEMS_COUNT } from '../data/menuData';
 import { DietaryType, MenuItem, CartItem } from '../types';
 import { HOTEL_INFO } from '../data/hotelData';
+import { generateOrderPdf } from '../utils/orderPdfGenerator';
 import {
   Search,
   X,
@@ -24,6 +25,7 @@ import {
   ChevronRight,
   Send,
   MessageCircle,
+  Download,
 } from 'lucide-react';
 
 interface DigitalMenuPageProps {
@@ -59,6 +61,8 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
   const [orderNote, setOrderNote] = useState<string>('');
   const [isWaiterMode, setIsWaiterMode] = useState<boolean>(false);
   const [copiedOrder, setCopiedOrder] = useState<boolean>(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const [pdfSuccess, setPdfSuccess] = useState<boolean>(false);
 
   // Scroll to top on mount
   useEffect(() => {
@@ -212,6 +216,30 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
     const encoded = encodeURIComponent(rawMsg);
     const phone = '917004865824';
     window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+  };
+
+  // Generate and download Kitchen Order Ticket (KOT) PDF
+  const handleGeneratePDF = async () => {
+    if (totalItemsCount === 0 || isGeneratingPdf) return;
+    try {
+      setIsGeneratingPdf(true);
+      await generateOrderPdf({
+        cart,
+        tableNumber,
+        orderNote,
+        totalItemsCount,
+        totalPrice,
+        hotelName: HOTEL_INFO.name,
+        phone: HOTEL_INFO.phone,
+        address: HOTEL_INFO.location,
+      });
+      setPdfSuccess(true);
+      setTimeout(() => setPdfSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   // FSSAI Dietary Standard Icon
@@ -924,16 +952,52 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
               ) : isWaiterMode ? (
                 /* WAITER QUICK-GLANCE RECEIPT MODE (High Contrast KOT ticket) */
                 <div className="p-4 sm:p-5 rounded-2xl bg-white text-black shadow-xl font-mono space-y-3 border-2 border-stone-300">
-                  <div className="text-center pb-2 border-b-2 border-dashed border-stone-400">
-                    <h4 className="font-serif font-black text-base tracking-wider uppercase">
-                      HOTEL RJ - KITCHEN ORDER
-                    </h4>
-                    <p className="text-[10px] text-stone-600 mt-0.5">
-                      Where Comfort Meets Great Taste • Suriya Road, Bagodar
-                    </p>
-                    <div className="mt-2 flex items-center justify-between text-xs font-bold pt-1 border-t border-stone-200">
-                      <span>TABLE: {tableNumber || 'WALK-IN'}</span>
-                      <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <div className="pb-2 border-b-2 border-dashed border-stone-400 space-y-2">
+                    {/* Top Action Bar in Waiter View with Table Badge & Small PDF Generator Button */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-sans font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                          Table: {tableNumber || 'Walk-In'}
+                        </span>
+                        <span className="text-[10px] text-stone-500 font-mono">
+                          {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      {/* Small Button to Generate PDF of Food Items */}
+                      <button
+                        type="button"
+                        onClick={handleGeneratePDF}
+                        disabled={isGeneratingPdf}
+                        className="px-2.5 py-1 rounded-lg bg-stone-900 hover:bg-black text-white text-[11px] font-sans font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all disabled:opacity-50"
+                        title="Generate and download PDF receipt of food items"
+                      >
+                        {pdfSuccess ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-300 font-bold">PDF Ready!</span>
+                          </>
+                        ) : isGeneratingPdf ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                            <span>Generating...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Generate PDF</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="text-center pt-1">
+                      <h4 className="font-serif font-black text-base tracking-wider uppercase">
+                        HOTEL RJ - KITCHEN ORDER
+                      </h4>
+                      <p className="text-[10px] text-stone-600 mt-0.5">
+                        Where Comfort Meets Great Taste • Suriya Road, Bagodar
+                      </p>
                     </div>
                   </div>
 
@@ -1070,14 +1134,41 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                     <span>WhatsApp Order</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleCopyOrder}
-                    className="w-full py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 active:scale-95 transition-all"
-                  >
-                    {copiedOrder ? <Check className="w-4 h-4 text-emerald-400" /> : <Send className="w-4 h-4 text-gold-400" />}
-                    <span>{copiedOrder ? 'Copied!' : 'Copy Summary'}</span>
-                  </button>
+                  {isWaiterMode ? (
+                    <button
+                      type="button"
+                      onClick={handleGeneratePDF}
+                      disabled={isGeneratingPdf}
+                      className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all disabled:opacity-50"
+                      title="Download PDF Kitchen Order Ticket"
+                    >
+                      {pdfSuccess ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-950" />
+                          <span className="font-bold">PDF Ready!</span>
+                        </>
+                      ) : isGeneratingPdf ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                          <span>Generating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 text-black" />
+                          <span>Download PDF</span>
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleCopyOrder}
+                      className="w-full py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 active:scale-95 transition-all"
+                    >
+                      {copiedOrder ? <Check className="w-4 h-4 text-emerald-400" /> : <Send className="w-4 h-4 text-gold-400" />}
+                      <span>{copiedOrder ? 'Copied!' : 'Copy Summary'}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between pt-1">
