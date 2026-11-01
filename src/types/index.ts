@@ -63,3 +63,22 @@ export interface BookingDetails {
   roomTier: RoomTier | 'all';
   selectedRoomId?: string;
 }
+
+export type DietaryType = 'veg' | 'non-veg' | 'egg';
+
+export interface MenuItem {
+  id: string;
+  name: string;
+  price: number | string;
+  dietary: DietaryType;
+  category: string;
+  popular?: boolean;
+}
+
+export interface MenuCategory {
+  id: string;
+  title: string;
+  description: string;
+  iconName: string;
+  items: MenuItem[];
+}

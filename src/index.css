@@ -157,6 +157,10 @@ html.light #dining h2,
 html.light #dining h3,
 html.light #dining .font-serif,
 html.light #dining [class*="text-white"],
+html.light #menu h2,
+html.light #menu h3,
+html.light #menu .font-serif,
+html.light #menu [class*="text-white"],
 html.light #location h2,
 html.light #location h4,
 html.light #location [class*="text-white"],
@@ -181,6 +185,9 @@ html.light #suites span.truncate,
 html.light #suites [class*="text-sand-"],
 html.light #dining p,
 html.light #dining [class*="text-sand-"],
+html.light #menu p,
+html.light #menu [class*="text-sand-"],
+html.light #menu span:not(.text-gold-400):not(.text-gold-300):not(.text-emerald-400):not(.text-rose-400):not(.text-amber-400),
 html.light #location p,
 html.light #location [class*="text-sand-"],
 html.light #reviews p,
@@ -416,4 +423,35 @@ html.light #main-content section:first-of-type p,
 html.light #main-content section:first-of-type span,
 html.light #main-content section:first-of-type .text-white {
   color: #ffffff !important;
+}
+
+/* Digital Food Menu in light mode */
+html.light #menu {
+  background-color: #faf8f5 !important;
+}
+
+html.light #menu input {
+  background-color: #ffffff !important;
+  color: #18181b !important;
+  border-color: #ded6c8 !important;
+}
+
+html.light #menu input::placeholder {
+  color: #78716c !important;
+}
+
+html.light #menu .bg-zinc-900\/60,
+html.light #menu .bg-zinc-900\/90 {
+  background-color: #ffffff !important;
+  border-color: #e5dec9 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light #menu .bg-zinc-900\/60:hover,
+html.light #menu .bg-zinc-800\/80 {
+  background-color: #f7f3eb !important;
+}
+
+html.light #menu .text-gold-300 {
+  color: #92400e !important;
 }

@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
 import { DINING_VENUES } from '../data/hotelData';
-import { Clock, Sparkles, Check, Calendar, Phone } from 'lucide-react';
+import { Clock, Sparkles, Phone, Utensils } from 'lucide-react';
 import { HOTEL_INFO } from '../data/hotelData';
 
-export const DiningSection: React.FC = () => {
+interface DiningSectionProps {
+  onOpenMenu?: () => void;
+}
+
+export const DiningSection: React.FC<DiningSectionProps> = ({ onOpenMenu }) => {
   const [activeVenueId, setActiveVenueId] = useState(DINING_VENUES[0].id);
-  const [tableBooked, setTableBooked] = useState(false);
 
   const activeVenue = DINING_VENUES.find((v) => v.id === activeVenueId) || DINING_VENUES[0];
-
-  const handleBookTable = () => {
-    setTableBooked(true);
-    setTimeout(() => setTableBooked(false), 4000);
-  };
 
   return (
     <section id="dining" className="py-24 sm:py-32 relative bg-[#0b0d13] border-t border-b border-white/5">
@@ -106,12 +104,20 @@ export const DiningSection: React.FC = () => {
               </div>
             </div>
 
-            {/* Table / Event Booking Actions */}
+            {/* Table / Event Booking Actions & Digital Food Menu CTA */}
             <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
               <span className="text-[11px] text-sand-400">
-                Call for table reservations, home delivery, or party hall inquiries.
+                Call for table reservations, catering, or browse our 270+ dish digital tariff card.
               </span>
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={onOpenMenu}
+                  className="w-full sm:w-auto px-5 py-3 rounded-full bg-gradient-to-r from-gold-400 to-gold-500 hover:from-gold-300 hover:to-gold-400 text-black text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
+                >
+                  <Utensils className="w-3.5 h-3.5" />
+                  <span>View Food Menu</span>
+                </button>
                 <a
                   href={`tel:${HOTEL_INFO.phone}`}
                   className="w-full sm:w-auto px-5 py-3 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-2 transition-colors"
@@ -119,22 +125,6 @@ export const DiningSection: React.FC = () => {
                   <Phone className="w-3.5 h-3.5 text-gold-400" />
                   <span>Call Us</span>
                 </a>
-                <button
-                  onClick={handleBookTable}
-                  className="w-full sm:w-auto px-6 py-3 rounded-full bg-gold-400 hover:bg-gold-300 text-black text-xs font-semibold tracking-wider uppercase transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
-                >
-                  {tableBooked ? (
-                    <>
-                      <Check className="w-4 h-4 text-black" />
-                      <span>Table Inquiry Sent!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Calendar className="w-4 h-4" />
-                      <span>Reserve Table</span>
-                    </>
-                  )}
-                </button>
               </div>
             </div>
           </div>

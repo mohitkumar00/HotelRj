@@ -24,6 +24,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
 
   const navLinks = [
     { label: 'Rooms & Suites', id: 'suites' },
+    { label: 'Food Menu', id: 'menu' },
     { label: 'Restaurant & Dining', id: 'dining' },
     { label: 'Banquet & Events', id: 'amenities' },
     { label: 'Amenities', id: 'amenities' },

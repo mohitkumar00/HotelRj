@@ -7,6 +7,7 @@ import { RoomsCatalog } from './components/RoomsCatalog';
 import { RoomModal } from './components/RoomModal';
 import { AmenitiesBento } from './components/AmenitiesBento';
 import { DiningSection } from './components/DiningSection';
+import { FoodMenuSection } from './components/FoodMenuSection';
 import { NeighborhoodGuide } from './components/NeighborhoodGuide';
 import { GuestReviews } from './components/GuestReviews';
 import { ReservationDrawer } from './components/ReservationDrawer';
@@ -27,6 +28,23 @@ export const App: React.FC = () => {
     }
     localStorage.setItem('hotel_theme', theme);
   }, [theme]);
+
+  // Handle URL hash changes (e.g. #menu when scanned via table QR code)
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setTimeout(() => {
+          const el = document.getElementById(hash);
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      }
+    };
+
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -114,7 +132,10 @@ export const App: React.FC = () => {
         <AmenitiesBento />
 
         {/* Michelin Dining & Lounge */}
-        <DiningSection />
+        <DiningSection onOpenMenu={() => handleNavigateSection('menu')} />
+
+        {/* Digital Food Menu & Table QR Code */}
+        <FoodMenuSection />
 
         {/* Destination & Concierge Neighborhood Guide */}
         <NeighborhoodGuide />
