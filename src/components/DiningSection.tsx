@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { DINING_VENUES } from '../data/hotelData';
 import { Clock, Sparkles, Phone, Utensils } from 'lucide-react';
 import { HOTEL_INFO } from '../data/hotelData';
+import { MenuQRCode } from './MenuQRCode';
 
 interface DiningSectionProps {
   onOpenMenu?: () => void;
@@ -116,7 +117,7 @@ export const DiningSection: React.FC<DiningSectionProps> = ({ onOpenMenu }) => {
                   className="w-full sm:w-auto px-5 py-3 rounded-full bg-gradient-to-r from-gold-400 to-gold-500 hover:from-gold-300 hover:to-gold-400 text-black text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
                 >
                   <Utensils className="w-3.5 h-3.5" />
-                  <span>View Food Menu</span>
+                  <span>Open Food Menu ↗</span>
                 </button>
                 <a
                   href={`tel:${HOTEL_INFO.phone}`}
@@ -127,6 +128,36 @@ export const DiningSection: React.FC<DiningSectionProps> = ({ onOpenMenu }) => {
                 </a>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Dedicated Digital Menu & Table QR Code Showcase */}
+        <div className="mt-12 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-zinc-900 via-zinc-950 to-zinc-900 border border-gold-400/30 flex flex-col md:flex-row items-center justify-between gap-8 shadow-xl">
+          <div className="max-w-xl text-center md:text-left">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold-400/10 text-gold-300 border border-gold-400/30 text-[10px] uppercase tracking-wider font-semibold mb-3">
+              <Sparkles className="w-3 h-3" />
+              <span>Dedicated Restaurant Digital Menu</span>
+            </div>
+            <h3 className="font-serif text-2xl sm:text-3xl text-white font-semibold">
+              Scan to Browse 270+ Dishes
+            </h3>
+            <p className="mt-2 text-xs sm:text-sm text-sand-300/80 leading-relaxed font-light">
+              Dining at our restaurant? Point your mobile phone camera at this QR code to open our interactive digital tariff card in a separate page with appetizing photos, live search, and veg/non-veg filters.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center md:justify-start gap-3">
+              <button
+                type="button"
+                onClick={onOpenMenu}
+                className="px-5 py-2.5 rounded-full bg-gradient-to-r from-gold-400 to-gold-500 text-black text-xs font-semibold uppercase tracking-wider shadow-md hover:from-gold-300 hover:to-gold-400 transition-all flex items-center gap-2"
+              >
+                <Utensils className="w-3.5 h-3.5" />
+                <span>Open Digital Menu (Separate Page) ↗</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            <MenuQRCode onOpenMenu={onOpenMenu} size={160} showDownload={true} />
           </div>
         </div>
       </div>

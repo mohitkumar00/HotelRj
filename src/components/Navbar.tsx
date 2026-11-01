@@ -5,11 +5,12 @@ import { HOTEL_INFO } from '../data/hotelData';
 interface NavbarProps {
   onOpenBooking: () => void;
   onSelectNav: (sectionId: string) => void;
+  onOpenMenu?: () => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, theme, onToggleTheme }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, onOpenMenu, theme, onToggleTheme }) => {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [phoneDropdownOpen, setPhoneDropdownOpen] = useState(false);
@@ -33,6 +34,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, them
   ];
 
   const handleLinkClick = (id: string) => {
+    if (id === 'menu') {
+      if (onOpenMenu) {
+        onOpenMenu();
+      } else {
+        const url = `${window.location.origin}${window.location.pathname.replace(/\/$/, '')}/?view=menu`;
+        window.open(url, '_blank');
+      }
+      setMobileMenuOpen(false);
+      return;
+    }
     onSelectNav(id);
     setMobileMenuOpen(false);
   };

@@ -7,17 +7,24 @@ import { RoomsCatalog } from './components/RoomsCatalog';
 import { RoomModal } from './components/RoomModal';
 import { AmenitiesBento } from './components/AmenitiesBento';
 import { DiningSection } from './components/DiningSection';
-import { FoodMenuSection } from './components/FoodMenuSection';
 import { NeighborhoodGuide } from './components/NeighborhoodGuide';
 import { GuestReviews } from './components/GuestReviews';
 import { ReservationDrawer } from './components/ReservationDrawer';
 import { Footer } from './components/Footer';
+import { DigitalMenuPage } from './pages/DigitalMenuPage';
 import { ROOMS } from './data/hotelData';
 import { Room, RoomTier, BookingDetails } from './types';
 
 export const App: React.FC = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('hotel_theme') as 'dark' | 'light') || 'dark';
+  });
+
+  // Track if current route is the standalone food menu page (?view=menu or #/menu)
+  const [isMenuView, setIsMenuView] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') === 'menu' || window.location.hash.includes('menu');
   });
 
   useEffect(() => {
@@ -29,25 +36,34 @@ export const App: React.FC = () => {
     localStorage.setItem('hotel_theme', theme);
   }, [theme]);
 
-  // Handle URL hash changes (e.g. #menu when scanned via table QR code)
+  // Synchronize route changes for standalone menu
   useEffect(() => {
-    const handleHash = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash) {
-        setTimeout(() => {
-          const el = document.getElementById(hash);
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-        }, 150);
-      }
+    const handleRouteChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      setIsMenuView(params.get('view') === 'menu' || window.location.hash.includes('menu'));
     };
 
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
+    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('hashchange', handleRouteChange);
+    return () => {
+      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('hashchange', handleRouteChange);
+    };
   }, []);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  const handleOpenMenu = () => {
+    const base = window.location.origin + window.location.pathname.replace(/\/$/, '');
+    window.open(`${base}/?view=menu`, '_blank');
+  };
+
+  const handleBackToHotel = () => {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.pushState({}, '', cleanUrl);
+    setIsMenuView(false);
   };
 
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -95,12 +111,24 @@ export const App: React.FC = () => {
     }
   };
 
+  // If user navigated directly to the menu page (or scanned the dining table QR)
+  if (isMenuView) {
+    return (
+      <DigitalMenuPage
+        onBackToHotel={handleBackToHotel}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#090a0c] text-sand-50 selection:bg-gold-500 selection:text-black">
       {/* Navigation */}
       <Navbar
         onOpenBooking={() => setIsBookingOpen(true)}
         onSelectNav={handleNavigateSection}
+        onOpenMenu={handleOpenMenu}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
@@ -132,10 +160,7 @@ export const App: React.FC = () => {
         <AmenitiesBento />
 
         {/* Michelin Dining & Lounge */}
-        <DiningSection onOpenMenu={() => handleNavigateSection('menu')} />
-
-        {/* Digital Food Menu & Table QR Code */}
-        <FoodMenuSection />
+        <DiningSection onOpenMenu={handleOpenMenu} />
 
         {/* Destination & Concierge Neighborhood Guide */}
         <NeighborhoodGuide />

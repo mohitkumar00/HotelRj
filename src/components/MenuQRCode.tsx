@@ -17,16 +17,24 @@ export const MenuQRCode: React.FC<MenuQRCodeProps> = ({
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Compute live URL with fallback to GitHub Pages address
+  // Compute live URL to open the standalone menu page
   const getMenuUrl = () => {
     if (typeof window !== 'undefined') {
       const base = window.location.origin + window.location.pathname.replace(/\/$/, '');
-      return `${base}/#menu`;
+      return `${base}/?view=menu`;
     }
-    return 'https://mohitkumar00.github.io/HotelRJ/#menu';
+    return 'https://mohitkumar00.github.io/HotelRJ/?view=menu';
   };
 
   const menuUrl = getMenuUrl();
+
+  const handleCardClick = () => {
+    if (onOpenMenu) {
+      onOpenMenu();
+    } else {
+      window.open(menuUrl, '_blank');
+    }
+  };
 
   const handleDownloadQR = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -79,7 +87,7 @@ export const MenuQRCode: React.FC<MenuQRCodeProps> = ({
 
   return (
     <div
-      onClick={onOpenMenu}
+      onClick={handleCardClick}
       className={`group relative bg-white/95 rounded-3xl p-5 shadow-2xl border border-gold-400/30 transition-all duration-300 hover:scale-[1.02] cursor-pointer flex flex-col items-center text-center ${className}`}
       title="Click to open digital food menu"
     >

@@ -73,6 +73,8 @@ export interface MenuItem {
   dietary: DietaryType;
   category: string;
   popular?: boolean;
+  image?: string;
+  description?: string;
 }
 
 export interface MenuCategory {
@@ -80,5 +82,6 @@ export interface MenuCategory {
   title: string;
   description: string;
   iconName: string;
+  heroImage?: string;
   items: MenuItem[];
 }

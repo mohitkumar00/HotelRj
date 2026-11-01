@@ -127,7 +127,7 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
               Explore Hotel RJ
             </span>
             <ul className="space-y-2.5 text-xs">
-              <li><a href="#menu" className="hover:text-gold-300 transition-colors font-semibold text-gold-400 flex items-center gap-1.5"><span>Digital Food Menu (QR)</span></a></li>
+              <li><a href="./?view=menu" target="_blank" rel="noopener noreferrer" className="hover:text-gold-300 transition-colors font-semibold text-gold-400 flex items-center gap-1"><span>Digital Food Menu ↗</span></a></li>
               <li><a href="#suites" className="hover:text-gold-300 transition-colors">Deluxe King Room (₹1,600)</a></li>
               <li><a href="#suites" className="hover:text-gold-300 transition-colors">Executive Family Suite (₹3,000)</a></li>
               <li><a href="#dining" className="hover:text-gold-300 transition-colors">Multi-Cuisine Restaurant</a></li>
