@@ -123,7 +123,7 @@ export const AMENITIES: AmenityHighlight[] = [
     description: 'Freshly prepared vegetarian & non-vegetarian delicacies including North Indian curries, Tandoori kebabs, South Indian favorites, Chinese, and regional Jharkhand specialties.',
     category: 'dining',
     iconName: 'Utensils',
-    imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: './images/food/venue-restaurant.jpg',
     colSpan: 'md:col-span-2 md:row-span-2',
     badge: 'Signature Restaurant',
   },
@@ -134,7 +134,7 @@ export const AMENITIES: AmenityHighlight[] = [
     description: 'Elegantly decorated, air-conditioned banquet hall with integrated sound system, stage lighting, and custom catering for weddings, receptions, birthdays, and business conferences.',
     category: 'events',
     iconName: 'Sparkles',
-    imageUrl: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: './images/food/venue-banquet.jpg',
     colSpan: 'md:col-span-1 md:row-span-1',
     badge: 'Events & Parties',
   },
@@ -155,7 +155,7 @@ export const AMENITIES: AmenityHighlight[] = [
     description: 'Spacious on-site parking monitored 24/7 with CCTV surveillance and security staff, providing peace of mind for highway travelers and banquet guests.',
     category: 'service',
     iconName: 'Compass',
-    imageUrl: 'https://images.unsplash.com/photo-1590674899484-d5640e854abe?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: './images/hotel-rj-exterior-front.jpg',
     colSpan: 'md:col-span-1 md:row-span-1',
   },
   {
@@ -165,7 +165,7 @@ export const AMENITIES: AmenityHighlight[] = [
     description: 'Peace of mind with immediate medical assistance available on call, conveniently located right next to Devi Durga Nursing Home on Suriya Road.',
     category: 'service',
     iconName: 'HeartPulse',
-    imageUrl: 'https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=1200&q=80',
+    imageUrl: './images/hotel-rj-features-poster.jpg',
     colSpan: 'md:col-span-1 md:row-span-1',
   },
 ];
@@ -180,7 +180,7 @@ export const DINING_VENUES: DiningVenue[] = [
     chefQuote: '"Where Comfort Meets Great Taste — cooked fresh with pure ingredients and traditional flavor."',
     description:
       'Step into our welcoming, air-conditioned dining hall for authentic flavors. Serving rich North Indian gravies, soft tandoori rotis and naans, sizzling Chinese starters, and healthy homestyle thalis.',
-    heroImage: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1600&q=80',
+    heroImage: './images/food/venue-restaurant.jpg',
     signatureDishes: [
       {
         name: 'Special Paneer Butter Masala',
@@ -218,7 +218,7 @@ export const DINING_VENUES: DiningVenue[] = [
     chefQuote: '"Making your weddings, birthdays, and celebrations memorable with royal hospitality."',
     description:
       'Comprehensive catering and banquet hall services for weddings, ring ceremonies, birthday parties, anniversary celebrations, and corporate get-togethers with live counters and customized thali spreads.',
-    heroImage: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=1600&q=80',
+    heroImage: './images/food/venue-banquet.jpg',
     signatureDishes: [
       {
         name: 'Royal Wedding Thali Spread',

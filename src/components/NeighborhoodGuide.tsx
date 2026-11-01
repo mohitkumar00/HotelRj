@@ -51,7 +51,7 @@ export const NeighborhoodGuide: React.FC = () => {
             <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-[#12141c] p-6 sm:p-8">
               <div className="relative aspect-[16/11] rounded-2xl overflow-hidden border border-white/10 bg-zinc-950">
                 <img
-                  src="https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=1200&q=80"
+                  src="./images/hotel-rj-exterior-front.jpg"
                   alt="Hotel RJ Location Map Preview"
                   className="w-full h-full object-cover brightness-75"
                 />

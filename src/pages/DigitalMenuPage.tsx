@@ -419,6 +419,9 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                         src={category.heroImage}
                         alt={category.title}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = './images/food/hero-veg-starters.jpg';
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/30" />
                     </div>
@@ -455,6 +458,9 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                               alt={item.name}
                               loading="lazy"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = category.heroImage || './images/food/hero-veg-starters.jpg';
+                              }}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                             {item.popular && (
