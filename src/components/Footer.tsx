@@ -8,6 +8,7 @@ interface FooterProps {
 
 export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
   const [emailSubscribed, setEmailSubscribed] = useState(false);
+  const [isSubmittingEmail, setIsSubmittingEmail] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const faqs = [
@@ -33,9 +34,36 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
     },
   ];
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    setEmailSubscribed(true);
+    const form = e.currentTarget as HTMLFormElement;
+    const input = form.querySelector('input[type="email"]') as HTMLInputElement;
+    const emailVal = input ? input.value : '';
+
+    setIsSubmittingEmail(true);
+    try {
+      await fetch('https://formsubmit.co/ajax/hotelrj.info@gmail.com', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          _subject: `📩 New Contact / Stay Connected Inquiry from ${emailVal}`,
+          _template: 'table',
+          _captcha: 'false',
+          'Visitor Email': emailVal,
+          'Inquiry Type': 'General / Offers / Banquet Inquiry',
+          'Submitted At': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        }),
+      });
+      setEmailSubscribed(true);
+    } catch (err) {
+      console.warn('FormSubmit error:', err);
+      setEmailSubscribed(true);
+    } finally {
+      setIsSubmittingEmail(false);
+    }
   };
 
   return (
@@ -162,9 +190,14 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
                 />
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-gold-400 text-black text-xs font-semibold uppercase tracking-wider hover:bg-gold-300 transition-colors shrink-0"
+                  disabled={isSubmittingEmail}
+                  className="px-5 py-2.5 rounded-xl bg-gold-400 text-black text-xs font-semibold uppercase tracking-wider hover:bg-gold-300 disabled:opacity-75 transition-colors shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  Send
+                  {isSubmittingEmail ? (
+                    <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <span>Send</span>
+                  )}
                 </button>
               </form>
             )}

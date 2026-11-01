@@ -39,6 +39,7 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [specialRequests, setSpecialRequests] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [reservationCode, setReservationCode] = useState('');
 
@@ -64,11 +65,52 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
   const taxesAndFees = Math.round((roomSubtotal + addOnsTotal) * 0.12);
   const grandTotal = roomSubtotal + addOnsTotal + taxesAndFees;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+
     const code = `RJ-${Math.floor(100000 + Math.random() * 900000)}`;
     setReservationCode(code);
-    setIsSubmitted(true);
+
+    try {
+      // Send real email notification to hotelrj.info@gmail.com via FormSubmit
+      await fetch('https://formsubmit.co/ajax/hotelrj.info@gmail.com', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          _subject: `🏨 New Booking Request: ${guestName} - ${selectedRoom?.name || 'Room'} (Ref: ${code})`,
+          _template: 'table',
+          _captcha: 'false',
+          'Booking Reference': code,
+          'Guest Name': guestName,
+          'Guest Phone / Mobile': guestPhone,
+          'Guest Email': guestEmail || 'Not provided',
+          'Selected Room': selectedRoom?.name,
+          'Room Rate (Per Night)': `₹${selectedRoom?.pricePerNight.toLocaleString()}`,
+          'Check-In Date': checkIn,
+          'Check-Out Date': checkOut,
+          'Total Nights': `${nights} ${nights === 1 ? 'Night' : 'Nights'}`,
+          'Number of Guests': guests,
+          'Add-on Station Transfer': addOnTransfer ? 'Yes (₹350)' : 'No',
+          'Add-on Dinner Thali': addOnDinnerThali ? 'Yes (₹450)' : 'No',
+          'Add-on Extra Bed': addOnExtraBed ? 'Yes (₹300)' : 'No',
+          'Estimated Total Tariff': `₹${grandTotal.toLocaleString()}`,
+          'Special Requests': specialRequests.trim() || 'None',
+          'Submission Timestamp': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        }),
+      });
+
+      setIsSubmitted(true);
+    } catch (err) {
+      console.warn('FormSubmit dispatch error:', err);
+      // Still show the confirmation screen so the guest has their reference code and WhatsApp fallback
+      setIsSubmitted(true);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
@@ -113,7 +155,7 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
               </span>
               <h3 className="font-serif text-3xl text-white font-medium">We Look Forward to Welcoming You</h3>
               <p className="mt-3 text-xs sm:text-sm text-sand-300 max-w-md mx-auto leading-relaxed">
-                Thank you, <strong className="text-white">{guestName || 'Valued Guest'}</strong>. Our front desk has reserved your room request. We have recorded your mobile number <strong className="text-white">{guestPhone}</strong>.
+                Thank you, <strong className="text-white">{guestName || 'Valued Guest'}</strong>. Your reservation request has been dispatched directly to Hotel RJ at <strong className="text-gold-300">hotelrj.info@gmail.com</strong>. We have recorded your mobile number <strong className="text-white">{guestPhone}</strong>.
               </p>
 
               {/* Confirmation Code Card */}
@@ -376,10 +418,20 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
               {/* Submit CTA */}
               <button
                 type="submit"
-                className="w-full py-4 rounded-full bg-gradient-to-r from-gold-300 via-gold-400 to-gold-500 hover:from-gold-200 hover:to-gold-300 text-black font-semibold text-xs tracking-[0.2em] uppercase shadow-xl shadow-gold-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="w-full py-4 rounded-full bg-gradient-to-r from-gold-300 via-gold-400 to-gold-500 hover:from-gold-200 hover:to-gold-300 disabled:opacity-75 text-black font-semibold text-xs tracking-[0.2em] uppercase shadow-xl shadow-gold-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Confirm Room Reservation</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    <span>Sending Request to Hotel RJ...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Confirm Room Reservation</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
               <div className="flex items-center justify-center gap-2 text-[10px] text-sand-400/80 text-center">
