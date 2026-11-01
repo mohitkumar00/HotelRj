@@ -49,11 +49,11 @@ export const NeighborhoodGuide: React.FC = () => {
           {/* Right Column: Visual Map Card */}
           <div className="lg:col-span-6 relative">
             <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-[#12141c] p-6 sm:p-8">
-              <div className="relative aspect-[16/11] rounded-2xl overflow-hidden border border-white/10 bg-zinc-950">
+              <div className="relative aspect-[16/11] rounded-2xl overflow-hidden border border-white/10 bg-zinc-950 group">
                 <img
-                  src="./images/hotel-rj-exterior-front.jpg"
-                  alt="Hotel RJ Location Map Preview"
-                  className="w-full h-full object-cover brightness-75"
+                  src="./images/hotel-rj-reception.jpg"
+                  alt="Hotel RJ Reception & Front Desk - Suriya Road, Bagodar"
+                  className="w-full h-full object-cover brightness-90 group-hover:scale-105 transition-transform duration-700"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/30" />
 
