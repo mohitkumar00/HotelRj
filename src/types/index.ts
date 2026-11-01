@@ -85,3 +85,9 @@ export interface MenuCategory {
   heroImage?: string;
   items: MenuItem[];
 }
+
+export interface CartItem {
+  item: MenuItem;
+  quantity: number;
+}
+

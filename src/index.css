@@ -455,3 +455,55 @@ html.light #menu .bg-zinc-800\/80 {
 html.light #menu .text-gold-300 {
   color: #92400e !important;
 }
+
+/* Standalone Digital Menu Page in light mode */
+html.light #digital-menu-container {
+  background-color: #faf8f5 !important;
+  color: #1c1917 !important;
+}
+
+html.light #digital-menu-container header {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light #digital-menu-container header .text-white {
+  color: #18181b !important;
+}
+
+html.light #digital-menu-container .bg-zinc-900\/60,
+html.light #digital-menu-container .bg-zinc-900\/50,
+html.light #digital-menu-container .bg-zinc-900\/70,
+html.light #digital-menu-container .bg-zinc-900\/80,
+html.light #digital-menu-container .bg-zinc-900\/90,
+html.light #digital-menu-container .bg-zinc-900 {
+  background-color: #ffffff !important;
+  border-color: #e5dec9 !important;
+  color: #18181b !important;
+}
+
+html.light #digital-menu-container .bg-zinc-900\/60:hover,
+html.light #digital-menu-container .bg-zinc-800\/80:hover {
+  background-color: #f7f3eb !important;
+}
+
+html.light #digital-menu-container .text-white {
+  color: #18181b !important;
+}
+
+html.light #digital-menu-container .text-sand-300,
+html.light #digital-menu-container .text-sand-400 {
+  color: #57534e !important;
+}
+
+html.light #digital-menu-container .text-gold-300 {
+  color: #92400e !important;
+}
+
+html.light #digital-menu-container input,
+html.light #digital-menu-container textarea {
+  background-color: #ffffff !important;
+  color: #18181b !important;
+  border-color: #ded6c8 !important;
+}
+
