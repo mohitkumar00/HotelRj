@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { HOTEL_INFO } from '../data/hotelData';
 import { Mail, Phone, MapPin, ChevronDown, Check, Navigation } from 'lucide-react';
+import { SocialLinks } from './SocialIcons';
 
 interface FooterProps {
   theme?: 'dark' | 'light';
@@ -147,6 +148,14 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
                 <a href={`mailto:${HOTEL_INFO.email}`} className="hover:text-white transition-colors font-mono">{HOTEL_INFO.email}</a>
               </div>
             </div>
+
+            {/* Social Media Channels */}
+            <div className="mt-6">
+              <span className="text-[10px] uppercase tracking-wider text-sand-400 font-semibold block mb-2.5">
+                Follow Hotel RJ
+              </span>
+              <SocialLinks variant="pills" />
+            </div>
           </div>
 
           {/* Quick Links */}
@@ -228,10 +237,14 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
         {/* Bottom copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-[11px] text-sand-400/60 gap-4">
           <p>© {new Date().getFullYear()} Hotel RJ, Bagodar. All rights reserved.</p>
-          <div className="flex items-center space-x-6">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            <SocialLinks variant="icons-only" />
+            <span className="text-white/20 hidden sm:inline">•</span>
+            <div className="flex items-center space-x-6">
             <a href="#" className="hover:text-sand-200 transition-colors">Privacy Policy</a>
             <a href="#" className="hover:text-sand-200 transition-colors">Terms of Stay</a>
             <a href={HOTEL_INFO.mapUrl} target="_blank" rel="noopener noreferrer" className="hover:text-sand-200 transition-colors">Suriya Road, Bagodar</a>
+          </div>
           </div>
         </div>
       </div>

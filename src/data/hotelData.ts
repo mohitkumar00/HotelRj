@@ -19,6 +19,11 @@ export const HOTEL_INFO = {
     'Grand Banquet & Celebration Hall',
     '24/7 Silent Power Backup',
   ],
+  social: {
+    facebook: 'https://www.facebook.com/share/1Dk4To2F1A/',
+    instagram: 'https://www.instagram.com/hotelrj.info?mdxt=MThjdGthNnQ5emNhOA==',
+    instagramHandle: '@hotelrj.info',
+  },
 };
 
 export const ROOMS: Room[] = [

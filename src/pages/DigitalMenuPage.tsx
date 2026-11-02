@@ -3,6 +3,7 @@ import { MENU_CATEGORIES, TOTAL_MENU_ITEMS_COUNT } from '../data/menuData';
 import { DietaryType, MenuItem, CartItem } from '../types';
 import { HOTEL_INFO } from '../data/hotelData';
 import { generateOrderPdf } from '../utils/orderPdfGenerator';
+import { InstagramIcon, FacebookIcon } from '../components/SocialIcons';
 import {
   Search,
   X,
@@ -335,6 +336,19 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
               )}
             </button>
 
+            
+            {/* Instagram Social Pill */}
+            <a
+              href={HOTEL_INFO.social.instagram}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-sand-300 hover:text-pink-400 flex items-center gap-1.5 border border-white/10 transition-colors"
+              title="Tag Hotel RJ on Instagram"
+              aria-label="Hotel RJ Instagram"
+            >
+              <InstagramIcon className="w-3.5 h-3.5 text-pink-400" />
+              <span className="hidden md:inline font-mono text-[11px]">@hotelrj.info</span>
+            </a>
             {/* Share / Copy Menu Link */}
             <button
               onClick={handleShareMenu}
@@ -813,6 +827,37 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
               Call Front Desk
             </a>
           </div>
+
+          {/* Social Tagging Invite Card */}
+          <div className="mt-8 p-4 rounded-2xl bg-gradient-to-r from-purple-950/30 via-zinc-900/60 to-blue-950/30 border border-white/10 max-w-lg mx-auto text-center">
+            <span className="text-[10px] uppercase font-semibold text-gold-400 tracking-widest block mb-1">
+              Share Your Food Moments
+            </span>
+            <p className="text-xs text-sand-300 mb-3">
+              Enjoying your meal? Tag <strong>{HOTEL_INFO.social.instagramHandle}</strong> on your stories and posts!
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <a
+                href={HOTEL_INFO.social.instagram}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-600 text-white text-xs font-semibold hover:opacity-95 shadow-sm transition-all"
+              >
+                <InstagramIcon className="w-3.5 h-3.5" />
+                <span>Follow Instagram</span>
+              </a>
+              <a
+                href={HOTEL_INFO.social.facebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition-all"
+              >
+                <FacebookIcon className="w-3.5 h-3.5" />
+                <span>Facebook Page</span>
+              </a>
+            </div>
+          </div>
+
         </div>
       </main>
 

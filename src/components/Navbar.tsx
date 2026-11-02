@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, Phone, Calendar, Sparkles, Sun, Moon, MapPin } from 'lucide-react';
+import { InstagramIcon, FacebookIcon, SocialLinks } from './SocialIcons';
 import { HOTEL_INFO } from '../data/hotelData';
 
 interface NavbarProps {
@@ -95,6 +96,30 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, onOp
 
           {/* Right Action Buttons */}
           <div className="hidden sm:flex items-center gap-3">
+            
+            {/* Social Links */}
+            <div className="hidden md:flex items-center gap-1.5 pr-1">
+              <a
+                href={HOTEL_INFO.social.instagram}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Hotel RJ Instagram"
+                title="Follow Hotel RJ on Instagram (@hotelrj.info)"
+                className="w-9 h-9 rounded-full border border-white/15 hover:border-pink-500/60 bg-white/5 hover:bg-gradient-to-tr hover:from-amber-500/20 hover:via-rose-500/20 hover:to-purple-500/20 flex items-center justify-center text-sand-300 hover:text-pink-400 transition-all active:scale-95"
+              >
+                <InstagramIcon className="w-4 h-4" />
+              </a>
+              <a
+                href={HOTEL_INFO.social.facebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Hotel RJ Facebook"
+                title="Follow Hotel RJ on Facebook"
+                className="w-9 h-9 rounded-full border border-white/15 hover:border-blue-500/60 bg-white/5 hover:bg-blue-600/20 flex items-center justify-center text-sand-300 hover:text-blue-400 transition-all active:scale-95"
+              >
+                <FacebookIcon className="w-4 h-4" />
+              </a>
+            </div>
             {/* Theme Toggle Button */}
             <button
               onClick={onToggleTheme}
@@ -257,6 +282,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenBooking, onSelectNav, onOp
                 <Calendar className="w-4 h-4" />
                 Check Rates & Availability
               </button>
+
+            <div className="pt-2 border-t border-white/10">
+              <span className="text-[10px] uppercase tracking-wider text-sand-400 font-semibold block mb-2">
+                Follow Us On Social Media
+              </span>
+              <SocialLinks variant="pills" />
+            </div>
+
             </div>
           </div>
         </div>
