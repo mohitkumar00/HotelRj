@@ -149,6 +149,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [printSuccessMsg, setPrintSuccessMsg] = useState<string | null>(null);
 
+  // Optional 5% GST Selection on Billing
+  const [applyGst, setApplyGst] = useState<boolean>(true);
+
   // Live Debug Logs
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
@@ -317,7 +320,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }, 0);
   }, [currentItemsList]);
 
-  const gstAmount = Math.round(subtotalPrice * 0.05); // 5% GST
+  // GST is optional based on waiter's choice (5% or 0%)
+  const gstAmount = applyGst ? Math.round(subtotalPrice * 0.05) : 0;
   const grandTotal = subtotalPrice + gstAmount;
 
   // Distinguish between New Items to Fire vs Already Fired to Kitchen
@@ -433,7 +437,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         notes: ci.notes,
       })),
       subtotal: subtotalPrice,
-      gstRate: 5,
+      gstRate: applyGst ? 5 : 0,
       grandTotal,
       isTakeaway: isTakeawayActive,
     };
@@ -442,9 +446,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
     try {
       const res = await BluetoothPrinter.printBill(billData);
-      setPrintSuccessMsg(`✅ Tax Invoice printed (${res.method})!`);
+      setPrintSuccessMsg(`✅ ${applyGst ? 'Tax Invoice' : 'Retail Bill'} printed (${res.method})!`);
       setTimeout(() => setPrintSuccessMsg(null), 4000);
-      Logger.success('Bill', `Bill for ${activeTable} printed via ${res.method}`);
+      Logger.success('Bill', `Bill for ${activeTable} printed via ${res.method} (GST: ${applyGst ? '5%' : '0%'})`);
 
       setTables((prev) => ({
         ...prev,
@@ -490,8 +494,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       .join('\n');
 
     const takeawayHeader = isTakeawayActive ? '\n*** TAKEAWAY / PARCEL ORDER ***\n' : '\n';
+    const gstLine = applyGst ? `*GST (5%):* ₹${gstAmount}\n` : '';
 
-    const text = `*HOTEL RJ - ${activeTable.toUpperCase()}*${takeawayHeader}Server: ${serverName}\nTime: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n--------------------\n${itemsListStr}\n--------------------\n*Subtotal:* ₹${subtotalPrice}\n*GST (5%):* ₹${gstAmount}\n*Total Bill:* ₹${grandTotal}\n_Where Comfort Meets Great Taste_`;
+    const text = `*HOTEL RJ - ${activeTable.toUpperCase()}*${takeawayHeader}GSTIN: 20BGPPJ2962J1ZA\nServer: ${serverName}\nTime: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n--------------------\n${itemsListStr}\n--------------------\n*Subtotal:* ₹${subtotalPrice}\n${gstLine}*Total Bill:* ₹${grandTotal}\n_Where Comfort Meets Great Taste_`;
 
     window.open(`https://wa.me/917004865824?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -1160,16 +1165,71 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                     </div>
                   )}
 
+                  {/* Tax / GST Selection Radio Option */}
+                  <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-sand-400">
+                        Tax Option (GST):
+                      </span>
+                      <span className="text-[9.5px] font-mono text-sand-500">
+                        GSTIN: 20BGPPJ2962J1ZA
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <label
+                        className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
+                          applyGst
+                            ? 'bg-amber-400/15 border-amber-400 text-white font-bold'
+                            : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="gstOptionRadio"
+                          checked={applyGst}
+                          onChange={() => setApplyGst(true)}
+                          className="accent-amber-400 w-3.5 h-3.5"
+                        />
+                        <span>With 5% GST</span>
+                      </label>
+
+                      <label
+                        className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
+                          !applyGst
+                            ? 'bg-amber-400/15 border-amber-400 text-white font-bold'
+                            : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="gstOptionRadio"
+                          checked={!applyGst}
+                          onChange={() => setApplyGst(false)}
+                          className="accent-amber-400 w-3.5 h-3.5"
+                        />
+                        <span>Without GST (0%)</span>
+                      </label>
+                    </div>
+                  </div>
+
                   {/* Bill Total Summary */}
                   <div className="p-3.5 rounded-2xl bg-[#131622] border border-white/10 space-y-1.5 text-xs">
                     <div className="flex items-center justify-between text-sand-300">
                       <span>Subtotal ({totalItemsCount} items):</span>
                       <span className="font-mono">₹{subtotalPrice.toFixed(2)}</span>
                     </div>
-                    <div className="flex items-center justify-between text-sand-300">
-                      <span>GST (5%):</span>
-                      <span className="font-mono">₹{gstAmount.toFixed(2)}</span>
-                    </div>
+                    {applyGst ? (
+                      <div className="flex items-center justify-between text-sand-300">
+                        <span>GST (5%):</span>
+                        <span className="font-mono text-amber-300">₹{gstAmount.toFixed(2)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between text-sand-400 text-[11px]">
+                        <span>GST (0%):</span>
+                        <span className="font-mono text-emerald-400">Not Added (₹0.00)</span>
+                      </div>
+                    )}
                     <div className="pt-2 border-t border-white/10 flex items-center justify-between font-bold text-sm">
                       <span className="text-white">Grand Total:</span>
                       <span className="font-mono text-amber-300 text-base">

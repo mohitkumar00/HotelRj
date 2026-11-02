@@ -365,8 +365,9 @@ export function generateBillHtml(data: BillPrintData): string {
     <div style="text-align: center; font-size: 9px;">Where Comfort Meets Great Taste</div>
     <div style="text-align: center; font-size: 9px;">Suriya Road, Bagodar, Giridih (Jharkhand)</div>
     <div style="text-align: center; font-size: 9px;">Tel: 7004865824 / 7004153034</div>
+    <div style="text-align: center; font-size: 10px; font-weight: bold; margin-top: 2px; letter-spacing: 0.5px;">GSTIN: 20BGPPJ2962J1ZA</div>
     <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
-    <div style="text-align: center; font-weight: bold; font-size: 12px;">TAX INVOICE / GUEST CHECK</div>
+    <div style="text-align: center; font-weight: bold; font-size: 12px;">${(data.gstRate && data.gstRate > 0) ? 'TAX INVOICE' : 'RETAIL INVOICE / GUEST BILL'}</div>
     ${isTakeaway ? `<div style="text-align: center; font-weight: bold; font-size: 11px; margin: 2px 0;">[ TAKEAWAY PACKING ]</div>` : ''}
     <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
     <div style="display: flex; justify-content: space-between; font-size: 11px;">
@@ -499,8 +500,9 @@ function generateBillEscPos(data: BillPrintData): Uint8Array {
   s += 'Where Comfort Meets Great Taste\n';
   s += 'Suriya Road, Bagodar (Giridih)\n';
   s += 'Ph: 7004865824 / 7004153034\n';
+  s += 'GSTIN: 20BGPPJ2962J1ZA\n';
   s += '================================\n';
-  s += 'TAX INVOICE / GUEST CHECK\n';
+  s += (data.gstRate && data.gstRate > 0) ? 'TAX INVOICE\n' : 'RETAIL INVOICE / GUEST BILL\n';
   if (data.isTakeaway || data.tableNumber.toLowerCase().includes('parcel') || data.tableNumber.toLowerCase().includes('takeaway')) {
     s += '[ TAKEAWAY PARCEL ]\n';
   }
