@@ -12,6 +12,7 @@ import { GuestReviews } from './components/GuestReviews';
 import { ReservationDrawer } from './components/ReservationDrawer';
 import { Footer } from './components/Footer';
 import { DigitalMenuPage } from './pages/DigitalMenuPage';
+import { WaiterPOS } from './components/WaiterPOS';
 import { ROOMS } from './data/hotelData';
 import { Capacitor } from '@capacitor/core';
 import { Room, RoomTier, BookingDetails } from './types';
@@ -22,6 +23,13 @@ export const App: React.FC = () => {
   });
 
   // Track if current route is the standalone food menu page (?view=menu or #/menu)
+    // Track if Waiter POS Mode is active (defaults to true in native Android APK)
+  const [isPosMode, setIsPosMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    if (Capacitor.isNativePlatform()) return true;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('mode') === 'pos' || window.location.hash.includes('pos');
+  });
   const [isMenuView, setIsMenuView] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     // On native Android app, launch straight into Waiter POS / Digital Menu
@@ -115,10 +123,15 @@ export const App: React.FC = () => {
   };
 
   // If user navigated directly to the menu page (or scanned the dining table QR)
+    if (isPosMode) {
+    return <WaiterPOS onSwitchToGuestMenu={() => setIsPosMode(false)} />;
+  }
+
   if (isMenuView) {
     return (
       <DigitalMenuPage
         onBackToHotel={handleBackToHotel}
+        onOpenPosMode={() => setIsPosMode(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
       />

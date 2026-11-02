@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 
 interface DigitalMenuPageProps {
+  onOpenPosMode?: () => void;
   onBackToHotel: () => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
@@ -39,6 +40,7 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
   onBackToHotel,
   theme,
   onToggleTheme,
+  onOpenPosMode,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedDietary, setSelectedDietary] = useState<DietaryType | 'all' | 'popular'>('all');
@@ -367,6 +369,17 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
               <span className="hidden md:inline">{copiedLink ? 'Copied' : 'Share'}</span>
             </button>
 
+                        {/* Switch to Waiter POS */}
+            {onOpenPosMode && (
+              <button
+                type="button"
+                onClick={onOpenPosMode}
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold uppercase tracking-wider flex items-center gap-1 shadow-md active:scale-95 transition-all shrink-0"
+                title="Switch to Staff Waiter POS"
+              >
+                <span>👨‍🍳 Waiter POS</span>
+              </button>
+            )}
             {/* Theme Toggle */}
             <button
               onClick={onToggleTheme}
