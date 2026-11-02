@@ -6,6 +6,7 @@ import {
   KOTPrintData,
   BillPrintData,
 } from '../utils/thermalPrinter';
+import { Logger, LogEntry } from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
 import {
   Search,
@@ -22,6 +23,9 @@ import {
   ChevronUp,
   ShoppingBag,
   Edit3,
+  Bug,
+  Copy,
+  RefreshCw,
 } from 'lucide-react';
 
 interface WaiterItemRecord {
@@ -142,7 +146,47 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // UI Drawers & Modals
   const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
   const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [printSuccessMsg, setPrintSuccessMsg] = useState<string | null>(null);
+
+  // Live Debug Logs
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  // Paired Bluetooth Printers (via Android Native Bridge)
+  const [pairedPrinters, setPairedPrinters] = useState<Array<{ name: string; address: string }>>([]);
+  const [selectedPrinterAddress, setSelectedPrinterAddress] = useState<string>(() => {
+    return localStorage.getItem('hotel_rj_printer_address') || '';
+  });
+
+  // Subscribe to live logger
+  useEffect(() => {
+    const unsubscribe = Logger.subscribe((newLogs) => setLogs(newLogs));
+    const isNative = Capacitor.isNativePlatform();
+    const hasBridge = BluetoothPrinter.isNativeAndroidAvailable();
+    Logger.info('App', `WaiterPOS loaded on ${isNative ? 'Android Native APK' : 'Browser'}. Native Bridge: ${hasBridge ? 'ONLINE' : 'OFFLINE'}`);
+    return () => unsubscribe();
+  }, []);
+
+  const refreshPairedDevices = () => {
+    const list = BluetoothPrinter.getPairedDevices();
+    setPairedPrinters(list);
+    Logger.info('Printer', `Found ${list.length} paired Bluetooth devices`);
+  };
+
+  useEffect(() => {
+    if (isPrinterModalOpen) {
+      refreshPairedDevices();
+    }
+  }, [isPrinterModalOpen]);
+
+  const handleSelectPrinter = (dev: { name: string; address: string }) => {
+    setSelectedPrinterAddress(dev.address);
+    localStorage.setItem('hotel_rj_printer_address', dev.address);
+    localStorage.setItem('hotel_rj_printer_name', dev.name);
+    Logger.success('Printer', `Selected printer: ${dev.name} (${dev.address})`);
+    setPrintSuccessMsg(`Selected: ${dev.name}`);
+    setTimeout(() => setPrintSuccessMsg(null), 2500);
+  };
 
   // Item customization modal
   const [customizingItem, setCustomizingItem] = useState<{ id: string; name: string; notes?: string } | null>(null);
@@ -303,7 +347,19 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   // Action: FIRE KOT TO KITCHEN
   const handleFireKOT = async () => {
-    if (newItemsToFire.length === 0) return;
+    Logger.info('KOT', `handleFireKOT tapped for table: ${activeTable}`);
+    if (newItemsToFire.length === 0) {
+      if (currentItemsList.length === 0) {
+        setPrintSuccessMsg('⚠️ Cart is empty! Add dishes first.');
+        setTimeout(() => setPrintSuccessMsg(null), 3000);
+        Logger.warn('KOT', `No dishes in cart for table ${activeTable}`);
+      } else {
+        setPrintSuccessMsg('ℹ️ All dishes are already cooking in the kitchen!');
+        setTimeout(() => setPrintSuccessMsg(null), 3000);
+        Logger.info('KOT', `All dishes on table ${activeTable} were already fired`);
+      }
+      return;
+    }
     triggerHaptic(60);
 
     const kotData: KOTPrintData = {
@@ -316,10 +372,13 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       isTakeaway: isTakeawayActive,
     };
 
+    setPrintSuccessMsg(`Sending KOT #${currentOrder.kotNumber} to printer...`);
+
     try {
-      await BluetoothPrinter.printKOT(kotData);
-      setPrintSuccessMsg(`KOT #${currentOrder.kotNumber} sent to Kitchen!`);
-      setTimeout(() => setPrintSuccessMsg(null), 3000);
+      const res = await BluetoothPrinter.printKOT(kotData);
+      setPrintSuccessMsg(`✅ KOT #${currentOrder.kotNumber} sent to Kitchen (${res.method})!`);
+      setTimeout(() => setPrintSuccessMsg(null), 4000);
+      Logger.success('KOT', `KOT #${currentOrder.kotNumber} fired successfully via ${res.method}`);
 
       // Lock newly fired items so they aren't printed twice next round
       setTables((prev) => {
@@ -344,14 +403,22 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           },
         };
       });
-    } catch (err) {
-      console.error('Failed to fire KOT:', err);
+    } catch (err: any) {
+      Logger.error('KOT', `Failed to fire KOT: ${err?.message || err}`);
+      setPrintSuccessMsg(`❌ Print failed: ${err?.message || 'Check Logs'}`);
+      setTimeout(() => setPrintSuccessMsg(null), 4000);
     }
   };
 
   // Action: PRINT FINAL BILL
   const handlePrintBill = async () => {
-    if (currentItemsList.length === 0) return;
+    Logger.info('Bill', `handlePrintBill tapped for table: ${activeTable}`);
+    if (currentItemsList.length === 0) {
+      setPrintSuccessMsg('⚠️ Cannot print bill for an empty table!');
+      setTimeout(() => setPrintSuccessMsg(null), 3000);
+      Logger.warn('Bill', `Table ${activeTable} is empty`);
+      return;
+    }
     triggerHaptic(50);
 
     const billData: BillPrintData = {
@@ -371,10 +438,13 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       isTakeaway: isTakeawayActive,
     };
 
+    setPrintSuccessMsg('Sending bill to printer...');
+
     try {
-      await BluetoothPrinter.printBill(billData);
-      setPrintSuccessMsg(`Tax Invoice printed for ${activeTable}!`);
-      setTimeout(() => setPrintSuccessMsg(null), 3000);
+      const res = await BluetoothPrinter.printBill(billData);
+      setPrintSuccessMsg(`✅ Tax Invoice printed (${res.method})!`);
+      setTimeout(() => setPrintSuccessMsg(null), 4000);
+      Logger.success('Bill', `Bill for ${activeTable} printed via ${res.method}`);
 
       setTables((prev) => ({
         ...prev,
@@ -383,8 +453,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           status: 'billed',
         },
       }));
-    } catch (err) {
-      console.error('Failed to print bill:', err);
+    } catch (err: any) {
+      Logger.error('Bill', `Failed to print bill: ${err?.message || err}`);
+      setPrintSuccessMsg(`❌ Bill print failed: ${err?.message || 'Check Logs'}`);
+      setTimeout(() => setPrintSuccessMsg(null), 4000);
     }
   };
 
@@ -547,6 +619,22 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             >
               <Printer className="w-3.5 h-3.5 text-gold-400" />
               <span className="text-[10px] hidden xs:inline">Printer</span>
+            </button>
+
+            {/* Live Debug Logs Button */}
+            <button
+              type="button"
+              onClick={() => setIsLogsModalOpen(true)}
+              className="px-2 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center gap-1 border border-white/10 active:scale-95 transition-all"
+              title="Live Debug Console & System Logs"
+            >
+              <Bug className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[10px] hidden xs:inline">Logs</span>
+              {logs.length > 0 && (
+                <span className="px-1 py-0.2 rounded-full bg-amber-400/20 text-amber-300 text-[9px] font-mono">
+                  {logs.length}
+                </span>
+              )}
             </button>
 
             {/* Browser preview exit (hidden on Android native APK) */}
@@ -1236,14 +1324,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       )}
 
-      {/* 10. THERMAL PRINTER INSTRUCTIONS & TEST MODAL */}
+      {/* 10. THERMAL PRINTER INSTRUCTIONS & SETUP MODAL */}
       {isPrinterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-[#11131c] border border-white/15 rounded-3xl p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-sm bg-[#11131c] border border-white/15 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Printer className="w-5 h-5 text-gold-400" />
-                <h3 className="font-bold text-sm text-white">Thermal Printer Guide</h3>
+                <h3 className="font-bold text-sm text-white">Thermal Printer Setup</h3>
               </div>
               <button
                 type="button"
@@ -1254,22 +1342,70 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </button>
             </div>
 
-            {/* Clear setup instructions */}
-            <div className="p-3.5 rounded-2xl bg-zinc-900 border border-white/10 space-y-2 text-xs text-sand-300 leading-relaxed">
-              <div className="font-bold text-white flex items-center gap-1.5">
-                <span>📱 How to Connect Bluetooth Printer:</span>
+            {/* Native Bridge Status */}
+            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-sand-400">Android Print Engine:</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${BluetoothPrinter.isNativeAndroidAvailable() ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                  {BluetoothPrinter.isNativeAndroidAvailable() ? '● Native Bridge Active' : '● Browser Mode'}
+                </span>
               </div>
-              <ol className="list-decimal pl-4 space-y-1 text-[11px] text-sand-300">
-                <li>Turn ON your 58mm / 80mm Bluetooth thermal printer.</li>
-                <li>Open your phone's <strong>Android Bluetooth Settings</strong>.</li>
-                <li>Pair with your printer (e.g. <strong>POS-58</strong> or <strong>MTP-2</strong>). PIN is usually <code>0000</code> or <code>1234</code>.</li>
-                <li>That's it! Tap <strong>Print Test Slip</strong> below to test.</li>
-              </ol>
+
+              {/* Paired Bluetooth Printers List */}
+              <div className="pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold text-white flex items-center gap-1">
+                    <span>Paired Bluetooth Printers:</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={refreshPairedDevices}
+                    className="p-1 rounded text-sand-400 hover:text-white flex items-center gap-1 text-[10px]"
+                    title="Refresh paired devices"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Scan</span>
+                  </button>
+                </div>
+
+                {pairedPrinters.length > 0 ? (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    {pairedPrinters.map((dev) => {
+                      const isSelected = selectedPrinterAddress === dev.address;
+                      return (
+                        <button
+                          key={dev.address}
+                          type="button"
+                          onClick={() => handleSelectPrinter(dev)}
+                          className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${isSelected ? 'bg-amber-400/20 border-amber-400 text-white font-bold' : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'}`}
+                        >
+                          <div>
+                            <div className="font-medium">{dev.name}</div>
+                            <div className="text-[9px] font-mono text-sand-400">{dev.address}</div>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-amber-400" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-sand-400 bg-white/5 p-2 rounded-xl">
+                    No Bluetooth printers paired in Android Settings yet. Pair your printer once in phone settings.
+                  </div>
+                )}
+              </div>
             </div>
 
-            <p className="text-[11px] text-sand-400 leading-relaxed">
-              When taking orders, tapping <strong>Fire KOT</strong> or <strong>Print Bill</strong> automatically sends the 58mm receipt to your paired printer via Android System Print.
-            </p>
+            {/* Quick Guide */}
+            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 text-[11px] text-sand-300 space-y-1.5">
+              <div className="font-bold text-white">📱 Pairing Steps:</div>
+              <ol className="list-decimal pl-4 space-y-1 text-sand-400">
+                <li>Turn ON your 58mm Bluetooth printer.</li>
+                <li>Go to phone's <strong>Android Bluetooth Settings</strong>.</li>
+                <li>Pair with printer (PIN is <code>0000</code> or <code>1234</code>).</li>
+                <li>Return here & tap <strong>Print Test Slip</strong>.</li>
+              </ol>
+            </div>
 
             {/* Action buttons */}
             <div className="space-y-2">
@@ -1277,9 +1413,17 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 type="button"
                 onClick={async () => {
                   triggerHaptic(40);
-                  await BluetoothPrinter.printTestReceipt();
+                  setPrintSuccessMsg('Printing test slip...');
+                  try {
+                    const res = await BluetoothPrinter.printTestReceipt();
+                    setPrintSuccessMsg(`✅ Test slip sent (${res.method})!`);
+                    setTimeout(() => setPrintSuccessMsg(null), 4000);
+                  } catch (err: any) {
+                    setPrintSuccessMsg(`❌ Test failed: ${err?.message}`);
+                    setTimeout(() => setPrintSuccessMsg(null), 4000);
+                  }
                 }}
-                className="w-full py-2.5 rounded-xl bg-gold-400 hover:bg-gold-300 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md"
+                className="w-full py-2.5 rounded-xl bg-gold-400 hover:bg-gold-300 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
                 <span>Print Test Slip (58mm)</span>
@@ -1287,11 +1431,132 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
               <button
                 type="button"
-                onClick={handleSendWhatsApp}
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                onClick={() => {
+                  setIsPrinterModalOpen(false);
+                  setIsLogsModalOpen(true);
+                }}
+                className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sand-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 transition-colors"
               >
-                <MessageCircle className="w-4 h-4" />
-                <span>Test Kitchen WhatsApp Slip</span>
+                <Bug className="w-4 h-4 text-amber-400" />
+                <span>View Live Debug Logs ({logs.length})</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. LIVE DEBUG CONSOLE & SYSTEM LOGS MODAL */}
+      {isLogsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-4">
+          <div className="w-full max-w-lg bg-[#0e1017] border border-amber-400/30 rounded-3xl p-4 shadow-2xl flex flex-col max-h-[92vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Bug className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="font-bold text-sm text-white">Live Debug Console</h3>
+                  <p className="text-[10px] text-sand-400">Real-time logs for KOT, printer & errors</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLogsModalOpen(false)}
+                className="p-1 rounded-full text-sand-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Diagnostic Badges */}
+            <div className="grid grid-cols-2 gap-2 my-3 text-[10px]">
+              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
+                <span className="text-sand-400 block">Platform:</span>
+                <span className="font-bold text-white">{Capacitor.isNativePlatform() ? 'Native Android APK' : 'Web Browser'}</span>
+              </div>
+              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
+                <span className="text-sand-400 block">Native Bridge:</span>
+                <span className={`font-bold ${BluetoothPrinter.isNativeAndroidAvailable() ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {BluetoothPrinter.isNativeAndroidAvailable() ? 'Active (AndroidPrinter)' : 'Web Mode'}
+                </span>
+              </div>
+              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
+                <span className="text-sand-400 block">Active Table:</span>
+                <span className="font-bold text-white">{activeTable} ({totalItemsCount} items, {newItemsToFire.length} unfired)</span>
+              </div>
+              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
+                <span className="text-sand-400 block">Target Printer:</span>
+                <span className="font-bold text-white truncate block">{localStorage.getItem('hotel_rj_printer_name') || 'Auto / Android Spooler'}</span>
+              </div>
+            </div>
+
+            {/* Logs List Container */}
+            <div className="flex-1 overflow-y-auto bg-black/60 rounded-2xl p-2.5 border border-white/10 font-mono text-[10px] space-y-1.5 max-h-[46vh]">
+              {logs.length === 0 ? (
+                <div className="text-center text-sand-500 py-6">No logs recorded yet.</div>
+              ) : (
+                logs.map((l) => {
+                  let badgeColor = 'text-sand-300';
+                  if (l.level === 'error') badgeColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
+                  else if (l.level === 'warn') badgeColor = 'text-amber-300 bg-amber-500/10 border-amber-500/30';
+                  else if (l.level === 'success') badgeColor = 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30';
+                  else badgeColor = 'text-blue-300 bg-blue-500/10 border-blue-500/30';
+
+                  return (
+                    <div key={l.id} className="p-1.5 rounded-lg bg-zinc-900/60 border border-white/5 space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-[9px]">
+                        <span className="text-sand-500">{l.timestamp}</span>
+                        <span className={`px-1 py-0.2 rounded border uppercase font-bold text-[8px] ${badgeColor}`}>
+                          {l.level}
+                        </span>
+                        <span className="text-sand-400 font-sans font-semibold">[{l.category}]</span>
+                      </div>
+                      <div className="text-sand-200 text-[10.5px] break-words">{l.message}</div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="pt-3 border-t border-white/10 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = logs
+                    .map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.category}] ${l.message}`)
+                    .join('\n');
+                  if (navigator.clipboard) {
+                    navigator.clipboard.writeText(text);
+                    setPrintSuccessMsg('✅ Logs copied to clipboard!');
+                    setTimeout(() => setPrintSuccessMsg(null), 2500);
+                  }
+                }}
+                className="flex-1 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 active:scale-95 transition-all"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy All</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const text = `*HOTEL RJ POS LOGS*\nDate: ${new Date().toLocaleString()}\nPlatform: ${Capacitor.isNativePlatform() ? 'Android Native' : 'Browser'}\n--------------------\n` +
+                    logs.slice(0, 25).map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`).join('\n');
+                  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                }}
+                className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp Logs</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => Logger.clear()}
+                className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-rose-400 text-xs font-semibold"
+                title="Clear Logs"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

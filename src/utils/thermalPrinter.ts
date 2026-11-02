@@ -4,6 +4,8 @@
  * 100% Free - Zero extra apps required
  */
 
+import { Logger } from './logger';
+
 export interface ReceiptItem {
   name: string;
   quantity: number;
@@ -39,16 +41,51 @@ export interface BillPrintData {
 let cachedDevice: any = null;
 let cachedCharacteristic: any = null;
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 export const BluetoothPrinter = {
   /**
-   * Check if Web Bluetooth is supported
+   * Check if Native Android Bridge is available
+   */
+  isNativeAndroidAvailable(): boolean {
+    return typeof window !== 'undefined' && Boolean((window as any).AndroidPrinter);
+  },
+
+  /**
+   * Check if Web Bluetooth is supported in browser
    */
   isWebBluetoothSupported(): boolean {
     return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
   },
 
   /**
-   * Get name of currently connected printer
+   * Get list of paired Bluetooth devices via native Android bridge
+   */
+  getPairedDevices(): Array<{ name: string; address: string }> {
+    const androidPrinter = (window as any).AndroidPrinter;
+    if (androidPrinter && typeof androidPrinter.getPairedBluetoothPrinters === 'function') {
+      try {
+        const json = androidPrinter.getPairedBluetoothPrinters();
+        const parsed = JSON.parse(json);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((d) => d.address);
+        }
+      } catch (e: any) {
+        Logger.error('Printer', 'Failed to parse paired printers', e);
+      }
+    }
+    return [];
+  },
+
+  /**
+   * Get name of currently selected/connected printer
    */
   getConnectedDeviceName(): string | null {
     if (cachedDevice && cachedDevice.gatt && cachedDevice.gatt.connected) {
@@ -59,105 +96,120 @@ export const BluetoothPrinter = {
   },
 
   /**
-   * Optional direct Bluetooth scan (used in supported browsers)
-   */
-  async connect(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
-    if (!this.isWebBluetoothSupported()) {
-      return {
-        success: false,
-        error: 'In the Android App, your printer is used directly via Android System Bluetooth. Pair the printer once in your Android Bluetooth Settings (like Bluetooth headphones), then tap "Print KOT" or "Print Test Slip" to print.',
-      };
-    }
-
-    try {
-      const device = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [
-          '000018f0-0000-1000-8000-00805f9b34fb',
-          'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-          '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-          '0000ffe0-0000-1000-8000-00805f9b34fb',
-          '0000ff00-0000-1000-8000-00805f9b34fb',
-        ],
-      });
-
-      if (!device) {
-        return { success: false, error: 'No printer selected.' };
-      }
-
-      const server = await device.gatt.connect();
-      const services = await server.getPrimaryServices();
-      let writeChar: any = null;
-
-      for (const service of services) {
-        try {
-          const chars = await service.getCharacteristics();
-          for (const c of chars) {
-            if (c.properties.write || c.properties.writeWithoutResponse) {
-              writeChar = c;
-              break;
-            }
-          }
-        } catch {}
-        if (writeChar) break;
-      }
-
-      if (writeChar) {
-        cachedDevice = device;
-        cachedCharacteristic = writeChar;
-        localStorage.setItem('hotel_rj_printer_name', device.name || 'Bluetooth Printer');
-        return { success: true, deviceName: device.name || 'Bluetooth Printer' };
-      }
-
-      return { success: true, deviceName: device.name || 'Paired Thermal Printer' };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Bluetooth connection cancelled.' };
-    }
-  },
-
-  /**
    * Print Kitchen Order Ticket (KOT)
-   * Tries direct Web Bluetooth if connected, otherwise uses the universal Android Print Spooler
+   * Tries direct Bluetooth SPP first, then Android System PrintManager spooler, then Web print
    */
-  async printKOT(data: KOTPrintData): Promise<{ success: boolean }> {
-    // 1. Try direct Web Bluetooth if characteristic is available
+  async printKOT(data: KOTPrintData): Promise<{ success: boolean; method: string; error?: string }> {
+    Logger.info('Printer', `Initiating KOT #${data.kotNumber} for table ${data.tableNumber}`);
+
+    const androidPrinter = (window as any).AndroidPrinter;
+    if (androidPrinter) {
+      Logger.info('Printer', 'Android native printer interface found');
+      const escpos = generateKOTEscPos(data);
+      const base64 = uint8ArrayToBase64(escpos);
+      const savedAddress = localStorage.getItem('hotel_rj_printer_address') || '';
+
+      // 1. Attempt Direct Bluetooth SPP
+      try {
+        Logger.info('Printer', `Attempting Bluetooth direct print (address: "${savedAddress || 'auto'}")`);
+        const resJson = androidPrinter.printBluetooth(savedAddress, base64);
+        const res = JSON.parse(resJson);
+        if (res.success) {
+          const device = res.deviceName || 'Bluetooth Printer';
+          Logger.success('Printer', `KOT #${data.kotNumber} printed to ${device}`);
+          return { success: true, method: `Bluetooth (${device})` };
+        } else {
+          Logger.warn('Printer', `Bluetooth returned: ${res.error || 'unspecified'}. Trying System Spooler...`);
+        }
+      } catch (err: any) {
+        Logger.warn('Printer', `Bluetooth direct call error: ${err?.message}`);
+      }
+
+      // 2. Fallback to Android Native System Print Spooler (PrintManager)
+      try {
+        Logger.info('Printer', 'Opening Android System Print dialog');
+        androidPrinter.printHtml(generateKOTHtml(data), `KOT_${data.tableNumber}_#${data.kotNumber}`);
+        return { success: true, method: 'Android System Print Spooler' };
+      } catch (err: any) {
+        Logger.error('Printer', `Android PrintManager failed: ${err?.message}`);
+      }
+    }
+
+    // 3. Web Bluetooth (if paired in supported browser)
     if (cachedCharacteristic && cachedDevice?.gatt?.connected) {
       try {
         const escpos = generateKOTEscPos(data);
         await this.sendBytes(escpos);
-        return { success: true };
-      } catch (err) {
-        console.warn('Direct bluetooth write failed, falling back to spooler:', err);
+        Logger.success('Printer', 'KOT printed via Web Bluetooth');
+        return { success: true, method: 'Web Bluetooth' };
+      } catch (err: any) {
+        Logger.warn('Printer', `Web Bluetooth write failed: ${err?.message}`);
       }
     }
 
-    // 2. Universal Android Print Spooler (100% works on all Android phones & WebView)
+    // 4. Browser Print Fallback
+    Logger.info('Printer', 'Executing browser print spooler');
     printViaAndroidSpooler(generateKOTHtml(data));
-    return { success: true };
+    return { success: true, method: 'Browser Print' };
   },
 
   /**
    * Print Final Customer Bill (Tax Invoice)
    */
-  async printBill(data: BillPrintData): Promise<{ success: boolean }> {
+  async printBill(data: BillPrintData): Promise<{ success: boolean; method: string; error?: string }> {
+    Logger.info('Printer', `Initiating Bill #${data.billNumber} for table ${data.tableNumber}`);
+
+    const androidPrinter = (window as any).AndroidPrinter;
+    if (androidPrinter) {
+      const escpos = generateBillEscPos(data);
+      const base64 = uint8ArrayToBase64(escpos);
+      const savedAddress = localStorage.getItem('hotel_rj_printer_address') || '';
+
+      // 1. Direct Bluetooth SPP
+      try {
+        const resJson = androidPrinter.printBluetooth(savedAddress, base64);
+        const res = JSON.parse(resJson);
+        if (res.success) {
+          const device = res.deviceName || 'Bluetooth Printer';
+          Logger.success('Printer', `Bill #${data.billNumber} printed to ${device}`);
+          return { success: true, method: `Bluetooth (${device})` };
+        } else {
+          Logger.warn('Printer', `Bluetooth returned: ${res.error}. Falling back to System Spooler...`);
+        }
+      } catch (err: any) {
+        Logger.warn('Printer', `Bluetooth call error: ${err?.message}`);
+      }
+
+      // 2. Android Native PrintManager
+      try {
+        Logger.info('Printer', 'Opening Android System Print dialog for Bill');
+        androidPrinter.printHtml(generateBillHtml(data), `Bill_${data.billNumber}`);
+        return { success: true, method: 'Android System Print Spooler' };
+      } catch (err: any) {
+        Logger.error('Printer', `Android PrintManager failed: ${err?.message}`);
+      }
+    }
+
     if (cachedCharacteristic && cachedDevice?.gatt?.connected) {
       try {
         const escpos = generateBillEscPos(data);
         await this.sendBytes(escpos);
-        return { success: true };
-      } catch (err) {
-        console.warn('Direct bluetooth write failed, falling back to spooler:', err);
+        Logger.success('Printer', 'Bill printed via Web Bluetooth');
+        return { success: true, method: 'Web Bluetooth' };
+      } catch (err: any) {
+        Logger.warn('Printer', `Web Bluetooth write failed: ${err?.message}`);
       }
     }
 
     printViaAndroidSpooler(generateBillHtml(data));
-    return { success: true };
+    return { success: true, method: 'Browser Print' };
   },
 
   /**
    * Print 58mm test receipt
    */
-  async printTestReceipt(): Promise<boolean> {
+  async printTestReceipt(): Promise<{ success: boolean; method: string }> {
+    Logger.info('Printer', 'Initiating Test Print Slip');
     const testData: KOTPrintData = {
       tableNumber: 'TEST',
       kotNumber: 1,
@@ -167,11 +219,10 @@ export const BluetoothPrinter = {
         { name: 'Hotel RJ Thermal Printer', quantity: 1, notes: 'Self-Test OK!' },
         { name: '58mm Paper Roll Configured', quantity: 1 },
       ],
-      orderNote: 'Printer is ready to take orders!',
+      orderNote: 'Thermal printing is working properly!',
     };
 
-    const res = await this.printKOT(testData);
-    return res.success;
+    return await this.printKOT(testData);
   },
 
   /**
