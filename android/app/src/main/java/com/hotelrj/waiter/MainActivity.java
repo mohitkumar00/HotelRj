@@ -210,7 +210,7 @@ public class MainActivity extends BridgeActivity {
                                 PrintAttributes.Builder builder = new PrintAttributes.Builder();
                                 builder.setColorMode(PrintAttributes.COLOR_MODE_MONOCHROME);
                                 builder.setMediaSize(PrintAttributes.MediaSize.UNKNOWN_PORTRAIT);
-                                builder.setMinMargins(PrintAttributes.Margins.ZERO);
+                                builder.setMinMargins(PrintAttributes.Margins.NO_MARGINS);
                                 printManager.print(name, printAdapter, builder.build());
                             }
                         }
