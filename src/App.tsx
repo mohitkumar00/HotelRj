@@ -122,11 +122,17 @@ export const App: React.FC = () => {
     }
   };
 
-  // If user navigated directly to the menu page (or scanned the dining table QR)
-    if (isPosMode) {
+  // In Native Android App: dedicated 100% for waiters (pure POS, no website, no back buttons)
+  if (Capacitor.isNativePlatform()) {
+    return <WaiterPOS />;
+  }
+
+  // Web Browser: Staff POS mode
+  if (isPosMode) {
     return <WaiterPOS onSwitchToGuestMenu={() => setIsPosMode(false)} />;
   }
 
+  // Web Browser: Digital menu (?view=menu)
   if (isMenuView) {
     return (
       <DigitalMenuPage

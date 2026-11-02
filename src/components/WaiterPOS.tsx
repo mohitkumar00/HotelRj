@@ -69,7 +69,7 @@ const ALL_TABLE_IDS = [
 ];
 
 interface WaiterPOSProps {
-  onSwitchToGuestMenu: () => void;
+  onSwitchToGuestMenu?: () => void;
 }
 
 export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => {
@@ -551,16 +551,18 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </span>
             </button>
 
-            {/* Switch to Guest Menu Presentation */}
-            <button
-              type="button"
-              onClick={onSwitchToGuestMenu}
-              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-[11px] font-semibold flex items-center gap-1 border border-white/10 active:scale-95 transition-all"
-              title="Show Photo Menu Card to Guests"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-gold-400" />
-              <span className="hidden sm:inline">Guest Menu</span>
-            </button>
+            {/* Optional Switch to Guest Menu Presentation */}
+            {onSwitchToGuestMenu && (
+              <button
+                type="button"
+                onClick={onSwitchToGuestMenu}
+                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-[11px] font-semibold flex items-center gap-1 border border-white/10 active:scale-95 transition-all"
+                title="Show Photo Menu Card to Guests"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-gold-400" />
+                <span className="hidden sm:inline">Guest Menu</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
