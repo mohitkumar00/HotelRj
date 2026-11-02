@@ -6,6 +6,7 @@ import {
   KOTPrintData,
   BillPrintData,
 } from '../utils/thermalPrinter';
+import { Capacitor } from '@capacitor/core';
 import {
   Search,
   Plus,
@@ -19,14 +20,15 @@ import {
   User,
   Trash2,
   ChevronUp,
-  BookOpen,
+  ShoppingBag,
+  Edit3,
 } from 'lucide-react';
 
 interface WaiterItemRecord {
   item: MenuItem;
   quantity: number;
   notes?: string;
-  firedCount: number; // How many were already printed in previous KOTs
+  firedCount: number;
 }
 
 interface TableOrder {
@@ -40,7 +42,7 @@ interface TableOrder {
 }
 
 const ALL_TABLE_IDS = [
-  // Dine-in tables
+  // 1. Dine-in tables
   'T-1',
   'T-2',
   'T-3',
@@ -53,7 +55,13 @@ const ALL_TABLE_IDS = [
   'T-10',
   'T-11',
   'T-12',
-  // Hotel rooms
+  // 2. Takeaway / Parcel slots
+  'Parcel 1',
+  'Parcel 2',
+  'Parcel 3',
+  'Parcel 4',
+  'Takeaway Counter',
+  // 3. Hotel rooms
   'Room 101',
   'Room 102',
   'Room 103',
@@ -64,8 +72,6 @@ const ALL_TABLE_IDS = [
   'Room 301',
   'Room 302',
   'Room 305',
-  // Parcel
-  'Takeaway',
 ];
 
 interface WaiterPOSProps {
@@ -73,9 +79,9 @@ interface WaiterPOSProps {
 }
 
 export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => {
-  // Active selected table
+  // Active selected table / parcel
   const [activeTable, setActiveTable] = useState<string>('T-1');
-  const [tableFilter, setTableFilter] = useState<'all' | 'dinein' | 'rooms' | 'active'>('all');
+  const [tableFilter, setTableFilter] = useState<'all' | 'dinein' | 'takeaway' | 'rooms' | 'active'>('all');
 
   // Staff / Server Name
   const [serverName, setServerName] = useState<string>(() => {
@@ -86,10 +92,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Multi-Table State Store
   const [tables, setTables] = useState<{ [tableId: string]: TableOrder }>(() => {
     try {
-      const saved = localStorage.getItem('hotel_rj_pos_tables_v2');
+      const saved = localStorage.getItem('hotel_rj_pos_tables_v3');
       if (saved) return JSON.parse(saved);
     } catch {}
-    // Default initial empty tables
     const init: { [tableId: string]: TableOrder } = {};
     for (const t of ALL_TABLE_IDS) {
       init[t] = {
@@ -107,7 +112,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Save tables state on every change
   useEffect(() => {
     try {
-      localStorage.setItem('hotel_rj_pos_tables_v2', JSON.stringify(tables));
+      localStorage.setItem('hotel_rj_pos_tables_v3', JSON.stringify(tables));
     } catch {}
   }, [tables]);
 
@@ -125,6 +130,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     );
   }, [tables, activeTable, serverName]);
 
+  const isTakeawayActive = useMemo(() => {
+    return activeTable.toLowerCase().includes('parcel') || activeTable.toLowerCase().includes('takeaway');
+  }, [activeTable]);
+
   // Search & Filter State for Menu
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -133,17 +142,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // UI Drawers & Modals
   const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
   const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
-  const [printerStatus, setPrinterStatus] = useState<string | null>(null);
-  const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
   const [printSuccessMsg, setPrintSuccessMsg] = useState<string | null>(null);
 
   // Item customization modal
-  const [customizingItem, setCustomizingItem] = useState<WaiterItemRecord | null>(null);
-
-  // Check printer connection on mount
-  useEffect(() => {
-    setPrinterStatus(BluetoothPrinter.getConnectedDeviceName());
-  }, []);
+  const [customizingItem, setCustomizingItem] = useState<{ id: string; name: string; notes?: string } | null>(null);
+  const [customNoteText, setCustomNoteText] = useState<string>('');
 
   // Haptic feedback helper
   const triggerHaptic = (ms = 35) => {
@@ -222,8 +225,17 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     });
   };
 
-  // Update notes on a specific dish
-  const handleSaveItemNote = (itemId: string, noteText: string) => {
+  // Open note editor for item
+  const openNoteEditor = (itemId: string, itemName: string, currentNotes?: string) => {
+    setCustomizingItem({ id: itemId, name: itemName, notes: currentNotes || '' });
+    setCustomNoteText(currentNotes || '');
+  };
+
+  // Save cooking note on a specific dish
+  const handleSaveItemNote = (noteText: string) => {
+    if (!customizingItem) return;
+    const itemId = customizingItem.id;
+
     setTables((prev) => {
       const table = prev[activeTable];
       if (!table || !table.items[itemId]) return prev;
@@ -301,6 +313,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       items: newItemsToFire,
       orderNote: currentOrder.generalNote,
+      isTakeaway: isTakeawayActive,
     };
 
     try {
@@ -317,7 +330,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         for (const [id, rec] of Object.entries(table.items)) {
           updatedItems[id] = {
             ...rec,
-            firedCount: rec.quantity, // all current quantity is now fired
+            firedCount: rec.quantity,
           };
         }
 
@@ -350,10 +363,12 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         name: ci.item.name,
         quantity: ci.quantity,
         price: typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0,
+        notes: ci.notes,
       })),
       subtotal: subtotalPrice,
       gstRate: 5,
       grandTotal,
+      isTakeaway: isTakeawayActive,
     };
 
     try {
@@ -393,38 +408,20 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }
   };
 
-  // Action: SHARE ON WHATSAPP
+  // Action: SEND VIA WHATSAPP (Kitchen or Guest)
   const handleSendWhatsApp = () => {
     const itemsListStr = currentItemsList
       .map((ci) => {
         const p = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
-        return `• ${ci.quantity}x ${ci.item.name} - ₹${p * ci.quantity}${ci.notes ? ` (${ci.notes})` : ''}`;
+        return `• ${ci.quantity}x ${ci.item.name} - ₹${p * ci.quantity}${ci.notes ? ` [${ci.notes}]` : ''}`;
       })
       .join('\n');
 
-    const text = `*HOTEL RJ - TABLE ${activeTable}*\nServer: ${serverName}\nTime: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n--------------------\n${itemsListStr}\n--------------------\n*Subtotal:* ₹${subtotalPrice}\n*GST (5%):* ₹${gstAmount}\n*Total Bill:* ₹${grandTotal}\n_Where Comfort Meets Great Taste_`;
+    const takeawayHeader = isTakeawayActive ? '\n*** TAKEAWAY / PARCEL ORDER ***\n' : '\n';
+
+    const text = `*HOTEL RJ - ${activeTable.toUpperCase()}*${takeawayHeader}Server: ${serverName}\nTime: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n--------------------\n${itemsListStr}\n--------------------\n*Subtotal:* ₹${subtotalPrice}\n*GST (5%):* ₹${gstAmount}\n*Total Bill:* ₹${grandTotal}\n_Where Comfort Meets Great Taste_`;
 
     window.open(`https://wa.me/917004865824?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  // Bluetooth Connect Action
-  const handleConnectBluetooth = async () => {
-    setIsConnectingPrinter(true);
-    const res = await BluetoothPrinter.connect();
-    setIsConnectingPrinter(false);
-    if (res.success) {
-      setPrinterStatus(res.deviceName || 'Thermal Printer');
-    } else {
-      alert(res.error || 'Bluetooth device selection cancelled');
-    }
-  };
-
-  const handleTestPrint = async () => {
-    const success = await BluetoothPrinter.printTestReceipt();
-    if (success) {
-      setPrintSuccessMsg('Test slip printed successfully!');
-      setTimeout(() => setPrintSuccessMsg(null), 3000);
-    }
   };
 
   // Filtered Menu Items for fast searching
@@ -444,7 +441,6 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         if (query) {
           const matchName = item.name.toLowerCase().includes(query);
           const matchPrice = String(item.price).includes(query);
-          // Acronym matching e.g. "pbm" for Paneer Butter Masala
           const acronym = item.name.split(/\s+/).map((w) => w[0]).join('').toLowerCase();
           const matchAcronym = acronym.includes(query);
 
@@ -467,6 +463,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const filteredTables = useMemo(() => {
     if (tableFilter === 'dinein') {
       return ALL_TABLE_IDS.filter((t) => t.startsWith('T-'));
+    }
+    if (tableFilter === 'takeaway') {
+      return ALL_TABLE_IDS.filter((t) => t.toLowerCase().includes('parcel') || t.toLowerCase().includes('takeaway'));
     }
     if (tableFilter === 'rooms') {
       return ALL_TABLE_IDS.filter((t) => t.startsWith('Room'));
@@ -532,35 +531,33 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             </div>
           </div>
 
-          {/* Right Header Controls: Printer, Guest Menu, Status */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Bluetooth Printer Pill */}
+          {/* Right Header Controls: Printer Setup */}
+          <div className="flex items-center gap-1.5">
+            {/* Active Table indicator pill */}
+            <div className="px-2.5 py-1 rounded-xl bg-amber-400/15 border border-amber-400/30 text-amber-300 text-xs font-bold">
+              {activeTable}
+            </div>
+
+            {/* Thermal Printer Button */}
             <button
               type="button"
               onClick={() => setIsPrinterModalOpen(true)}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all active:scale-95 ${
-                printerStatus
-                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                  : 'bg-white/5 border-white/10 text-sand-400 hover:text-white'
-              }`}
-              title="Thermal Printer Connection"
+              className="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center gap-1.5 border border-white/10 active:scale-95 transition-all"
+              title="Thermal Printer & Printing Setup"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span className="text-[10px] hidden xs:inline">
-                {printerStatus ? printerStatus.slice(0, 10) : 'Connect Printer'}
-              </span>
+              <Printer className="w-3.5 h-3.5 text-gold-400" />
+              <span className="text-[10px] hidden xs:inline">Printer</span>
             </button>
 
-            {/* Optional Switch to Guest Menu Presentation */}
-            {onSwitchToGuestMenu && (
+            {/* Browser preview exit (hidden on Android native APK) */}
+            {!Capacitor.isNativePlatform() && onSwitchToGuestMenu && (
               <button
                 type="button"
                 onClick={onSwitchToGuestMenu}
-                className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-[11px] font-semibold flex items-center gap-1 border border-white/10 active:scale-95 transition-all"
-                title="Show Photo Menu Card to Guests"
+                className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-medium border border-white/10"
+                title="Exit POS mode back to guest menu (browser only)"
               >
-                <BookOpen className="w-3.5 h-3.5 text-gold-400" />
-                <span className="hidden sm:inline">Guest Menu</span>
+                Exit POS
               </button>
             )}
           </div>
@@ -575,31 +572,33 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       )}
 
-      {/* 3. MULTI-TABLE QUICK SWITCHER BAR */}
+      {/* 3. MULTI-TABLE & TAKEAWAY QUICK SWITCHER */}
       <div className="bg-[#11131c] border-b border-white/10 px-3 py-2">
         <div className="max-w-7xl mx-auto space-y-2">
           {/* Table Type Filter Tabs */}
           <div className="flex items-center justify-between gap-2 text-[10px] uppercase font-bold tracking-wider">
-            <span className="text-sand-400">Select Table / Room:</span>
-            <div className="flex items-center gap-1">
-              {(['all', 'dinein', 'rooms', 'active'] as const).map((mode) => (
+            <span className="text-sand-400">Order For:</span>
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+              {(
+                [
+                  { id: 'all', label: 'All' },
+                  { id: 'dinein', label: '🍽️ Dine-In' },
+                  { id: 'takeaway', label: '🛍️ Takeaway' },
+                  { id: 'rooms', label: '🏨 Rooms' },
+                  { id: 'active', label: '🟢 Active' },
+                ] as const
+              ).map((tab) => (
                 <button
-                  key={mode}
+                  key={tab.id}
                   type="button"
-                  onClick={() => setTableFilter(mode)}
-                  className={`px-2 py-0.5 rounded-full transition-colors ${
-                    tableFilter === mode
-                      ? 'bg-amber-400 text-black'
-                      : 'text-sand-400 hover:text-white'
+                  onClick={() => setTableFilter(tab.id)}
+                  className={`px-2.5 py-1 rounded-full whitespace-nowrap transition-colors ${
+                    tableFilter === tab.id
+                      ? 'bg-amber-400 text-black font-black'
+                      : 'text-sand-300 hover:text-white bg-zinc-900 border border-white/5'
                   }`}
                 >
-                  {mode === 'all'
-                    ? 'All'
-                    : mode === 'dinein'
-                    ? 'Dine-In'
-                    : mode === 'rooms'
-                    ? 'Rooms'
-                    : 'Active'}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -612,6 +611,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               const itemCount = tblData ? Object.values(tblData.items || {}).reduce((sum, it) => sum + it.quantity, 0) : 0;
               const isSelected = activeTable === tblId;
               const isKotSent = tblData?.status === 'kot_sent';
+              const isParcel = tblId.toLowerCase().includes('parcel') || tblId.toLowerCase().includes('takeaway');
 
               return (
                 <button
@@ -628,19 +628,25 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                       ? isKotSent
                         ? 'bg-amber-950/60 text-amber-300 border-amber-500/50'
                         : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/50'
+                      : isParcel
+                      ? 'bg-purple-950/40 text-purple-200 border-purple-500/30 hover:border-purple-400/50'
                       : 'bg-zinc-900/90 text-sand-300 border-white/10 hover:border-white/20'
                   }`}
                 >
-                  {/* Status Indicator Dot */}
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      itemCount === 0
-                        ? 'bg-stone-600'
-                        : isKotSent
-                        ? 'bg-amber-400 animate-pulse'
-                        : 'bg-emerald-400'
-                    }`}
-                  />
+                  {/* Status Indicator Dot / Icon */}
+                  {isParcel ? (
+                    <ShoppingBag className="w-3 h-3 text-purple-300" />
+                  ) : (
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        itemCount === 0
+                          ? 'bg-stone-600'
+                          : isKotSent
+                          ? 'bg-amber-400 animate-pulse'
+                          : 'bg-emerald-400'
+                      }`}
+                    />
+                  )}
                   <span>{tblId}</span>
                   {itemCount > 0 && (
                     <span
@@ -660,17 +666,25 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       </div>
 
-      {/* 4. SEARCH & FAST CATEGORY TABS */}
+      {/* 4. TAKEAWAY NOTICE BANNER (when parcel selected) */}
+      {isTakeawayActive && (
+        <div className="bg-purple-900/40 border-b border-purple-500/30 px-3 py-1.5 text-center text-xs text-purple-200 font-semibold flex items-center justify-center gap-2">
+          <ShoppingBag className="w-3.5 h-3.5 text-purple-300" />
+          <span>Takeaway / Parcel Active — Food will be packed for takeaway</span>
+        </div>
+      )}
+
+      {/* 5. SEARCH & FAST CATEGORY TABS */}
       <div className="sticky top-[52px] z-30 bg-[#08090d]/95 backdrop-blur-md px-3 pt-2.5 pb-2 border-b border-white/5 shadow-md">
         <div className="max-w-7xl mx-auto space-y-2">
-          {/* Quick Search with Acronym hint */}
+          {/* Quick Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sand-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search dish or shortcode (e.g. 'pbm', 'cb', 'naan')..."
+              placeholder="Search dishes or shortcodes ('pbm', 'cb', 'naan', 'dal')..."
               className="w-full bg-zinc-900/90 text-xs sm:text-sm text-white pl-9 pr-8 py-2 rounded-xl border border-white/10 focus:border-gold-400 focus:outline-none placeholder:text-sand-500"
             />
             {searchQuery && (
@@ -729,7 +743,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                       : 'text-sand-400 hover:text-white bg-zinc-900 border border-white/5'
                   }`}
                 >
-                  {diet === 'all' ? 'All Diet' : diet === 'veg' ? '🟢 Veg' : '🔴 Non-Veg'}
+                  {diet === 'all' ? 'All' : diet === 'veg' ? '🟢 Veg' : '🔴 Non-Veg'}
                 </button>
               ))}
             </div>
@@ -737,7 +751,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       </div>
 
-      {/* 5. DISH PUNCHING GRID */}
+      {/* 6. DISH PUNCHING GRID WITH CLEAR FOOD PHOTOS */}
       <main className="max-w-7xl mx-auto px-3 py-3">
         <div className="space-y-6">
           {filteredCategories.map((category) => (
@@ -749,8 +763,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </span>
               </h3>
 
-              {/* Fast 2 to 3 column punch cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {/* 2 to 3 column cards with food photos */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
                 {category.items.map((dish) => {
                   const record = currentOrder.items[dish.id];
                   const inCartQty = record?.quantity || 0;
@@ -759,71 +773,93 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   return (
                     <div
                       key={dish.id}
-                      className={`relative p-2.5 rounded-xl border transition-all flex flex-col justify-between select-none ${
+                      className={`relative p-2 rounded-2xl border transition-all flex flex-col justify-between select-none overflow-hidden ${
                         inCartQty > 0
-                          ? 'bg-[#181a24] border-amber-400 shadow-md ring-1 ring-amber-400/30'
-                          : 'bg-zinc-900/60 border-white/5 hover:border-white/15'
+                          ? 'bg-[#181a24] border-amber-400 shadow-lg ring-1 ring-amber-400/40'
+                          : 'bg-zinc-900/80 border-white/10 hover:border-white/20'
                       }`}
                     >
-                      {/* Top Row: Dietary dot & Price */}
-                      <div className="flex items-start justify-between gap-1 mb-1">
+                      {/* Dish Thumbnail Image */}
+                      <div className="relative w-full h-24 sm:h-28 rounded-xl overflow-hidden mb-2 bg-zinc-950 shrink-0">
+                        <img
+                          src={dish.image || './images/food/hero-veg-starters.jpg'}
+                          alt={dish.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = './images/food/hero-veg-starters.jpg';
+                          }}
+                        />
+
+                        {/* Overlay Dietary Dot */}
                         <span
-                          className={`w-3.5 h-3.5 rounded border flex items-center justify-center p-0.5 shrink-0 ${
+                          className={`absolute top-1.5 left-1.5 w-4 h-4 rounded border flex items-center justify-center p-0.5 shadow-md ${
                             dish.dietary === 'veg'
                               ? 'border-emerald-600 bg-white'
                               : 'border-rose-600 bg-white'
                           }`}
                         >
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${
+                            className={`w-2 h-2 rounded-full ${
                               dish.dietary === 'veg' ? 'bg-emerald-600' : 'bg-rose-600'
                             }`}
                           />
                         </span>
 
-                        <span className="font-mono text-xs font-bold text-gold-300">
+                        {/* Price Badge */}
+                        <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/85 backdrop-blur-xs font-mono text-xs font-bold text-amber-300 shadow">
                           ₹{priceNum}
                         </span>
+
+                        {/* Active Quantity Badge Overlay */}
+                        {inCartQty > 0 && (
+                          <span className="absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full bg-amber-400 text-black text-xs font-black shadow-md">
+                            x{inCartQty}
+                          </span>
+                        )}
                       </div>
 
                       {/* Dish Name */}
-                      <h4 className="text-xs font-semibold text-white leading-tight line-clamp-2 min-h-[32px]">
+                      <h4 className="text-xs font-semibold text-white leading-tight line-clamp-2 min-h-[30px] px-1">
                         {dish.name}
                       </h4>
 
-                      {/* Cooking Note Indicator if set */}
-                      {record?.notes && (
-                        <div className="text-[9px] text-amber-300 italic truncate mt-1">
-                          Note: {record.notes}
-                        </div>
-                      )}
+                      {/* Cooking Note Button / Display */}
+                      {inCartQty > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => openNoteEditor(dish.id, dish.name, record?.notes)}
+                          className="mt-1.5 w-full py-1 px-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/30 text-amber-300 text-[10px] font-semibold flex items-center justify-center gap-1 active:scale-95 transition-all truncate"
+                          title="Tap to add cooking note"
+                        >
+                          <Edit3 className="w-2.5 h-2.5 shrink-0" />
+                          <span className="truncate">
+                            {record?.notes ? record.notes : '+ Cooking Note'}
+                          </span>
+                        </button>
+                      ) : null}
 
-                      {/* Stepper Buttons for Fast Thumb Tapping */}
-                      <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between gap-1">
+                      {/* Stepper Buttons */}
+                      <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between gap-1">
                         {inCartQty > 0 ? (
                           <>
                             <button
                               type="button"
                               onClick={() => handleRemoveItem(dish.id)}
-                              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center active:scale-90 transition-transform"
+                              className="w-9 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center active:scale-90 transition-transform"
                               aria-label="Decrease quantity"
                             >
                               <Minus className="w-3.5 h-3.5" />
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => setCustomizingItem(record)}
-                              className="font-mono text-xs font-black text-amber-300 px-1 hover:underline"
-                              title="Tap to add cooking note"
-                            >
-                              x{inCartQty}
-                            </button>
+                            <span className="font-mono text-xs font-black text-white px-1">
+                              {inCartQty}
+                            </span>
 
                             <button
                               type="button"
                               onClick={() => handleAddItem(dish)}
-                              className="w-8 h-8 rounded-lg bg-amber-400 text-black flex items-center justify-center active:scale-90 transition-transform shadow-sm"
+                              className="w-9 h-8 rounded-lg bg-amber-400 text-black flex items-center justify-center active:scale-90 transition-transform shadow-sm"
                               aria-label="Increase quantity"
                             >
                               <Plus className="w-3.5 h-3.5" />
@@ -833,9 +869,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                           <button
                             type="button"
                             onClick={() => handleAddItem(dish)}
-                            className="w-full py-1.5 px-2 rounded-lg bg-white/5 hover:bg-amber-400 hover:text-black text-sand-200 text-xs font-semibold flex items-center justify-center gap-1 border border-white/10 active:scale-95 transition-all"
+                            className="w-full py-1.5 px-2 rounded-xl bg-white/10 hover:bg-amber-400 hover:text-black text-white text-xs font-semibold flex items-center justify-center gap-1 border border-white/10 active:scale-95 transition-all"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-3.5 h-3.5" />
                             <span>Add</span>
                           </button>
                         )}
@@ -849,13 +885,13 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       </main>
 
-      {/* 6. PERSISTENT FLOATING BOTTOM ACTION BAR */}
+      {/* 7. PERSISTENT FLOATING BOTTOM ACTION BAR */}
       <footer className="fixed bottom-0 left-0 right-0 z-40 bg-[#0d0f17]/98 backdrop-blur-xl border-t border-amber-400/40 p-2.5 sm:p-3 shadow-2xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
           {/* Active Table Summary */}
           <div
             onClick={() => setIsOrderDrawerOpen(true)}
-            className="flex items-center gap-2 cursor-pointer min-w-0"
+            className="flex items-center gap-2.5 cursor-pointer min-w-0"
           >
             <div className="w-10 h-10 rounded-xl bg-amber-400 text-black flex items-center justify-center font-black text-sm shrink-0 shadow-md">
               {totalItemsCount}
@@ -866,14 +902,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   {activeTable}
                 </span>
                 <span className="text-[10px] text-sand-400">
-                  ({totalItemsCount} {totalItemsCount === 1 ? 'item' : 'items'})
+                  ({totalItemsCount} items)
                 </span>
               </div>
               <div className="font-mono text-xs font-bold text-amber-300">
                 ₹{subtotalPrice}
                 {newItemsToFire.length > 0 && (
-                  <span className="ml-1.5 text-[9px] text-emerald-400 font-sans font-normal">
-                    ({newItemsToFire.length} new to fire)
+                  <span className="ml-1.5 text-[9.5px] text-emerald-400 font-sans font-normal">
+                    ({newItemsToFire.length} ready to fire)
                   </span>
                 )}
               </div>
@@ -908,7 +944,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       </footer>
 
-      {/* 7. FULL ORDER DRAWER & KOT / BILLING SLIP MODAL */}
+      {/* 8. ORDER DRAWER & KOT / BILLING SLIP MODAL */}
       {isOrderDrawerOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
           <div className="w-full max-w-lg max-h-[92vh] bg-[#0e1017] text-white rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
@@ -920,7 +956,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </div>
                 <div>
                   <h3 className="font-serif text-sm font-bold text-white">
-                    {activeTable} Order Summary
+                    {activeTable} Order Sheet
                   </h3>
                   <span className="text-[10px] text-sand-400">
                     Server: {serverName} • KOT #{currentOrder.kotNumber}
@@ -937,11 +973,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </button>
             </div>
 
-            {/* Modal Body: Two Wave Sections */}
+            {/* Modal Body */}
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
               {currentItemsList.length === 0 ? (
                 <div className="py-12 text-center text-sand-400">
-                  <p className="text-sm font-medium">Table {activeTable} is empty.</p>
+                  <p className="text-sm font-medium">{activeTable} is empty.</p>
                   <p className="text-xs mt-1">Tap dishes on the menu to add items.</p>
                 </div>
               ) : (
@@ -952,7 +988,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1">
                           <Sparkles className="w-3.5 h-3.5" />
-                          <span>New Items (Ready to Fire to Kitchen)</span>
+                          <span>New Items to Cook</span>
                         </span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-black font-bold">
                           KOT #{currentOrder.kotNumber}
@@ -967,18 +1003,23 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                             const price = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
 
                             return (
-                              <div key={ci.item.id} className="py-2 flex items-center justify-between gap-2">
-                                <div>
+                              <div key={ci.item.id} className="py-2.5 flex items-start justify-between gap-2">
+                                <div className="min-w-0">
                                   <div className="text-xs font-semibold text-white">
                                     {unfiredQty}x {ci.item.name}
                                   </div>
-                                  {ci.notes && (
-                                    <div className="text-[10px] text-amber-300 italic">
-                                      * {ci.notes}
-                                    </div>
-                                  )}
+                                  {/* Note Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => openNoteEditor(ci.item.id, ci.item.name, ci.notes)}
+                                    className="text-[10px] text-amber-300 italic hover:underline flex items-center gap-1 mt-0.5"
+                                  >
+                                    <Edit3 className="w-2.5 h-2.5" />
+                                    <span>{ci.notes ? ci.notes : '+ Add note (Spicy / Jain...)'}</span>
+                                  </button>
                                 </div>
-                                <div className="flex items-center gap-2">
+
+                                <div className="flex items-center gap-2 shrink-0">
                                   <span className="text-xs font-mono text-sand-300">
                                     ₹{price * unfiredQty}
                                   </span>
@@ -1011,7 +1052,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                     <div className="p-3 rounded-2xl bg-zinc-900 border border-white/5 space-y-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
                         <Check className="w-3.5 h-3.5" />
-                        <span>Already Fired to Kitchen (Cooking)</span>
+                        <span>Already Cooking in Kitchen</span>
                       </span>
 
                       <div className="divide-y divide-white/5 text-xs text-sand-300">
@@ -1021,8 +1062,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                               {it.quantity}x {it.name}
                             </span>
                             {it.notes && (
-                              <span className="text-[10px] text-sand-500 italic">
-                                ({it.notes})
+                              <span className="text-[10px] text-amber-300 italic">
+                                [{it.notes}]
                               </span>
                             )}
                           </div>
@@ -1062,7 +1103,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                     className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-gold-400 to-gold-500 hover:from-gold-300 hover:to-gold-400 text-black text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
                   >
                     <FileText className="w-4 h-4" />
-                    <span>Print Bill (Tax Invoice)</span>
+                    <span>Print Bill</span>
                   </button>
 
                   <button
@@ -1099,71 +1140,110 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       )}
 
-      {/* 8. DISH CUSTOMIZATION / COOKING NOTE POPUP */}
+      {/* 9. COOKING NOTES & INSTRUCTIONS POPUP (LESS SPICY, JAIN, ETC.) */}
       {customizingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-[#131622] border border-white/10 rounded-2xl p-4 shadow-2xl space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-semibold text-sm text-white">
-                Cooking Note: {customizingItem.item.name}
-              </h4>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-[#131622] border border-amber-400/40 rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                  Cooking Note / Request
+                </span>
+                <h4 className="font-bold text-sm text-white">
+                  {customizingItem.name}
+                </h4>
+              </div>
               <button
                 type="button"
                 onClick={() => setCustomizingItem(null)}
-                className="p-1 text-sand-400 hover:text-white"
+                className="p-1 rounded-full text-sand-400 hover:text-white"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Quick preset chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                'Less Spicy',
-                'Extra Spicy',
-                'No Onion-Garlic (Jain)',
-                'Extra Gravy',
-                'Crispy',
-                'Bring First (Starter)',
-                'Pack / Parcel',
-              ].map((chip) => (
-                <button
-                  key={chip}
-                  type="button"
-                  onClick={() => handleSaveItemNote(customizingItem.item.id, chip)}
-                  className="px-2.5 py-1 rounded-lg text-xs bg-white/5 hover:bg-gold-400 hover:text-black text-sand-300 border border-white/10 transition-colors"
-                >
-                  {chip}
-                </button>
-              ))}
+            {/* Quick 1-Tap Cooking Chips */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-2">
+                Tap Quick Instructions:
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  '🌶️ Less Spicy',
+                  '🔥 Extra Spicy',
+                  '🥬 No Onion-Garlic (Jain)',
+                  '🧈 Extra Butter',
+                  '🥣 Extra Gravy',
+                  '🍟 Extra Crispy',
+                  '⏱️ Bring First (Starter)',
+                  '📦 Pack / Parcel',
+                  '🧂 Low Salt',
+                  '🚫 No Coriander',
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => {
+                      setCustomNoteText((prev) => {
+                        const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
+                        if (prev.includes(cleanChip)) return prev;
+                        return prev ? `${prev}, ${cleanChip}` : cleanChip;
+                      });
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl text-xs bg-white/10 hover:bg-amber-400 hover:text-black text-sand-200 border border-white/10 active:scale-95 transition-all font-medium"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Custom text */}
-            <div className="pt-2">
+            {/* Custom instruction textarea */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block">
+                Instruction Text:
+              </label>
               <input
                 type="text"
-                defaultValue={customizingItem.notes || ''}
-                placeholder="Or type custom instructions..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSaveItemNote(customizingItem.item.id, (e.target as HTMLInputElement).value);
-                  }
-                }}
-                className="w-full text-xs bg-zinc-900 text-white p-2.5 rounded-xl border border-white/10 focus:border-gold-400 focus:outline-none"
+                value={customNoteText}
+                onChange={(e) => setCustomNoteText(e.target.value)}
+                placeholder="e.g. Less spicy, make gravy thick..."
+                className="w-full text-xs bg-zinc-900 text-white p-2.5 rounded-xl border border-white/15 focus:border-amber-400 focus:outline-none"
               />
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleSaveItemNote(customNoteText.trim())}
+                className="flex-1 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs uppercase tracking-wider active:scale-95 transition-all"
+              >
+                Save Note
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomNoteText('');
+                  handleSaveItemNote('');
+                }}
+                className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-rose-400 text-xs font-semibold"
+              >
+                Clear
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 9. BLUETOOTH PRINTER SCANNER MODAL */}
+      {/* 10. THERMAL PRINTER INSTRUCTIONS & TEST MODAL */}
       {isPrinterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm bg-[#11131c] border border-white/15 rounded-3xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Printer className="w-5 h-5 text-gold-400" />
-                <h3 className="font-bold text-sm text-white">Thermal Printer Setup</h3>
+                <h3 className="font-bold text-sm text-white">Thermal Printer Guide</h3>
               </div>
               <button
                 type="button"
@@ -1174,47 +1254,44 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </button>
             </div>
 
-            {/* Current Status */}
-            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/5 space-y-1">
-              <span className="text-[10px] uppercase font-bold text-sand-400 tracking-wider">
-                Printer Status:
-              </span>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`w-2.5 h-2.5 rounded-full ${
-                    printerStatus ? 'bg-emerald-400' : 'bg-rose-500'
-                  }`}
-                />
-                <span className="text-xs font-semibold text-white">
-                  {printerStatus ? `Connected to ${printerStatus}` : 'No printer paired'}
-                </span>
+            {/* Clear setup instructions */}
+            <div className="p-3.5 rounded-2xl bg-zinc-900 border border-white/10 space-y-2 text-xs text-sand-300 leading-relaxed">
+              <div className="font-bold text-white flex items-center gap-1.5">
+                <span>📱 How to Connect Bluetooth Printer:</span>
               </div>
+              <ol className="list-decimal pl-4 space-y-1 text-[11px] text-sand-300">
+                <li>Turn ON your 58mm / 80mm Bluetooth thermal printer.</li>
+                <li>Open your phone's <strong>Android Bluetooth Settings</strong>.</li>
+                <li>Pair with your printer (e.g. <strong>POS-58</strong> or <strong>MTP-2</strong>). PIN is usually <code>0000</code> or <code>1234</code>.</li>
+                <li>That's it! Tap <strong>Print Test Slip</strong> below to test.</li>
+              </ol>
             </div>
 
-            <p className="text-xs text-sand-400 leading-relaxed">
-              Works with any 58mm or 80mm Bluetooth thermal printer. Tap below to pair once. No extra apps needed.
+            <p className="text-[11px] text-sand-400 leading-relaxed">
+              When taking orders, tapping <strong>Fire KOT</strong> or <strong>Print Bill</strong> automatically sends the 58mm receipt to your paired printer via Android System Print.
             </p>
 
-            {/* Connect Button */}
+            {/* Action buttons */}
             <div className="space-y-2">
               <button
                 type="button"
-                disabled={isConnectingPrinter}
-                onClick={handleConnectBluetooth}
-                className="w-full py-2.5 rounded-xl bg-gold-400 hover:bg-gold-300 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md disabled:opacity-50"
+                onClick={async () => {
+                  triggerHaptic(40);
+                  await BluetoothPrinter.printTestReceipt();
+                }}
+                className="w-full py-2.5 rounded-xl bg-gold-400 hover:bg-gold-300 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md"
               >
                 <Printer className="w-4 h-4" />
-                <span>
-                  {isConnectingPrinter ? 'Scanning Devices...' : 'Pair Bluetooth Printer'}
-                </span>
+                <span>Print Test Slip (58mm)</span>
               </button>
 
               <button
                 type="button"
-                onClick={handleTestPrint}
-                className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs flex items-center justify-center gap-1.5 border border-white/10 transition-colors"
+                onClick={handleSendWhatsApp}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
               >
-                <span>Print Test Slip</span>
+                <MessageCircle className="w-4 h-4" />
+                <span>Test Kitchen WhatsApp Slip</span>
               </button>
             </div>
           </div>

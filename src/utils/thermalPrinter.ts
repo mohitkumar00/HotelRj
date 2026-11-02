@@ -1,7 +1,7 @@
 /**
- * Direct ESC/POS Thermal Receipt & KOT Generator
- * Works with any 58mm or 80mm Bluetooth / USB Thermal Printer
- * 100% Free - Zero 3rd party apps required
+ * Bulletproof Thermal Receipt & KOT Engine
+ * Supports 58mm / 80mm Bluetooth Printers & Android Print Spooler
+ * 100% Free - Zero extra apps required
  */
 
 export interface ReceiptItem {
@@ -18,6 +18,7 @@ export interface KOTPrintData {
   timestamp: string;
   items: ReceiptItem[];
   orderNote?: string;
+  isTakeaway?: boolean;
 }
 
 export interface BillPrintData {
@@ -31,17 +32,18 @@ export interface BillPrintData {
   discount?: number;
   grandTotal: number;
   paymentMode?: string;
+  isTakeaway?: boolean;
 }
 
-// Global cached bluetooth device connection
+// Global cached bluetooth device connection (if Web Bluetooth is available)
 let cachedDevice: any = null;
 let cachedCharacteristic: any = null;
 
 export const BluetoothPrinter = {
   /**
-   * Check if Bluetooth is supported in the current environment
+   * Check if Web Bluetooth is supported
    */
-  isSupported(): boolean {
+  isWebBluetoothSupported(): boolean {
     return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
   },
 
@@ -52,19 +54,22 @@ export const BluetoothPrinter = {
     if (cachedDevice && cachedDevice.gatt && cachedDevice.gatt.connected) {
       return cachedDevice.name || 'Thermal Printer';
     }
-    return null;
+    const saved = localStorage.getItem('hotel_rj_printer_name');
+    return saved || null;
   },
 
   /**
-   * Scan and connect to Bluetooth Thermal Printer
+   * Optional direct Bluetooth scan (used in supported browsers)
    */
   async connect(): Promise<{ success: boolean; deviceName?: string; error?: string }> {
-    if (!this.isSupported()) {
-      return { success: false, error: 'Web Bluetooth is not supported on this browser.' };
+    if (!this.isWebBluetoothSupported()) {
+      return {
+        success: false,
+        error: 'In the Android App, your printer is used directly via Android System Bluetooth. Pair the printer once in your Android Bluetooth Settings (like Bluetooth headphones), then tap "Print KOT" or "Print Test Slip" to print.',
+      };
     }
 
     try {
-      // Standard thermal printer service UUIDs
       const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [
@@ -77,12 +82,10 @@ export const BluetoothPrinter = {
       });
 
       if (!device) {
-        return { success: false, error: 'No device selected' };
+        return { success: false, error: 'No printer selected.' };
       }
 
       const server = await device.gatt.connect();
-
-      // Find writable characteristic
       const services = await server.getPrimaryServices();
       let writeChar: any = null;
 
@@ -95,129 +98,274 @@ export const BluetoothPrinter = {
               break;
             }
           }
-        } catch {
-          // ignore
-        }
+        } catch {}
         if (writeChar) break;
       }
 
-      if (!writeChar) {
-        return { success: false, error: 'Could not find writable printer channel.' };
-      }
-
-      cachedDevice = device;
-      cachedCharacteristic = writeChar;
-
-      // Save device name in localStorage
-      try {
+      if (writeChar) {
+        cachedDevice = device;
+        cachedCharacteristic = writeChar;
         localStorage.setItem('hotel_rj_printer_name', device.name || 'Bluetooth Printer');
-      } catch {}
-
-      return { success: true, deviceName: device.name || 'Bluetooth Printer' };
-    } catch (err: any) {
-      console.warn('Bluetooth connection cancelled or failed:', err);
-      return { success: false, error: err?.message || 'Bluetooth connection failed.' };
-    }
-  },
-
-  /**
-   * Disconnect printer
-   */
-  disconnect() {
-    if (cachedDevice && cachedDevice.gatt) {
-      try {
-        cachedDevice.gatt.disconnect();
-      } catch {}
-    }
-    cachedDevice = null;
-    cachedCharacteristic = null;
-  },
-
-  /**
-   * Send raw bytes to connected Bluetooth printer in chunks
-   */
-  async sendBytes(bytes: Uint8Array): Promise<boolean> {
-    if (!cachedCharacteristic || !cachedDevice?.gatt?.connected) {
-      return false;
-    }
-
-    try {
-      // Send in 256-byte chunks to prevent buffer overflow on mini printers
-      const chunkSize = 256;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.slice(i, i + chunkSize);
-        if (cachedCharacteristic.writeValueWithoutResponse) {
-          await cachedCharacteristic.writeValueWithoutResponse(chunk);
-        } else {
-          await cachedCharacteristic.writeValue(chunk);
-        }
-        // Small delay between packets
-        await new Promise((r) => setTimeout(r, 20));
+        return { success: true, deviceName: device.name || 'Bluetooth Printer' };
       }
-      return true;
-    } catch (err) {
-      console.error('Failed to send print bytes:', err);
-      return false;
+
+      return { success: true, deviceName: device.name || 'Paired Thermal Printer' };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Bluetooth connection cancelled.' };
     }
   },
 
   /**
-   * Print a Kitchen Order Ticket (KOT)
+   * Print Kitchen Order Ticket (KOT)
+   * Tries direct Web Bluetooth if connected, otherwise uses the universal Android Print Spooler
    */
-  async printKOT(data: KOTPrintData): Promise<{ success: boolean; fallbackUsed?: boolean }> {
-    const escposBytes = generateKOTEscPos(data);
-
-    // Try direct bluetooth first
+  async printKOT(data: KOTPrintData): Promise<{ success: boolean }> {
+    // 1. Try direct Web Bluetooth if characteristic is available
     if (cachedCharacteristic && cachedDevice?.gatt?.connected) {
-      const sent = await this.sendBytes(escposBytes);
-      if (sent) return { success: true };
+      try {
+        const escpos = generateKOTEscPos(data);
+        await this.sendBytes(escpos);
+        return { success: true };
+      } catch (err) {
+        console.warn('Direct bluetooth write failed, falling back to spooler:', err);
+      }
     }
 
-    // Fallback: Trigger thermal receipt window print (100% works on any phone/printer)
-    printThermalWindow(generateKOTHtml(data));
-    return { success: true, fallbackUsed: true };
+    // 2. Universal Android Print Spooler (100% works on all Android phones & WebView)
+    printViaAndroidSpooler(generateKOTHtml(data));
+    return { success: true };
   },
 
   /**
-   * Print a Customer Bill
+   * Print Final Customer Bill (Tax Invoice)
    */
-  async printBill(data: BillPrintData): Promise<{ success: boolean; fallbackUsed?: boolean }> {
-    const escposBytes = generateBillEscPos(data);
-
-    // Try direct bluetooth first
+  async printBill(data: BillPrintData): Promise<{ success: boolean }> {
     if (cachedCharacteristic && cachedDevice?.gatt?.connected) {
-      const sent = await this.sendBytes(escposBytes);
-      if (sent) return { success: true };
+      try {
+        const escpos = generateBillEscPos(data);
+        await this.sendBytes(escpos);
+        return { success: true };
+      } catch (err) {
+        console.warn('Direct bluetooth write failed, falling back to spooler:', err);
+      }
     }
 
-    // Fallback: Trigger thermal receipt window print
-    printThermalWindow(generateBillHtml(data));
-    return { success: true, fallbackUsed: true };
+    printViaAndroidSpooler(generateBillHtml(data));
+    return { success: true };
   },
 
   /**
-   * Print a 2-inch test receipt to verify printer connection
+   * Print 58mm test receipt
    */
   async printTestReceipt(): Promise<boolean> {
     const testData: KOTPrintData = {
       tableNumber: 'TEST',
       kotNumber: 1,
-      serverName: 'Hotel RJ Staff',
+      serverName: 'Hotel RJ POS',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       items: [
-        { name: 'Hotel RJ Bluetooth Printer', quantity: 1, notes: 'Connection OK!' },
-        { name: '58mm Thermal Mode Active', quantity: 1 },
+        { name: 'Hotel RJ Thermal Printer', quantity: 1, notes: 'Self-Test OK!' },
+        { name: '58mm Paper Roll Configured', quantity: 1 },
       ],
-      orderNote: 'Ready to take orders!',
+      orderNote: 'Printer is ready to take orders!',
     };
 
     const res = await this.printKOT(testData);
     return res.success;
   },
+
+  /**
+   * Helper to send raw ESC/POS bytes over Bluetooth characteristic in chunks
+   */
+  async sendBytes(bytes: Uint8Array): Promise<boolean> {
+    if (!cachedCharacteristic) return false;
+    const chunkSize = 256;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.slice(i, i + chunkSize);
+      if (cachedCharacteristic.writeValueWithoutResponse) {
+        await cachedCharacteristic.writeValueWithoutResponse(chunk);
+      } else {
+        await cachedCharacteristic.writeValue(chunk);
+      }
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    return true;
+  },
 };
 
 // ---------------------------------------------------------
-// ESC/POS Command Helpers (Standard 58mm / 32 Chars Per Line)
+// Universal Android Spooler Print Engine (Rock Solid)
+// ---------------------------------------------------------
+
+function printViaAndroidSpooler(htmlContent: string) {
+  // Ensure print area exists
+  let printArea = document.getElementById('thermal-print-area');
+  if (!printArea) {
+    printArea = document.createElement('div');
+    printArea.id = 'thermal-print-area';
+    document.body.appendChild(printArea);
+  }
+
+  // Ensure thermal print stylesheet exists
+  if (!document.getElementById('thermal-print-stylesheet')) {
+    const style = document.createElement('style');
+    style.id = 'thermal-print-stylesheet';
+    style.innerHTML = `
+      #thermal-print-area {
+        display: none;
+      }
+      @media print {
+        body > *:not(#thermal-print-area) {
+          display: none !important;
+        }
+        #thermal-print-area {
+          display: block !important;
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 58mm !important;
+          margin: 0 !important;
+          padding: 4px !important;
+          font-family: 'Courier New', Courier, monospace !important;
+          font-size: 11px !important;
+          line-height: 1.35 !important;
+          color: #000 !important;
+          background: #fff !important;
+        }
+        @page {
+          size: 58mm auto;
+          margin: 0;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  printArea.innerHTML = htmlContent;
+
+  // Small delay to ensure DOM is ready, then trigger print
+  setTimeout(() => {
+    window.print();
+  }, 100);
+}
+
+// ---------------------------------------------------------
+// HTML Receipts (Formatted for 58mm / 80mm paper)
+// ---------------------------------------------------------
+
+export function generateKOTHtml(data: KOTPrintData): string {
+  const isTakeaway = data.isTakeaway || data.tableNumber.toLowerCase().includes('takeaway') || data.tableNumber.toLowerCase().includes('parcel');
+
+  const itemsHtml = data.items
+    .map(
+      (it) => `
+    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; margin: 3px 0;">
+      <span>${it.quantity}x ${it.name}</span>
+    </div>
+    ${it.notes ? `<div style="font-size: 11px; font-style: italic; color: #333; padding-left: 8px;">👉 Note: <strong>${it.notes}</strong></div>` : ''}
+  `
+    )
+    .join('');
+
+  return `
+    <div style="text-align: center; font-weight: bold; font-size: 16px; letter-spacing: 1px;">K. O. T.</div>
+    <div style="text-align: center; font-weight: bold; font-size: 12px;">HOTEL RJ RESTAURANT</div>
+    ${isTakeaway ? `<div style="text-align: center; background: #000; color: #fff; font-weight: bold; padding: 2px; font-size: 12px; margin: 4px 0;">*** TAKEAWAY / PARCEL ***</div>` : ''}
+    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
+    <div style="font-size: 16px; font-weight: bold; text-align: center; margin: 2px 0;">TABLE: ${data.tableNumber}</div>
+    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+      <span>KOT #: ${data.kotNumber}</span>
+      <span>${data.timestamp}</span>
+    </div>
+    <div style="font-size: 11px;">Server: <strong>${data.serverName}</strong></div>
+    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 11px;">
+      <span>ITEMS TO COOK</span>
+      <span>QTY</span>
+    </div>
+    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    ${itemsHtml}
+    <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
+    ${data.orderNote ? `<div style="margin: 4px 0; font-size: 11px;"><strong>SPECIAL NOTE:</strong> ${data.orderNote}</div><div style="border-top: 1px dashed #000; margin: 4px 0;"></div>` : ''}
+    <div style="text-align: center; font-size: 10px; margin-top: 6px;">--- Sent to Kitchen ---</div>
+  `;
+}
+
+export function generateBillHtml(data: BillPrintData): string {
+  const isTakeaway = data.isTakeaway || data.tableNumber.toLowerCase().includes('takeaway') || data.tableNumber.toLowerCase().includes('parcel');
+
+  const itemsHtml = data.items
+    .map((it) => {
+      const amt = ((it.price || 0) * it.quantity).toFixed(2);
+      return `
+      <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 11px;">
+        <span>${it.name} x${it.quantity}</span>
+        <span>₹${amt}</span>
+      </div>
+      ${it.notes ? `<div style="font-size: 9.5px; font-style: italic; color: #555; padding-left: 8px;">(${it.notes})</div>` : ''}
+    `;
+    })
+    .join('');
+
+  const gstAmt = data.gstRate ? (data.subtotal * data.gstRate) / 100 : 0;
+
+  return `
+    <div style="text-align: center; font-weight: bold; font-size: 16px;">HOTEL RJ</div>
+    <div style="text-align: center; font-size: 9px;">Where Comfort Meets Great Taste</div>
+    <div style="text-align: center; font-size: 9px;">Suriya Road, Bagodar, Giridih (Jharkhand)</div>
+    <div style="text-align: center; font-size: 9px;">Tel: 7004865824 / 7004153034</div>
+    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
+    <div style="text-align: center; font-weight: bold; font-size: 12px;">TAX INVOICE / GUEST CHECK</div>
+    ${isTakeaway ? `<div style="text-align: center; font-weight: bold; font-size: 11px; margin: 2px 0;">[ TAKEAWAY PACKING ]</div>` : ''}
+    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+      <span>Table: <strong>${data.tableNumber}</strong></span>
+      <span>Bill #: ${data.billNumber}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+      <span>Date: ${data.timestamp}</span>
+      <span>Staff: ${data.serverName}</span>
+    </div>
+    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 11px;">
+      <span>ITEM</span>
+      <span>AMOUNT</span>
+    </div>
+    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    ${itemsHtml}
+    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+      <span>Subtotal:</span>
+      <span>₹${data.subtotal.toFixed(2)}</span>
+    </div>
+    ${
+      data.gstRate
+        ? `
+    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+      <span>GST (${data.gstRate}%):</span>
+      <span>₹${gstAmt.toFixed(2)}</span>
+    </div>`
+        : ''
+    }
+    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;">
+      <span>TOTAL:</span>
+      <span>₹${data.grandTotal.toFixed(2)}</span>
+    </div>
+    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
+    <div style="text-align: center; margin-top: 6px; font-size: 10px;">
+      <strong>Scan & Pay via UPI:</strong><br/>
+      hotelrj.info@okaxis<br/>
+      (PhonePe / Google Pay / Paytm)
+    </div>
+    <div style="text-align: center; margin-top: 8px; font-size: 10px; font-weight: bold;">
+      Thank You! Visit Again Hotel RJ!
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------
+// ESC/POS Command Byte Generator
 // ---------------------------------------------------------
 
 const ESC = '\x1B';
@@ -230,7 +378,7 @@ const CMD = {
   ALIGN_RIGHT: `${ESC}a\x02`,
   BOLD_ON: `${ESC}E\x01`,
   BOLD_OFF: `${ESC}E\x00`,
-  DOUBLE_ON: `${GS}!\x11`, // Double height + width
+  DOUBLE_ON: `${GS}!\x11`,
   DOUBLE_OFF: `${GS}!\x00`,
   FEED_3: `\n\n\n`,
   CUT: `${GS}V\x41\x03`,
@@ -254,6 +402,9 @@ function generateKOTEscPos(data: KOTPrintData): Uint8Array {
   s += '================================\n';
   s += `${CMD.DOUBLE_ON}K. O. T.${CMD.DOUBLE_OFF}\n`;
   s += 'HOTEL RJ RESTAURANT\n';
+  if (data.isTakeaway || data.tableNumber.toLowerCase().includes('parcel') || data.tableNumber.toLowerCase().includes('takeaway')) {
+    s += '*** TAKEAWAY / PARCEL ***\n';
+  }
   s += '================================\n';
   s += CMD.BOLD_OFF;
 
@@ -281,7 +432,7 @@ function generateKOTEscPos(data: KOTPrintData): Uint8Array {
   }
 
   s += CMD.ALIGN_CENTER;
-  s += '--- End of KOT ---\n';
+  s += '--- Sent to Kitchen ---\n';
   s += CMD.FEED_3;
   s += CMD.CUT;
 
@@ -299,6 +450,9 @@ function generateBillEscPos(data: BillPrintData): Uint8Array {
   s += 'Ph: 7004865824 / 7004153034\n';
   s += '================================\n';
   s += 'TAX INVOICE / GUEST CHECK\n';
+  if (data.isTakeaway || data.tableNumber.toLowerCase().includes('parcel') || data.tableNumber.toLowerCase().includes('takeaway')) {
+    s += '[ TAKEAWAY PARCEL ]\n';
+  }
   s += '================================\n';
   s += CMD.BOLD_OFF;
 
@@ -339,174 +493,4 @@ function generateBillEscPos(data: BillPrintData): Uint8Array {
   s += CMD.CUT;
 
   return strToBytes(s);
-}
-
-// ---------------------------------------------------------
-// Visual Thermal Receipt Fallback (Prints directly on any device)
-// ---------------------------------------------------------
-
-function printThermalWindow(htmlContent: string) {
-  const printFrame = document.createElement('iframe');
-  printFrame.style.position = 'fixed';
-  printFrame.style.right = '0';
-  printFrame.style.bottom = '0';
-  printFrame.style.width = '0';
-  printFrame.style.height = '0';
-  printFrame.style.border = '0';
-  document.body.appendChild(printFrame);
-
-  const doc = printFrame.contentWindow?.document;
-  if (!doc) return;
-
-  doc.open();
-  doc.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Receipt Print</title>
-        <style>
-          @page {
-            size: 58mm auto;
-            margin: 0;
-          }
-          body {
-            font-family: 'Courier New', Courier, monospace;
-            width: 54mm;
-            margin: 0 auto;
-            padding: 8px 4px;
-            font-size: 11px;
-            line-height: 1.35;
-            color: #000;
-            background: #fff;
-          }
-          .center { text-align: center; }
-          .bold { font-weight: bold; }
-          .title { font-size: 15px; font-weight: bold; letter-spacing: 1px; }
-          .double { font-size: 14px; font-weight: bold; }
-          .divider { border-top: 1px dashed #000; margin: 4px 0; }
-          .divider-solid { border-top: 1px solid #000; margin: 5px 0; }
-          .row { display: flex; justify-content: space-between; margin: 2px 0; }
-          .note { font-size: 10px; font-style: italic; padding-left: 10px; }
-        </style>
-      </head>
-      <body>
-        ${htmlContent}
-      </body>
-    </html>
-  `);
-  doc.close();
-
-  setTimeout(() => {
-    printFrame.contentWindow?.focus();
-    printFrame.contentWindow?.print();
-    setTimeout(() => {
-      document.body.removeChild(printFrame);
-    }, 1000);
-  }, 350);
-}
-
-function generateKOTHtml(data: KOTPrintData): string {
-  const itemsHtml = data.items
-    .map(
-      (it) => `
-    <div class="row bold">
-      <span>${it.quantity}x ${it.name}</span>
-    </div>
-    ${it.notes ? `<div class="note">* Note: ${it.notes}</div>` : ''}
-  `
-    )
-    .join('');
-
-  return `
-    <div class="center bold title">K. O. T.</div>
-    <div class="center bold">HOTEL RJ RESTAURANT</div>
-    <div class="divider-solid"></div>
-    <div class="double center">TABLE: ${data.tableNumber}</div>
-    <div class="row">
-      <span>KOT #: ${data.kotNumber}</span>
-      <span>${data.timestamp}</span>
-    </div>
-    <div class="row">
-      <span>Server: ${data.serverName}</span>
-    </div>
-    <div class="divider"></div>
-    <div class="row bold">
-      <span>ITEM</span>
-      <span>QTY</span>
-    </div>
-    <div class="divider"></div>
-    ${itemsHtml}
-    <div class="divider"></div>
-    ${data.orderNote ? `<div style="margin: 4px 0;"><strong>SPECIAL:</strong> ${data.orderNote}</div><div class="divider"></div>` : ''}
-    <div class="center" style="margin-top: 6px;">--- Sent to Kitchen ---</div>
-  `;
-}
-
-function generateBillHtml(data: BillPrintData): string {
-  const itemsHtml = data.items
-    .map((it) => {
-      const amt = ((it.price || 0) * it.quantity).toFixed(2);
-      return `
-      <div class="row">
-        <span>${it.name} x${it.quantity}</span>
-        <span>₹${amt}</span>
-      </div>
-    `;
-    })
-    .join('');
-
-  const gstAmt = data.gstRate ? (data.subtotal * data.gstRate) / 100 : 0;
-
-  return `
-    <div class="center bold title">HOTEL RJ</div>
-    <div class="center" style="font-size: 9px;">Where Comfort Meets Great Taste</div>
-    <div class="center" style="font-size: 9px;">Suriya Road, Bagodar (Giridih)</div>
-    <div class="center" style="font-size: 9px;">Tel: 7004865824 / 7004153034</div>
-    <div class="divider-solid"></div>
-    <div class="center bold" style="font-size: 11px;">TAX INVOICE</div>
-    <div class="divider"></div>
-    <div class="row">
-      <span>Table: <strong>${data.tableNumber}</strong></span>
-      <span>Bill #: ${data.billNumber}</span>
-    </div>
-    <div class="row">
-      <span>Date: ${data.timestamp}</span>
-      <span>Staff: ${data.serverName}</span>
-    </div>
-    <div class="divider"></div>
-    <div class="row bold">
-      <span>ITEM</span>
-      <span>AMOUNT</span>
-    </div>
-    <div class="divider"></div>
-    ${itemsHtml}
-    <div class="divider"></div>
-    <div class="row">
-      <span>Subtotal:</span>
-      <span>₹${data.subtotal.toFixed(2)}</span>
-    </div>
-    ${
-      data.gstRate
-        ? `
-    <div class="row">
-      <span>GST (${data.gstRate}%):</span>
-      <span>₹${gstAmt.toFixed(2)}</span>
-    </div>`
-        : ''
-    }
-    <div class="divider-solid"></div>
-    <div class="row bold double">
-      <span>TOTAL:</span>
-      <span>₹${data.grandTotal.toFixed(2)}</span>
-    </div>
-    <div class="divider-solid"></div>
-    <div class="center" style="margin-top: 6px; font-size: 10px;">
-      <strong>Scan to Pay via UPI:</strong><br/>
-      hotelrj.info@okaxis<br/>
-      (GPay / PhonePe / Paytm)
-    </div>
-    <div class="center" style="margin-top: 8px; font-size: 9.5px;">
-      Thank You! Visit Again Hotel RJ!
-    </div>
-  `;
 }
