@@ -89,6 +89,9 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
 
   // Cart mutation helpers
   const addToCart = (item: MenuItem) => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(35);
+    }
     setCart((prev) => {
       const existing = prev[item.id];
       return {
@@ -102,6 +105,9 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
   };
 
   const removeFromCart = (itemId: string) => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(25);
+    }
     setCart((prev) => {
       const existing = prev[itemId];
       if (!existing) return prev;
@@ -156,7 +162,9 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
         if (query) {
           const matchName = item.name.toLowerCase().includes(query);
           const matchPrice = String(item.price).includes(query);
-          if (!matchName && !matchPrice) return false;
+          const acronym = item.name.split(/\s+/).map((w: string) => w[0]).join('').toLowerCase();
+          const matchAcronym = acronym.includes(query);
+          if (!matchName && !matchPrice && !matchAcronym) return false;
         }
 
         return true;
@@ -1138,6 +1146,31 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                         </div>
                       );
                     })}
+                  </div>
+
+                  
+                  {/* Quick Preset Tags for Waiters */}
+                  <div className="pt-2">
+                    <span className="text-[10px] uppercase font-semibold text-sand-400 tracking-wider block mb-1.5">
+                      Quick Tags:
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {['Less Spicy', 'Extra Spicy', 'No Onion Garlic', 'Crispy', 'Extra Gravy', 'Packing / Parcel'].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            setOrderNote((prev) => {
+                              if (prev.includes(tag)) return prev;
+                              return prev ? `${prev}, ${tag}` : tag;
+                            });
+                          }}
+                          className="px-2 py-0.5 rounded-full text-[10px] bg-white/5 hover:bg-gold-400/20 text-sand-300 hover:text-gold-300 border border-white/10 active:scale-95 transition-all"
+                        >
+                          + {tag}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Special Cooking Note Input */}

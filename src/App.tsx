@@ -13,6 +13,7 @@ import { ReservationDrawer } from './components/ReservationDrawer';
 import { Footer } from './components/Footer';
 import { DigitalMenuPage } from './pages/DigitalMenuPage';
 import { ROOMS } from './data/hotelData';
+import { Capacitor } from '@capacitor/core';
 import { Room, RoomTier, BookingDetails } from './types';
 
 export const App: React.FC = () => {
@@ -23,6 +24,8 @@ export const App: React.FC = () => {
   // Track if current route is the standalone food menu page (?view=menu or #/menu)
   const [isMenuView, setIsMenuView] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
+    // On native Android app, launch straight into Waiter POS / Digital Menu
+    if (Capacitor.isNativePlatform()) return true;
     const params = new URLSearchParams(window.location.search);
     return params.get('view') === 'menu' || window.location.hash.includes('menu');
   });

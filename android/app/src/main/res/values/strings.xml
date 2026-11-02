@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hotel RJ POS</string>
+    <string name="title_activity_main">Hotel RJ POS</string>
+    <string name="package_name">com.hotelrj.waiter</string>
+    <string name="custom_url_scheme">com.hotelrj.waiter</string>
+</resources>
