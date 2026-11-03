@@ -216,18 +216,19 @@ ipcMain.handle('get-waiters', () => {
   return syncServer.getWaitersList();
 });
 
-// Prompt to fix Windows Defender Firewall for Port 5050
+// Prompt to fix Windows Defender Firewall for Port 5050 and set Wi-Fi to Private
 ipcMain.handle('fix-firewall', async () => {
   const { exec } = require('child_process');
   return new Promise((resolve) => {
-    const psCmd = `powershell -Command "Start-Process netsh -ArgumentList 'advfirewall firewall add rule name=\\"Hotel RJ Counter POS (Port 5050)\\" dir=in action=allow protocol=TCP localport=5050' -Verb RunAs"`;
+    const psScript = `Set-NetConnectionProfile -InterfaceAlias ''Wi-Fi'' -NetworkCategory Private -ErrorAction SilentlyContinue; netsh advfirewall firewall add rule name=\\\"Hotel RJ Counter POS (Port 5050)\\\" dir=in action=allow protocol=TCP localport=5050 profile=any`;
+    const psCmd = `powershell -Command "Start-Process powershell -ArgumentList '-NoProfile -Command ${psScript}' -Verb RunAs"`;
     exec(psCmd, (err) => {
       if (err) {
         logger.error('Firewall', 'Failed to prompt for firewall rule', err);
         resolve({ success: false, error: err.message });
       } else {
-        logger.warn('Firewall', 'Windows Firewall rule prompt initiated for port 5050');
-        resolve({ success: true });
+        logger.warn('Firewall', 'Windows Firewall rule and Private network profile prompt initiated');
+        resolve({ success: true, message: 'Firewall rule & Private Wi-Fi configured' });
       }
     });
   });
