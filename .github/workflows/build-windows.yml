@@ -1,0 +1,35 @@
+name: Build Windows Desktop App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Hotel RJ Counter POS (.exe)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build and Package Windows Desktop App
+        run: npm run electron:build
+
+      - name: Upload Windows Installer & Portable Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: HotelRJ-Counter-POS-Windows
+          path: |
+            dist-electron/*.exe
+          if-no-files-found: error
