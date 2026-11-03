@@ -122,8 +122,9 @@ export const App: React.FC = () => {
     }
   };
 
-  // In Native Android App: dedicated 100% for waiters (pure POS, no website, no back buttons)
-  if (Capacitor.isNativePlatform()) {
+  // In Native Android App OR Windows Desktop Counter POS: dedicated 100% for POS (no website, no back buttons)
+  const isElectron = typeof window !== 'undefined' && Boolean((window as any).ElectronAPI?.isElectron);
+  if (Capacitor.isNativePlatform() || isElectron) {
     return <WaiterPOS />;
   }
 

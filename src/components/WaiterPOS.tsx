@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { MENU_CATEGORIES } from '../data/menuData';
 import { MenuItem, DietaryType } from '../types';
 import {
@@ -8,6 +8,7 @@ import {
 } from '../utils/thermalPrinter';
 import { Logger, LogEntry } from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Search,
   Plus,
@@ -26,6 +27,10 @@ import {
   Bug,
   Copy,
   RefreshCw,
+  Wifi,
+  WifiOff,
+  Monitor,
+  FolderOpen,
 } from 'lucide-react';
 
 interface WaiterItemRecord {
@@ -43,6 +48,75 @@ interface TableOrder {
   kotNumber: number;
   items: { [itemId: string]: WaiterItemRecord };
   generalNote?: string;
+  updatedAt?: number;
+}
+
+interface SyncServerInfo {
+  running: boolean;
+  port: number;
+  ip: string;
+  localUrl: string;
+}
+
+function mergeTables(
+  local: { [key: string]: TableOrder },
+  remote: { [key: string]: TableOrder }
+): { [key: string]: TableOrder } {
+  if (!remote || typeof remote !== 'object') return local;
+  const merged: { [key: string]: TableOrder } = { ...local };
+
+  for (const tableId of Object.keys(remote)) {
+    const remoteTable = remote[tableId];
+    const localTable = merged[tableId];
+
+    if (!localTable) {
+      merged[tableId] = remoteTable;
+      continue;
+    }
+
+    const rTime = remoteTable.updatedAt || 0;
+    const lTime = localTable.updatedAt || 0;
+
+    if (rTime > lTime) {
+      const items = { ...remoteTable.items };
+      for (const itemId of Object.keys(localTable.items || {})) {
+        const localItem = localTable.items[itemId];
+        if (!items[itemId] && localItem.quantity > (localItem.firedCount || 0)) {
+          items[itemId] = localItem;
+        }
+      }
+      merged[tableId] = {
+        ...remoteTable,
+        items,
+      };
+    } else if (lTime > rTime) {
+      continue;
+    } else {
+      const mergedItems = { ...localTable.items };
+      for (const itemId of Object.keys(remoteTable.items || {})) {
+        const rItem = remoteTable.items[itemId];
+        const lItem = mergedItems[itemId];
+        if (!lItem) {
+          mergedItems[itemId] = rItem;
+        } else {
+          mergedItems[itemId] = {
+            ...lItem,
+            quantity: Math.max(lItem.quantity, rItem.quantity),
+            firedCount: Math.max(lItem.firedCount, rItem.firedCount),
+            notes: rItem.notes || lItem.notes,
+          };
+        }
+      }
+      merged[tableId] = {
+        ...localTable,
+        status: remoteTable.status !== 'vacant' ? remoteTable.status : localTable.status,
+        kotNumber: Math.max(localTable.kotNumber || 1, remoteTable.kotNumber || 1),
+        openedAt: localTable.openedAt || remoteTable.openedAt,
+        items: mergedItems,
+      };
+    }
+  }
+  return merged;
 }
 
 const ALL_TABLE_IDS = [
@@ -108,17 +182,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         status: 'vacant',
         kotNumber: 1,
         items: {},
+        updatedAt: 0,
       };
     }
     return init;
   });
-
-  // Save tables state on every change
-  useEffect(() => {
-    try {
-      localStorage.setItem('hotel_rj_pos_tables_v3', JSON.stringify(tables));
-    } catch {}
-  }, [tables]);
 
   // Current active table data
   const currentOrder: TableOrder = useMemo(() => {
@@ -143,11 +211,31 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedDietary, setSelectedDietary] = useState<DietaryType | 'all'>('all');
 
+  // Platform & Desktop App Check
+  const isElectron = useMemo(() => BluetoothPrinter.isElectron(), []);
+
   // UI Drawers & Modals
   const [isOrderDrawerOpen, setIsOrderDrawerOpen] = useState(false);
   const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [printSuccessMsg, setPrintSuccessMsg] = useState<string | null>(null);
+
+  // Local Wi-Fi Sync State (Counter PC Server & Waiter Client)
+  const [syncInfo, setSyncInfo] = useState<SyncServerInfo | null>(null);
+  const [counterSyncUrl, setCounterSyncUrl] = useState<string>(() => {
+    return localStorage.getItem('hotel_rj_counter_sync_url') || '';
+  });
+  const [counterInputUrl, setCounterInputUrl] = useState<string>(() => {
+    return localStorage.getItem('hotel_rj_counter_sync_url') || '';
+  });
+  const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
+
+  // Windows Installed Printers List (Bluetooth & USB)
+  const [windowsPrinters, setWindowsPrinters] = useState<Array<{ name: string; displayName?: string; isDefault?: boolean }>>([]);
+  const [selectedWindowsPrinter, setSelectedWindowsPrinter] = useState<string>(() => {
+    return localStorage.getItem('hotel_rj_windows_printer') || '';
+  });
 
   // Optional 5% GST Selection on Billing
   const [applyGst, setApplyGst] = useState<boolean>(true);
@@ -161,14 +249,127 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     return localStorage.getItem('hotel_rj_printer_address') || '';
   });
 
+  // Helper to push tables to Windows Counter PC over local Wi-Fi
+  const pushTablesToCounter = useCallback(async (currentTables: { [tableId: string]: TableOrder }) => {
+    if (isElectron || !counterSyncUrl.trim()) return;
+    let cleanUrl = counterSyncUrl.trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `http://${cleanUrl}`;
+    }
+    if (!cleanUrl.match(/:\d+$/)) {
+      cleanUrl = `${cleanUrl}:5050`;
+    }
+    try {
+      await fetch(`${cleanUrl}/api/tables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tables: currentTables }),
+        signal: AbortSignal.timeout(3000),
+      });
+      setIsSyncConnected(true);
+    } catch {
+      // Quietly set connection flag
+      setIsSyncConnected(false);
+    }
+  }, [isElectron, counterSyncUrl]);
+
+  // Save tables state on every change and propagate sync
+  useEffect(() => {
+    try {
+      localStorage.setItem('hotel_rj_pos_tables_v3', JSON.stringify(tables));
+    } catch {}
+
+    if (isElectron && (window as any).ElectronAPI?.syncTables) {
+      (window as any).ElectronAPI.syncTables(tables);
+    } else if (!isElectron && counterSyncUrl.trim()) {
+      pushTablesToCounter(tables);
+    }
+  }, [tables, isElectron, counterSyncUrl, pushTablesToCounter]);
+
+  // Windows: Query Sync Server Info on mount
+  useEffect(() => {
+    if (isElectron && (window as any).ElectronAPI?.getSyncInfo) {
+      (window as any).ElectronAPI.getSyncInfo()
+        .then((info: any) => {
+          if (info) {
+            setSyncInfo(info);
+            setIsSyncConnected(true);
+            Logger.info('Sync', `Windows Counter Sync Server running on port ${info.port} (${info.ip})`);
+          }
+        })
+        .catch((err: any) => {
+          Logger.warn('Sync', `Could not query sync info: ${err?.message}`);
+        });
+    }
+  }, [isElectron]);
+
+  // Windows: Real-time listener for incoming orders from Waiter Android phones
+  useEffect(() => {
+    if (isElectron && (window as any).ElectronAPI?.onSyncUpdate) {
+      const unsubscribe = (window as any).ElectronAPI.onSyncUpdate((remoteTables: any) => {
+        if (remoteTables && typeof remoteTables === 'object') {
+          Logger.info('Sync', 'Received real-time table sync from waiter device');
+          setTables((prev) => mergeTables(prev, remoteTables));
+        }
+      });
+      return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }
+  }, [isElectron]);
+
+  // Waiter Phone (Android / Web): Periodic polling with Counter POS
+  useEffect(() => {
+    if (isElectron || !counterSyncUrl.trim()) return;
+
+    let cleanUrl = counterSyncUrl.trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `http://${cleanUrl}`;
+    }
+    if (!cleanUrl.match(/:\d+$/)) {
+      cleanUrl = `${cleanUrl}:5050`;
+    }
+
+    let isMounted = true;
+
+    const pollSync = async () => {
+      try {
+        const res = await fetch(`${cleanUrl}/api/tables`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setIsSyncConnected(true);
+            if (data?.tables) {
+              setTables((prev) => mergeTables(prev, data.tables));
+            }
+          }
+        } else {
+          if (isMounted) setIsSyncConnected(false);
+        }
+      } catch {
+        if (isMounted) setIsSyncConnected(false);
+      }
+    };
+
+    pollSync();
+    const interval = setInterval(pollSync, 4000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [counterSyncUrl, isElectron]);
+
   // Subscribe to live logger
   useEffect(() => {
     const unsubscribe = Logger.subscribe((newLogs) => setLogs(newLogs));
     const isNative = Capacitor.isNativePlatform();
     const hasBridge = BluetoothPrinter.isNativeAndroidAvailable();
-    Logger.info('App', `WaiterPOS loaded on ${isNative ? 'Android Native APK' : 'Browser'}. Native Bridge: ${hasBridge ? 'ONLINE' : 'OFFLINE'}`);
+    Logger.info(
+      'App',
+      `WaiterPOS loaded on ${isElectron ? 'Windows Desktop App' : isNative ? 'Android Native APK' : 'Browser'}. Native Bridge: ${hasBridge ? 'ONLINE' : isElectron ? 'ELECTRON_IPC' : 'OFFLINE'}`
+    );
     return () => unsubscribe();
-  }, []);
+  }, [isElectron]);
 
   const refreshPairedDevices = () => {
     const list = BluetoothPrinter.getPairedDevices();
@@ -176,11 +377,23 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     Logger.info('Printer', `Found ${list.length} paired Bluetooth devices`);
   };
 
+  const refreshWindowsPrinters = async () => {
+    if (isElectron) {
+      const list = await BluetoothPrinter.getWindowsPrinters();
+      setWindowsPrinters(list);
+      Logger.info('Printer', `Found ${list.length} Windows thermal printers`);
+    }
+  };
+
   useEffect(() => {
     if (isPrinterModalOpen) {
-      refreshPairedDevices();
+      if (isElectron) {
+        refreshWindowsPrinters();
+      } else {
+        refreshPairedDevices();
+      }
     }
-  }, [isPrinterModalOpen]);
+  }, [isPrinterModalOpen, isElectron]);
 
   const handleSelectPrinter = (dev: { name: string; address: string }) => {
     setSelectedPrinterAddress(dev.address);
@@ -188,6 +401,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     localStorage.setItem('hotel_rj_printer_name', dev.name);
     Logger.success('Printer', `Selected printer: ${dev.name} (${dev.address})`);
     setPrintSuccessMsg(`Selected: ${dev.name}`);
+    setTimeout(() => setPrintSuccessMsg(null), 2500);
+  };
+
+  const handleSelectWindowsPrinter = (printerName: string) => {
+    setSelectedWindowsPrinter(printerName);
+    localStorage.setItem('hotel_rj_windows_printer', printerName);
+    Logger.success('Printer', `Selected Windows thermal printer: ${printerName || 'Default System Printer'}`);
+    setPrintSuccessMsg(`Printer: ${printerName || 'System Default'}`);
     setTimeout(() => setPrintSuccessMsg(null), 2500);
   };
 
@@ -226,6 +447,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           ...existingTable,
           status: 'active',
           openedAt: existingTable.openedAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          updatedAt: Date.now(),
           items: {
             ...existingTable.items,
             [item.id]: {
@@ -266,6 +488,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         [activeTable]: {
           ...existingTable,
           status: hasRemaining ? existingTable.status : 'vacant',
+          updatedAt: Date.now(),
           items: newItems,
         },
       };
@@ -291,6 +514,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         ...prev,
         [activeTable]: {
           ...table,
+          updatedAt: Date.now(),
           items: {
             ...table.items,
             [itemId]: {
@@ -404,6 +628,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             status: 'kot_sent',
             kotNumber: table.kotNumber + 1,
             items: updatedItems,
+            updatedAt: Date.now(),
           },
         };
       });
@@ -455,6 +680,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         [activeTable]: {
           ...prev[activeTable],
           status: 'billed',
+          updatedAt: Date.now(),
         },
       }));
     } catch (err: any) {
@@ -478,6 +704,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           kotNumber: 1,
           items: {},
           generalNote: '',
+          updatedAt: Date.now(),
         },
       }));
       setIsOrderDrawerOpen(false);
@@ -578,6 +805,12 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 <span className="px-1.5 py-0.2 rounded bg-amber-400 text-black text-[9px] font-black uppercase tracking-wider">
                   POS
                 </span>
+                {isElectron && (
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Monitor className="w-2.5 h-2.5" />
+                    <span>Counter</span>
+                  </span>
+                )}
               </div>
               {/* Server Name Tag */}
               {isEditingServer ? (
@@ -615,6 +848,41 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               {activeTable}
             </div>
 
+            {/* Local Wi-Fi Sync Button */}
+            {isElectron ? (
+              <button
+                type="button"
+                onClick={() => setIsSyncModalOpen(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 active:scale-95 transition-all"
+                title="Counter Wi-Fi Sync Server (Click for IP & QR Code)"
+              >
+                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[10px] font-mono hidden sm:inline">
+                  {syncInfo?.ip ? `${syncInfo.ip}:5050` : 'Sync Server'}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsSyncModalOpen(true)}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border active:scale-95 transition-all ${
+                  isSyncConnected
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'
+                    : 'bg-white/5 border-white/10 text-sand-400 hover:bg-white/10'
+                }`}
+                title="Wi-Fi Sync with Counter PC"
+              >
+                {isSyncConnected ? (
+                  <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <WifiOff className="w-3.5 h-3.5 text-sand-500" />
+                )}
+                <span className="text-[10px] hidden sm:inline">
+                  {isSyncConnected ? 'Synced' : 'Sync Counter'}
+                </span>
+              </button>
+            )}
+
             {/* Thermal Printer Button */}
             <button
               type="button"
@@ -642,8 +910,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               )}
             </button>
 
-            {/* Browser preview exit (hidden on Android native APK) */}
-            {!Capacitor.isNativePlatform() && onSwitchToGuestMenu && (
+            {/* Browser preview exit (hidden on Android native APK and Windows Desktop App) */}
+            {!Capacitor.isNativePlatform() && !isElectron && onSwitchToGuestMenu && (
               <button
                 type="button"
                 onClick={onSwitchToGuestMenu}
@@ -1391,7 +1659,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Printer className="w-5 h-5 text-gold-400" />
-                <h3 className="font-bold text-sm text-white">Thermal Printer Setup</h3>
+                <h3 className="font-bold text-sm text-white">
+                  {isElectron ? 'Windows Thermal Printer' : 'Thermal Printer Setup'}
+                </h3>
               </div>
               <button
                 type="button"
@@ -1402,69 +1672,146 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </button>
             </div>
 
-            {/* Native Bridge Status */}
+            {/* Print Engine Status */}
             <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-sand-400">Android Print Engine:</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${BluetoothPrinter.isNativeAndroidAvailable() ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                  {BluetoothPrinter.isNativeAndroidAvailable() ? '● Native Bridge Active' : '● Browser Mode'}
+                <span className="text-sand-400">Print Engine:</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    isElectron
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : BluetoothPrinter.isNativeAndroidAvailable()
+                      ? 'bg-emerald-500/20 text-emerald-300'
+                      : 'bg-amber-500/20 text-amber-300'
+                  }`}
+                >
+                  {isElectron
+                    ? '● Windows Silent Background'
+                    : BluetoothPrinter.isNativeAndroidAvailable()
+                    ? '● Native Android Bridge'
+                    : '● Browser Mode'}
                 </span>
               </div>
 
-              {/* Paired Bluetooth Printers List */}
+              {/* Printers List */}
               <div className="pt-2 border-t border-white/10">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[11px] font-bold text-white flex items-center gap-1">
-                    <span>Paired Bluetooth Printers:</span>
+                    <span>{isElectron ? 'Installed Windows Printers:' : 'Paired Bluetooth Printers:'}</span>
                   </span>
                   <button
                     type="button"
-                    onClick={refreshPairedDevices}
+                    onClick={isElectron ? refreshWindowsPrinters : refreshPairedDevices}
                     className="p-1 rounded text-sand-400 hover:text-white flex items-center gap-1 text-[10px]"
-                    title="Refresh paired devices"
+                    title="Refresh printers"
                   >
                     <RefreshCw className="w-3 h-3" />
                     <span>Scan</span>
                   </button>
                 </div>
 
-                {pairedPrinters.length > 0 ? (
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                    {pairedPrinters.map((dev) => {
-                      const isSelected = selectedPrinterAddress === dev.address;
-                      return (
-                        <button
-                          key={dev.address}
-                          type="button"
-                          onClick={() => handleSelectPrinter(dev)}
-                          className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${isSelected ? 'bg-amber-400/20 border-amber-400 text-white font-bold' : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'}`}
-                        >
-                          <div>
-                            <div className="font-medium">{dev.name}</div>
-                            <div className="text-[9px] font-mono text-sand-400">{dev.address}</div>
-                          </div>
-                          {isSelected && <Check className="w-4 h-4 text-amber-400" />}
-                        </button>
-                      );
-                    })}
-                  </div>
+                {isElectron ? (
+                  windowsPrinters.length > 0 ? (
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectWindowsPrinter('')}
+                        className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${
+                          !selectedWindowsPrinter
+                            ? 'bg-amber-400/20 border-amber-400 text-white font-bold'
+                            : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <div>
+                          <div className="font-medium">System Default Printer</div>
+                          <div className="text-[9px] font-mono text-sand-400">Windows default device</div>
+                        </div>
+                        {!selectedWindowsPrinter && <Check className="w-4 h-4 text-amber-400" />}
+                      </button>
+
+                      {windowsPrinters.map((p) => {
+                        const isSelected = selectedWindowsPrinter === p.name;
+                        return (
+                          <button
+                            key={p.name}
+                            type="button"
+                            onClick={() => handleSelectWindowsPrinter(p.name)}
+                            className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-amber-400/20 border-amber-400 text-white font-bold'
+                                : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
+                            }`}
+                          >
+                            <div className="min-w-0 pr-2">
+                              <div className="font-medium truncate">{p.displayName || p.name}</div>
+                              <div className="text-[9px] font-mono text-sand-400">
+                                {p.isDefault ? 'Default Device' : 'Windows Thermal/USB/Bluetooth'}
+                              </div>
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-sand-400 bg-white/5 p-2 rounded-xl">
+                      Scanning Windows printers... Connect your USB or Bluetooth thermal printer.
+                    </div>
+                  )
                 ) : (
-                  <div className="text-[11px] text-sand-400 bg-white/5 p-2 rounded-xl">
-                    No Bluetooth printers paired in Android Settings yet. Pair your printer once in phone settings.
-                  </div>
+                  pairedPrinters.length > 0 ? (
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      {pairedPrinters.map((dev) => {
+                        const isSelected = selectedPrinterAddress === dev.address;
+                        return (
+                          <button
+                            key={dev.address}
+                            type="button"
+                            onClick={() => handleSelectPrinter(dev)}
+                            className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-amber-400/20 border-amber-400 text-white font-bold'
+                                : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-medium">{dev.name}</div>
+                              <div className="text-[9px] font-mono text-sand-400">{dev.address}</div>
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-amber-400" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-sand-400 bg-white/5 p-2 rounded-xl">
+                      No Bluetooth printers paired in Android Settings yet. Pair your printer once in phone settings.
+                    </div>
+                  )
                 )}
               </div>
             </div>
 
             {/* Quick Guide */}
             <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 text-[11px] text-sand-300 space-y-1.5">
-              <div className="font-bold text-white">📱 Pairing Steps:</div>
-              <ol className="list-decimal pl-4 space-y-1 text-sand-400">
-                <li>Turn ON your 58mm Bluetooth printer.</li>
-                <li>Go to phone's <strong>Android Bluetooth Settings</strong>.</li>
-                <li>Pair with printer (PIN is <code>0000</code> or <code>1234</code>).</li>
-                <li>Return here & tap <strong>Print Test Slip</strong>.</li>
-              </ol>
+              <div className="font-bold text-white">
+                {isElectron ? '💻 Windows Counter Setup:' : '📱 Pairing Steps:'}
+              </div>
+              {isElectron ? (
+                <ol className="list-decimal pl-4 space-y-1 text-sand-400">
+                  <li>Pair Bluetooth thermal printer or plug via USB cable.</li>
+                  <li>Windows installs driver or Generic Text printer.</li>
+                  <li>Select printer above (or leave Default).</li>
+                  <li>Tap <strong>Print Test Slip</strong> to test silent print!</li>
+                </ol>
+              ) : (
+                <ol className="list-decimal pl-4 space-y-1 text-sand-400">
+                  <li>Turn ON your 58mm Bluetooth printer.</li>
+                  <li>Go to phone's <strong>Android Bluetooth Settings</strong>.</li>
+                  <li>Pair with printer (PIN is <code>0000</code> or <code>1234</code>).</li>
+                  <li>Return here & tap <strong>Print Test Slip</strong>.</li>
+                </ol>
+              )}
             </div>
 
             {/* Action buttons */}
@@ -1489,6 +1836,17 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 <span>Print Test Slip (58mm)</span>
               </button>
 
+              {isElectron && (
+                <button
+                  type="button"
+                  onClick={() => BluetoothPrinter.openWindowsLogsFolder()}
+                  className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sand-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 transition-colors"
+                >
+                  <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Open Windows Logs Folder</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -1505,7 +1863,165 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         </div>
       )}
 
-      {/* 11. LIVE DEBUG CONSOLE & SYSTEM LOGS MODAL */}
+      {/* 11. LOCAL WI-FI SYNC SERVER & CONNECTION MODAL */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bg-[#11131c] border border-emerald-500/30 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Wifi className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-sm text-white">
+                  {isElectron ? 'Counter Wi-Fi Sync Server' : 'Connect to Counter POS'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSyncModalOpen(false)}
+                className="p-1 rounded-full text-sand-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isElectron ? (
+              <>
+                <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2 text-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">
+                    ● Server Running on Port 5050
+                  </span>
+                  <div className="font-mono text-base font-bold text-white bg-black/40 py-1.5 px-3 rounded-xl border border-white/10 inline-block">
+                    {syncInfo?.ip || '127.0.0.1'}:5050
+                  </div>
+                  <p className="text-[11px] text-sand-400">
+                    Waiters connect to this Counter IP over the local restaurant Wi-Fi to sync orders live.
+                  </p>
+                </div>
+
+                {/* QR Code */}
+                <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white space-y-2 shadow-inner">
+                  <QRCodeSVG
+                    value={`http://${syncInfo?.ip || '127.0.0.1'}:5050`}
+                    size={150}
+                    level="M"
+                  />
+                  <span className="text-[10px] font-bold text-zinc-800 font-mono">
+                    http://{syncInfo?.ip || '127.0.0.1'}:5050
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 text-[11px] text-sand-300 space-y-1.5">
+                  <div className="font-bold text-white">📲 Instructions for Waiters:</div>
+                  <ol className="list-decimal pl-4 space-y-1 text-sand-400">
+                    <li>Connect phone to same hotel Wi-Fi.</li>
+                    <li>Open Hotel RJ Waiter App.</li>
+                    <li>Tap <strong>Sync Counter</strong> in top header.</li>
+                    <li>Type Counter IP: <strong className="text-white font-mono">{syncInfo?.ip || '127.0.0.1'}</strong>.</li>
+                  </ol>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-sand-400">Sync Status:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        isSyncConnected ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-sand-400'
+                      }`}
+                    >
+                      {isSyncConnected ? '● Connected to Counter PC' : '○ Offline / Local Mode'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] uppercase font-bold text-sand-400 tracking-wider block">
+                    Counter PC IP Address:
+                  </label>
+                  <input
+                    type="text"
+                    value={counterInputUrl}
+                    onChange={(e) => setCounterInputUrl(e.target.value)}
+                    placeholder="e.g. 192.168.1.15:5050"
+                    className="w-full text-xs font-mono bg-zinc-900 text-white p-2.5 rounded-xl border border-white/15 focus:border-emerald-400 focus:outline-none"
+                  />
+                  <p className="text-[10px] text-sand-400">
+                    Look at the Counter POS screen on Windows to see the exact IP address.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const target = counterInputUrl.trim();
+                      localStorage.setItem('hotel_rj_counter_sync_url', target);
+                      setCounterSyncUrl(target);
+                      if (target) {
+                        let cleanUrl = target;
+                        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                          cleanUrl = `http://${cleanUrl}`;
+                        }
+                        if (!cleanUrl.match(/:\d+$/)) {
+                          cleanUrl = `${cleanUrl}:5050`;
+                        }
+                        try {
+                          setPrintSuccessMsg('Pinging Counter POS...');
+                          const res = await fetch(`${cleanUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
+                          if (res.ok) {
+                            setIsSyncConnected(true);
+                            setPrintSuccessMsg('✅ Connected to Counter POS!');
+                            setTimeout(() => setPrintSuccessMsg(null), 3000);
+                            const tRes = await fetch(`${cleanUrl}/api/tables`, { signal: AbortSignal.timeout(3000) });
+                            if (tRes.ok) {
+                              const tData = await tRes.json();
+                              if (tData?.tables) {
+                                setTables((prev) => mergeTables(prev, tData.tables));
+                              }
+                            }
+                          } else {
+                            setIsSyncConnected(false);
+                            setPrintSuccessMsg('❌ Counter responded with error');
+                            setTimeout(() => setPrintSuccessMsg(null), 3000);
+                          }
+                        } catch (err: any) {
+                          setIsSyncConnected(false);
+                          setPrintSuccessMsg(`❌ Could not reach Counter: ${err?.message}`);
+                          setTimeout(() => setPrintSuccessMsg(null), 3000);
+                        }
+                      } else {
+                        setIsSyncConnected(false);
+                      }
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider active:scale-95 transition-all"
+                  >
+                    Connect & Sync
+                  </button>
+
+                  {counterSyncUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem('hotel_rj_counter_sync_url');
+                        setCounterSyncUrl('');
+                        setCounterInputUrl('');
+                        setIsSyncConnected(false);
+                        setPrintSuccessMsg('Disconnected from Counter');
+                        setTimeout(() => setPrintSuccessMsg(null), 2500);
+                      }}
+                      className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-rose-400 text-xs font-semibold"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 12. LIVE DEBUG CONSOLE & SYSTEM LOGS MODAL */}
       {isLogsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-4">
           <div className="w-full max-w-lg bg-[#0e1017] border border-amber-400/30 rounded-3xl p-4 shadow-2xl flex flex-col max-h-[92vh]">
@@ -1515,7 +2031,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 <Bug className="w-5 h-5 text-amber-400" />
                 <div>
                   <h3 className="font-bold text-sm text-white">Live Debug Console</h3>
-                  <p className="text-[10px] text-sand-400">Real-time logs for KOT, printer & errors</p>
+                  <p className="text-[10px] text-sand-400">
+                    {isElectron
+                      ? 'Windows Error & Warning Monitor (%APPDATA%)'
+                      : 'Real-time logs for KOT, printer & errors'}
+                  </p>
                 </div>
               </div>
               <button
@@ -1531,23 +2051,61 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             <div className="grid grid-cols-2 gap-2 my-3 text-[10px]">
               <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
                 <span className="text-sand-400 block">Platform:</span>
-                <span className="font-bold text-white">{Capacitor.isNativePlatform() ? 'Native Android APK' : 'Web Browser'}</span>
+                <span className="font-bold text-white">
+                  {isElectron
+                    ? 'Windows Desktop App (Electron)'
+                    : Capacitor.isNativePlatform()
+                    ? 'Native Android APK'
+                    : 'Web Browser'}
+                </span>
               </div>
               <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
-                <span className="text-sand-400 block">Native Bridge:</span>
-                <span className={`font-bold ${BluetoothPrinter.isNativeAndroidAvailable() ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {BluetoothPrinter.isNativeAndroidAvailable() ? 'Active (AndroidPrinter)' : 'Web Mode'}
+                <span className="text-sand-400 block">Native Engine:</span>
+                <span
+                  className={`font-bold ${
+                    isElectron
+                      ? 'text-emerald-400'
+                      : BluetoothPrinter.isNativeAndroidAvailable()
+                      ? 'text-emerald-400'
+                      : 'text-amber-400'
+                  }`}
+                >
+                  {isElectron
+                    ? 'Active (Windows Silent Thermal)'
+                    : BluetoothPrinter.isNativeAndroidAvailable()
+                    ? 'Active (AndroidPrinter)'
+                    : 'Web Mode'}
                 </span>
               </div>
               <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
                 <span className="text-sand-400 block">Active Table:</span>
-                <span className="font-bold text-white">{activeTable} ({totalItemsCount} items, {newItemsToFire.length} unfired)</span>
+                <span className="font-bold text-white">
+                  {activeTable} ({totalItemsCount} items, {newItemsToFire.length} unfired)
+                </span>
               </div>
               <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
                 <span className="text-sand-400 block">Target Printer:</span>
-                <span className="font-bold text-white truncate block">{localStorage.getItem('hotel_rj_printer_name') || 'Auto / Android Spooler'}</span>
+                <span className="font-bold text-white truncate block">
+                  {isElectron
+                    ? selectedWindowsPrinter || 'Windows Default Device'
+                    : localStorage.getItem('hotel_rj_printer_name') || 'Auto / Android Spooler'}
+                </span>
               </div>
             </div>
+
+            {/* Privacy notice */}
+            {isElectron && (
+              <div className="mb-2 p-2 rounded-xl bg-zinc-900/80 border border-white/10 text-[10px] text-sand-400 flex items-center justify-between">
+                <span>📁 Errors and warnings saved to Windows logs folder. Order details omitted.</span>
+                <button
+                  type="button"
+                  onClick={() => BluetoothPrinter.openWindowsLogsFolder()}
+                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/15 text-sand-200 text-[9px] font-bold shrink-0 ml-2"
+                >
+                  Open Folder
+                </button>
+              </div>
+            )}
 
             {/* Logs List Container */}
             <div className="flex-1 overflow-y-auto bg-black/60 rounded-2xl p-2.5 border border-white/10 font-mono text-[10px] space-y-1.5 max-h-[46vh]">
@@ -1600,7 +2158,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               <button
                 type="button"
                 onClick={() => {
-                  const text = `*HOTEL RJ POS LOGS*\nDate: ${new Date().toLocaleString()}\nPlatform: ${Capacitor.isNativePlatform() ? 'Android Native' : 'Browser'}\n--------------------\n` +
+                  const text =
+                    `*HOTEL RJ POS LOGS*\nDate: ${new Date().toLocaleString()}\nPlatform: ${
+                      isElectron ? 'Windows Desktop' : Capacitor.isNativePlatform() ? 'Android Native' : 'Browser'
+                    }\n--------------------\n` +
                     logs.slice(0, 25).map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`).join('\n');
                   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
                 }}

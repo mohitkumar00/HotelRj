@@ -59,6 +59,38 @@ export const BluetoothPrinter = {
   },
 
   /**
+   * Check if running inside Windows Electron Desktop App
+   */
+  isElectron(): boolean {
+    return typeof window !== 'undefined' && Boolean((window as any).ElectronAPI?.isElectron);
+  },
+
+  /**
+   * Query Windows Installed Printers (Bluetooth / USB)
+   */
+  async getWindowsPrinters(): Promise<Array<{ name: string; displayName?: string; isDefault?: boolean }>> {
+    const electronAPI = (window as any).ElectronAPI;
+    if (electronAPI && typeof electronAPI.getPrinters === 'function') {
+      try {
+        return await electronAPI.getPrinters();
+      } catch (e) {
+        console.warn('Could not query Windows printers', e);
+      }
+    }
+    return [];
+  },
+
+  /**
+   * Open the Windows application logs folder in File Explorer
+   */
+  openWindowsLogsFolder(): void {
+    const electronAPI = (window as any).ElectronAPI;
+    if (electronAPI && typeof electronAPI.openLogsFolder === 'function') {
+      electronAPI.openLogsFolder();
+    }
+  },
+
+  /**
    * Check if Web Bluetooth is supported in browser
    */
   isWebBluetoothSupported(): boolean {
@@ -101,6 +133,26 @@ export const BluetoothPrinter = {
    */
   async printKOT(data: KOTPrintData): Promise<{ success: boolean; method: string; error?: string }> {
     Logger.info('Printer', `Initiating KOT #${data.kotNumber} for table ${data.tableNumber}`);
+
+    // 0. Windows Desktop App (Electron) Silent Background Thermal Print
+    const electronAPI = (window as any).ElectronAPI;
+    if (electronAPI?.isElectron) {
+      Logger.info('Printer', 'Windows Electron native printer engine detected');
+      const selectedDevice = localStorage.getItem('hotel_rj_windows_printer') || '';
+      try {
+        const res = await electronAPI.printThermal(generateKOTHtml(data), selectedDevice);
+        if (res.success) {
+          Logger.success('Printer', `KOT #${data.kotNumber} printed via ${res.method}`);
+          return { success: true, method: res.method };
+        } else {
+          Logger.warn('Printer', `Windows print warning: ${res.error}`);
+          electronAPI.logWarning('Printer', `Silent print failed: ${res.error}`);
+        }
+      } catch (err: any) {
+        Logger.error('Printer', `Windows print error: ${err?.message}`);
+        electronAPI.logError('Printer', 'Windows thermal print error', err?.message);
+      }
+    }
 
     const androidPrinter = (window as any).AndroidPrinter;
     if (androidPrinter) {
@@ -158,6 +210,26 @@ export const BluetoothPrinter = {
    */
   async printBill(data: BillPrintData): Promise<{ success: boolean; method: string; error?: string }> {
     Logger.info('Printer', `Initiating Bill #${data.billNumber} for table ${data.tableNumber}`);
+
+    // 0. Windows Desktop App (Electron) Silent Background Thermal Print
+    const electronAPI = (window as any).ElectronAPI;
+    if (electronAPI?.isElectron) {
+      Logger.info('Printer', 'Windows Electron native printer engine detected for Bill');
+      const selectedDevice = localStorage.getItem('hotel_rj_windows_printer') || '';
+      try {
+        const res = await electronAPI.printThermal(generateBillHtml(data), selectedDevice);
+        if (res.success) {
+          Logger.success('Printer', `Bill #${data.billNumber} printed via ${res.method}`);
+          return { success: true, method: res.method };
+        } else {
+          Logger.warn('Printer', `Windows print warning: ${res.error}`);
+          electronAPI.logWarning('Printer', `Silent bill print failed: ${res.error}`);
+        }
+      } catch (err: any) {
+        Logger.error('Printer', `Windows print error: ${err?.message}`);
+        electronAPI.logError('Printer', 'Windows thermal print bill error', err?.message);
+      }
+    }
 
     const androidPrinter = (window as any).AndroidPrinter;
     if (androidPrinter) {
