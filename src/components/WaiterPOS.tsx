@@ -238,10 +238,20 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Local Wi-Fi Sync State (Counter PC Server & Waiter Client)
   const [syncInfo, setSyncInfo] = useState<SyncServerInfo | null>(null);
   const [counterSyncUrl, setCounterSyncUrl] = useState<string>(() => {
-    return localStorage.getItem('hotel_rj_counter_sync_url') || '';
+    const saved = localStorage.getItem('hotel_rj_counter_sync_url');
+    if (saved) return saved;
+    if (typeof window !== 'undefined' && window.location.port === '5050') {
+      return window.location.host;
+    }
+    return '';
   });
   const [counterInputUrl, setCounterInputUrl] = useState<string>(() => {
-    return localStorage.getItem('hotel_rj_counter_sync_url') || '';
+    const saved = localStorage.getItem('hotel_rj_counter_sync_url');
+    if (saved) return saved;
+    if (typeof window !== 'undefined' && window.location.port === '5050') {
+      return window.location.host;
+    }
+    return '';
   });
   const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
 

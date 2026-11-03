@@ -1,5 +1,7 @@
 const http = require('http');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
 const logger = require('./logger.cjs');
 
 function mergeTables(local, remote) {
@@ -241,6 +243,36 @@ class LocalSyncServer {
           }
         });
         return;
+      }
+
+      // Serve static Waiter POS web app files for mobile phone browsers (Zero APK install)
+      if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
+        const mimeTypes = {
+          '.html': 'text/html; charset=utf-8',
+          '.js': 'application/javascript; charset=utf-8',
+          '.css': 'text/css; charset=utf-8',
+          '.json': 'application/json; charset=utf-8',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.svg': 'image/svg+xml',
+          '.ico': 'image/x-icon',
+          '.woff2': 'font/woff2',
+        };
+
+        const distDir = path.join(__dirname, '../dist');
+        const safeSuffix = path.normalize(url.pathname).replace(/^(\.\.[\/\\])+/, '');
+        let targetPath = path.join(distDir, safeSuffix === '\\' || safeSuffix === '/' ? 'index.html' : safeSuffix);
+
+        if (!fs.existsSync(targetPath) || fs.statSync(targetPath).isDirectory()) {
+          targetPath = path.join(distDir, 'index.html');
+        }
+
+        if (fs.existsSync(targetPath)) {
+          const ext = path.extname(targetPath).toLowerCase();
+          res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+          fs.createReadStream(targetPath).pipe(res);
+          return;
+        }
       }
 
       res.writeHead(404, { 'Content-Type': 'application/json' });
