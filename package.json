@@ -11,11 +11,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "electron:start": "electron .",
-    "electron:build": "npm run build && electron-builder --win --x64"
+    "electron:build": "npm run build && electron-builder --win --x64 --publish never"
   },
   "build": {
     "appId": "com.hotelrj.pos",
     "productName": "Hotel RJ Counter POS",
+    "publish": null,
     "directories": {
       "output": "dist-electron"
     },

@@ -24,7 +24,9 @@ jobs:
         run: npm ci
 
       - name: Build and Package Windows Desktop App
-        run: npm run electron:build
+        run: npm run electron:build -- --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Windows Installer & Portable Executable
         uses: actions/upload-artifact@v4
