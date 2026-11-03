@@ -249,6 +249,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     return localStorage.getItem('hotel_rj_printer_address') || '';
   });
 
+  // Desktop alert notification when a waiter sends table updates
+  const [tableUpdateNotice, setTableUpdateNotice] = useState<{
+    tableId: string;
+    server: string;
+    itemCount: number;
+    timestamp: string;
+  } | null>(null);
+
   // Helper to push tables to Windows Counter PC over local Wi-Fi
   const pushTablesToCounter = useCallback(async (currentTables: { [tableId: string]: TableOrder }) => {
     if (isElectron || !counterSyncUrl.trim()) return;
@@ -260,18 +268,68 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       cleanUrl = `${cleanUrl}:5050`;
     }
     try {
-      await fetch(`${cleanUrl}/api/tables`, {
+      const res = await fetch(`${cleanUrl}/api/tables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tables: currentTables }),
         signal: AbortSignal.timeout(3000),
       });
-      setIsSyncConnected(true);
+      if (res.ok) {
+        setIsSyncConnected(true);
+        const data = await res.json();
+        if (data?.tables) {
+          setTables((prev) => mergeTables(prev, data.tables));
+        }
+      }
     } catch {
       // Quietly set connection flag
       setIsSyncConnected(false);
     }
   }, [isElectron, counterSyncUrl]);
+
+  // Full 2-way sync helper: Sends local tables and receives latest counter state
+  const performManualSync = useCallback(async (customUrl?: string) => {
+    const target = customUrl || counterSyncUrl;
+    if (!target.trim()) return false;
+    let cleanUrl = target.trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `http://${cleanUrl}`;
+    }
+    if (!cleanUrl.match(/:\d+$/)) {
+      cleanUrl = `${cleanUrl}:5050`;
+    }
+    triggerHaptic(30);
+    setPrintSuccessMsg('Syncing with Counter POS...');
+    try {
+      const postRes = await fetch(`${cleanUrl}/api/tables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tables }),
+        signal: AbortSignal.timeout(3500),
+      });
+
+      if (postRes.ok) {
+        const data = await postRes.json();
+        setIsSyncConnected(true);
+        if (data?.tables) {
+          setTables((prev) => mergeTables(prev, data.tables));
+        }
+        setPrintSuccessMsg('✅ Synced with Counter PC!');
+        setTimeout(() => setPrintSuccessMsg(null), 3000);
+        return true;
+      } else {
+        setIsSyncConnected(false);
+        setPrintSuccessMsg('❌ Sync failed (Counter error)');
+        setTimeout(() => setPrintSuccessMsg(null), 3000);
+        return false;
+      }
+    } catch (err: any) {
+      setIsSyncConnected(false);
+      setPrintSuccessMsg(`❌ Could not reach Counter: ${err?.message || 'Check Wi-Fi'}`);
+      setTimeout(() => setPrintSuccessMsg(null), 3000);
+      return false;
+    }
+  }, [counterSyncUrl, tables]);
 
   // Save tables state on every change and propagate sync
   useEffect(() => {
@@ -306,10 +364,34 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Windows: Real-time listener for incoming orders from Waiter Android phones
   useEffect(() => {
     if (isElectron && (window as any).ElectronAPI?.onSyncUpdate) {
-      const unsubscribe = (window as any).ElectronAPI.onSyncUpdate((remoteTables: any) => {
+      const unsubscribe = (window as any).ElectronAPI.onSyncUpdate((payload: any) => {
+        const remoteTables = payload?.tables || payload;
+        const incomingPatch = payload?.incomingPatch;
+
         if (remoteTables && typeof remoteTables === 'object') {
           Logger.info('Sync', 'Received real-time table sync from waiter device');
           setTables((prev) => mergeTables(prev, remoteTables));
+
+          // If incoming update has active items, notify the counter manager
+          if (incomingPatch && typeof incomingPatch === 'object') {
+            const activeModified = Object.keys(incomingPatch).find((tId) => {
+              const t = incomingPatch[tId];
+              return t && Object.keys(t.items || {}).length > 0;
+            });
+            if (activeModified) {
+              const tblData = incomingPatch[activeModified];
+              const count = Object.values(tblData.items || {}).reduce(
+                (sum: number, it: any) => sum + (it.quantity || 0),
+                0
+              );
+              setTableUpdateNotice({
+                tableId: activeModified,
+                server: tblData.serverName || 'Waiter',
+                itemCount: count,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              });
+            }
+          }
         }
       });
       return () => {
@@ -862,25 +944,40 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </span>
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => setIsSyncModalOpen(true)}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border active:scale-95 transition-all ${
-                  isSyncConnected
-                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'
-                    : 'bg-white/5 border-white/10 text-sand-400 hover:bg-white/10'
-                }`}
-                title="Wi-Fi Sync with Counter PC"
-              >
-                {isSyncConnected ? (
-                  <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                ) : (
-                  <WifiOff className="w-3.5 h-3.5 text-sand-500" />
-                )}
-                <span className="text-[10px] hidden sm:inline">
-                  {isSyncConnected ? 'Synced' : 'Sync Counter'}
-                </span>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setIsSyncModalOpen(true)}
+                  className={`px-2 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border active:scale-95 transition-all ${
+                    isSyncConnected
+                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'
+                      : 'bg-white/5 border-white/10 text-sand-400 hover:bg-white/10'
+                  }`}
+                  title="Wi-Fi Sync Settings with Counter PC"
+                >
+                  {isSyncConnected ? (
+                    <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <WifiOff className="w-3.5 h-3.5 text-sand-500" />
+                  )}
+                  <span className="text-[10px] hidden sm:inline">
+                    {isSyncConnected ? 'Synced' : 'Connect Counter'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => performManualSync()}
+                  className={`p-1.5 rounded-xl border active:scale-95 transition-all ${
+                    isSyncConnected
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                      : 'bg-white/5 border-white/10 text-sand-400 hover:bg-white/10'
+                  }`}
+                  title="Tap to sync all tables now with Counter PC"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
 
             {/* Thermal Printer Button */}
@@ -924,6 +1021,37 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           </div>
         </div>
       </header>
+
+      {/* 1.1 COUNTER DESKTOP: LIVE WAITER ORDER NOTIFICATION BANNER */}
+      {isElectron && tableUpdateNotice && (
+        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-black px-4 py-2.5 flex items-center justify-between shadow-xl animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2 font-bold text-xs">
+            <span className="text-base animate-bounce">🔔</span>
+            <span>
+              New update on <strong>{tableUpdateNotice.tableId}</strong> ({tableUpdateNotice.itemCount} items by {tableUpdateNotice.server} at {tableUpdateNotice.timestamp})
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTable(tableUpdateNotice.tableId);
+                setTableUpdateNotice(null);
+              }}
+              className="px-3 py-1 rounded-lg bg-black text-amber-300 hover:bg-zinc-900 text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all"
+            >
+              Open {tableUpdateNotice.tableId}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTableUpdateNotice(null)}
+              className="p-1 text-black/70 hover:text-black"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. SUCCESS NOTICE BANNER */}
       {printSuccessMsg && (
@@ -1955,47 +2083,20 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                     type="button"
                     onClick={async () => {
                       const target = counterInputUrl.trim();
+                      if (!target) {
+                        setIsSyncConnected(false);
+                        return;
+                      }
                       localStorage.setItem('hotel_rj_counter_sync_url', target);
                       setCounterSyncUrl(target);
-                      if (target) {
-                        let cleanUrl = target;
-                        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-                          cleanUrl = `http://${cleanUrl}`;
-                        }
-                        if (!cleanUrl.match(/:\d+$/)) {
-                          cleanUrl = `${cleanUrl}:5050`;
-                        }
-                        try {
-                          setPrintSuccessMsg('Pinging Counter POS...');
-                          const res = await fetch(`${cleanUrl}/api/status`, { signal: AbortSignal.timeout(3000) });
-                          if (res.ok) {
-                            setIsSyncConnected(true);
-                            setPrintSuccessMsg('✅ Connected to Counter POS!');
-                            setTimeout(() => setPrintSuccessMsg(null), 3000);
-                            const tRes = await fetch(`${cleanUrl}/api/tables`, { signal: AbortSignal.timeout(3000) });
-                            if (tRes.ok) {
-                              const tData = await tRes.json();
-                              if (tData?.tables) {
-                                setTables((prev) => mergeTables(prev, tData.tables));
-                              }
-                            }
-                          } else {
-                            setIsSyncConnected(false);
-                            setPrintSuccessMsg('❌ Counter responded with error');
-                            setTimeout(() => setPrintSuccessMsg(null), 3000);
-                          }
-                        } catch (err: any) {
-                          setIsSyncConnected(false);
-                          setPrintSuccessMsg(`❌ Could not reach Counter: ${err?.message}`);
-                          setTimeout(() => setPrintSuccessMsg(null), 3000);
-                        }
-                      } else {
-                        setIsSyncConnected(false);
+                      const ok = await performManualSync(target);
+                      if (ok) {
+                        setTimeout(() => setIsSyncModalOpen(false), 900);
                       }
                     }}
                     className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider active:scale-95 transition-all"
                   >
-                    Connect & Sync
+                    Connect & Sync Now
                   </button>
 
                   {counterSyncUrl && (
