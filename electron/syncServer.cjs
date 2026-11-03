@@ -67,6 +67,54 @@ class LocalSyncServer {
     this.localIp = this.detectLocalIp();
     this.tablesState = {};
     this.onUpdateCallback = null;
+    this.onWaitersUpdateCallback = null;
+    this.activeWaiters = new Map();
+  }
+
+  recordWaiter(clientIp, serverName, activeTable = '', deviceInfo = '') {
+    const cleanIp = String(clientIp || '').replace(/^.*:/, '') || '127.0.0.1';
+    const name = serverName || 'Waiter';
+    const id = `${name}@${cleanIp}`;
+    const now = Date.now();
+
+    this.activeWaiters.set(id, {
+      id,
+      name,
+      ip: cleanIp,
+      activeTable: activeTable || '-',
+      device: deviceInfo || 'Mobile Phone',
+      lastSeen: now,
+      lastSeenTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      status: 'online',
+    });
+
+    this.pruneWaiters();
+    this.notifyWaitersUpdated();
+    logger.warn('SyncServer', `Waiter activity: "${name}" (${cleanIp}) on table "${activeTable || '-'}"`);
+  }
+
+  pruneWaiters() {
+    const now = Date.now();
+    for (const [id, w] of this.activeWaiters.entries()) {
+      if (now - w.lastSeen > 35000) {
+        if (now - w.lastSeen > 90000) {
+          this.activeWaiters.delete(id);
+        } else {
+          w.status = 'idle';
+        }
+      }
+    }
+  }
+
+  getWaitersList() {
+    this.pruneWaiters();
+    return Array.from(this.activeWaiters.values());
+  }
+
+  notifyWaitersUpdated() {
+    if (this.onWaitersUpdateCallback) {
+      this.onWaitersUpdateCallback(this.getWaitersList());
+    }
   }
 
   detectLocalIp() {
@@ -93,8 +141,9 @@ class LocalSyncServer {
     return candidates[0] || '127.0.0.1';
   }
 
-  start(onTableUpdate) {
+  start(onTableUpdate, onWaitersUpdate) {
     this.onUpdateCallback = onTableUpdate;
+    this.onWaitersUpdateCallback = onWaitersUpdate;
 
     this.server = http.createServer((req, res) => {
       // Enable CORS for Android waiter app and web requests
@@ -108,9 +157,11 @@ class LocalSyncServer {
         return;
       }
 
+      const clientIp = req.socket.remoteAddress ? req.socket.remoteAddress.replace(/^.*:/, '') : '127.0.0.1';
       const url = new URL(req.url, `http://${req.headers.host}`);
 
       if (req.method === 'GET' && url.pathname === '/api/status') {
+        logger.warn('SyncServer', `Ping /api/status from ${clientIp}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -118,13 +169,38 @@ class LocalSyncServer {
             service: 'Hotel RJ Counter POS Sync',
             ip: this.localIp,
             port: this.port,
+            connectedWaitersCount: this.getWaitersList().length,
             time: new Date().toISOString(),
           })
         );
         return;
       }
 
+      if (req.method === 'GET' && url.pathname === '/api/waiters') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, waiters: this.getWaitersList() }));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/waiter/heartbeat') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            this.recordWaiter(clientIp, data.serverName, data.activeTable, data.deviceInfo);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, connectedWaiters: this.getWaitersList().length }));
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
       if (req.method === 'GET' && url.pathname === '/api/tables') {
+        logger.warn('SyncServer', `GET /api/tables from ${clientIp}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, tables: this.tablesState }));
         return;
@@ -144,10 +220,14 @@ class LocalSyncServer {
           try {
             const data = JSON.parse(body);
             if (data && data.tables) {
+              if (data.serverName) {
+                this.recordWaiter(clientIp, data.serverName, data.activeTable, data.deviceInfo);
+              }
               this.tablesState = mergeTables(this.tablesState, data.tables);
               if (this.onUpdateCallback) {
                 this.onUpdateCallback(this.tablesState, data.tables);
               }
+              logger.warn('SyncServer', `POST /api/tables synced from ${clientIp} (${data.serverName || 'Waiter'})`);
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: true, tables: this.tablesState }));
             } else {
@@ -155,7 +235,7 @@ class LocalSyncServer {
               res.end(JSON.stringify({ error: 'Missing tables payload' }));
             }
           } catch (err) {
-            logger.warn('SyncServer', 'Malformed JSON payload received from client', err.message);
+            logger.warn('SyncServer', `Malformed JSON payload from ${clientIp}: ${err.message}`);
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid JSON' }));
           }

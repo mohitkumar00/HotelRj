@@ -51,11 +51,21 @@ app.whenReady().then(() => {
 
   // Start the Local Wi-Fi Sync Server for Waiter Android Phones
   try {
-    syncServer.start((updatedTables) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('sync-tables-updated', updatedTables);
+    syncServer.start(
+      (updatedTables, incomingPatch) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('sync-tables-updated', {
+            tables: updatedTables,
+            incomingPatch: incomingPatch || null,
+          });
+        }
+      },
+      (waitersList) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('sync-waiters-updated', waitersList);
+        }
       }
-    });
+    );
   } catch (err) {
     logger.error('SyncServer', 'Could not initialize local sync server', err);
   }
@@ -199,4 +209,26 @@ ipcMain.handle('get-sync-info', () => {
 // Sync tables broadcast from counter window
 ipcMain.on('sync-tables', (event, tables) => {
   syncServer.updateState(tables);
+});
+
+// Get connected waiters list
+ipcMain.handle('get-waiters', () => {
+  return syncServer.getWaitersList();
+});
+
+// Prompt to fix Windows Defender Firewall for Port 5050
+ipcMain.handle('fix-firewall', async () => {
+  const { exec } = require('child_process');
+  return new Promise((resolve) => {
+    const psCmd = `powershell -Command "Start-Process netsh -ArgumentList 'advfirewall firewall add rule name=\\"Hotel RJ Counter POS (Port 5050)\\" dir=in action=allow protocol=TCP localport=5050' -Verb RunAs"`;
+    exec(psCmd, (err) => {
+      if (err) {
+        logger.error('Firewall', 'Failed to prompt for firewall rule', err);
+        resolve({ success: false, error: err.message });
+      } else {
+        logger.warn('Firewall', 'Windows Firewall rule prompt initiated for port 5050');
+        resolve({ success: true });
+      }
+    });
+  });
 });

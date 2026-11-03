@@ -27,7 +27,7 @@ class WindowsLogger {
    * Only logs WARNINGS and ERRORS (No order details or sensitive customer info)
    */
   log(level, category, message, errorObj = null) {
-    if (level !== 'WARN' && level !== 'ERROR') {
+    if (level !== 'WARN' && level !== 'ERROR' && category !== 'SyncServer' && category !== 'Firewall') {
       return; // Filter out normal debug/info logs as requested
     }
 

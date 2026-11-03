@@ -28,4 +28,15 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
     ipcRenderer.on('sync-tables-updated', handler);
     return () => ipcRenderer.removeListener('sync-tables-updated', handler);
   },
+
+  // Active connected waiters list
+  getWaiters: () => ipcRenderer.invoke('get-waiters'),
+  onWaitersUpdate: (callback) => {
+    const handler = (event, waiters) => callback(waiters);
+    ipcRenderer.on('sync-waiters-updated', handler);
+    return () => ipcRenderer.removeListener('sync-waiters-updated', handler);
+  },
+
+  // Prompt to add inbound Windows Firewall rule for port 5050
+  fixFirewall: () => ipcRenderer.invoke('fix-firewall'),
 });

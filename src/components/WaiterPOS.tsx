@@ -31,6 +31,9 @@ import {
   WifiOff,
   Monitor,
   FolderOpen,
+  Users,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface WaiterItemRecord {
@@ -38,6 +41,17 @@ interface WaiterItemRecord {
   quantity: number;
   notes?: string;
   firedCount: number;
+}
+
+interface ConnectedWaiter {
+  id: string;
+  name: string;
+  ip: string;
+  activeTable: string;
+  device: string;
+  lastSeen: number;
+  lastSeenTime: string;
+  status: 'online' | 'idle';
 }
 
 interface TableOrder {
@@ -257,6 +271,12 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     timestamp: string;
   } | null>(null);
 
+  // Active connected waiters list (on Counter Desktop)
+  const [connectedWaiters, setConnectedWaiters] = useState<ConnectedWaiter[]>([]);
+  const [isWaitersModalOpen, setIsWaitersModalOpen] = useState(false);
+  const [firewallStatusMsg, setFirewallStatusMsg] = useState<string | null>(null);
+  const [syncErrorDetail, setSyncErrorDetail] = useState<string | null>(null);
+
   // Helper to push tables to Windows Counter PC over local Wi-Fi
   const pushTablesToCounter = useCallback(async (currentTables: { [tableId: string]: TableOrder }) => {
     if (isElectron || !counterSyncUrl.trim()) return;
@@ -271,8 +291,13 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       const res = await fetch(`${cleanUrl}/api/tables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tables: currentTables }),
-        signal: AbortSignal.timeout(3000),
+        body: JSON.stringify({
+          tables: currentTables,
+          serverName,
+          activeTable,
+          deviceInfo: Capacitor.isNativePlatform() ? 'Android APK' : 'Mobile Web Browser',
+        }),
+        signal: AbortSignal.timeout(7000),
       });
       if (res.ok) {
         setIsSyncConnected(true);
@@ -281,11 +306,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           setTables((prev) => mergeTables(prev, data.tables));
         }
       }
-    } catch {
-      // Quietly set connection flag
+    } catch (err: any) {
+      Logger.warn('Sync', `Background push failed: ${err?.message || 'unreachable'}`);
       setIsSyncConnected(false);
     }
-  }, [isElectron, counterSyncUrl]);
+  }, [isElectron, counterSyncUrl, serverName, activeTable]);
 
   // Full 2-way sync helper: Sends local tables and receives latest counter state
   const performManualSync = useCallback(async (customUrl?: string) => {
@@ -299,13 +324,21 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       cleanUrl = `${cleanUrl}:5050`;
     }
     triggerHaptic(30);
-    setPrintSuccessMsg('Syncing with Counter POS...');
+    setSyncErrorDetail(null);
+    setPrintSuccessMsg('Connecting to Counter POS (Port 5050)...');
+    Logger.info('Sync', `Sending 2-way sync request to ${cleanUrl} (timeout: 8s)...`);
+
     try {
       const postRes = await fetch(`${cleanUrl}/api/tables`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tables }),
-        signal: AbortSignal.timeout(3500),
+        body: JSON.stringify({
+          tables,
+          serverName,
+          activeTable,
+          deviceInfo: Capacitor.isNativePlatform() ? 'Android APK' : 'Mobile Web Browser',
+        }),
+        signal: AbortSignal.timeout(8000),
       });
 
       if (postRes.ok) {
@@ -314,22 +347,36 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         if (data?.tables) {
           setTables((prev) => mergeTables(prev, data.tables));
         }
-        setPrintSuccessMsg('✅ Synced with Counter PC!');
-        setTimeout(() => setPrintSuccessMsg(null), 3000);
+        Logger.success('Sync', `✅ Connected & Synced with Counter PC at ${cleanUrl}!`);
+        setPrintSuccessMsg('✅ Connected & Synced with Counter PC!');
+        setTimeout(() => setPrintSuccessMsg(null), 3500);
         return true;
       } else {
         setIsSyncConnected(false);
-        setPrintSuccessMsg('❌ Sync failed (Counter error)');
-        setTimeout(() => setPrintSuccessMsg(null), 3000);
+        const errMsg = `Counter PC returned HTTP ${postRes.status} (${postRes.statusText})`;
+        Logger.error('Sync', errMsg);
+        setSyncErrorDetail(errMsg);
+        setPrintSuccessMsg(`❌ ${errMsg}`);
+        setTimeout(() => setPrintSuccessMsg(null), 4000);
         return false;
       }
     } catch (err: any) {
       setIsSyncConnected(false);
-      setPrintSuccessMsg(`❌ Could not reach Counter: ${err?.message || 'Check Wi-Fi'}`);
-      setTimeout(() => setPrintSuccessMsg(null), 3000);
+      const isTimeout =
+        err?.name === 'AbortError' ||
+        err?.name === 'TimeoutError' ||
+        String(err?.message || '').toLowerCase().includes('timeout');
+      const errReason = isTimeout
+        ? 'Connection timed out after 8s. Windows Firewall is likely blocking port 5050, or phone is on a different Wi-Fi router.'
+        : `Network error: ${err?.message || 'Could not connect'}`;
+
+      Logger.error('Sync', errReason);
+      setSyncErrorDetail(errReason);
+      setPrintSuccessMsg(`❌ ${isTimeout ? 'Connection timed out (8s)' : 'Connection failed'}`);
+      setTimeout(() => setPrintSuccessMsg(null), 4000);
       return false;
     }
-  }, [counterSyncUrl, tables]);
+  }, [counterSyncUrl, tables, serverName, activeTable]);
 
   // Save tables state on every change and propagate sync
   useEffect(() => {
@@ -360,6 +407,62 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         });
     }
   }, [isElectron]);
+
+  // Windows: Listen for connected waiters updates
+  useEffect(() => {
+    if (isElectron && (window as any).ElectronAPI?.onWaitersUpdate) {
+      if ((window as any).ElectronAPI?.getWaiters) {
+        (window as any).ElectronAPI.getWaiters()
+          .then((list: any) => {
+            if (Array.isArray(list)) setConnectedWaiters(list);
+          })
+          .catch(() => {});
+      }
+
+      const unsubscribe = (window as any).ElectronAPI.onWaitersUpdate((waiters: any) => {
+        if (Array.isArray(waiters)) {
+          setConnectedWaiters(waiters);
+        }
+      });
+      return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }
+  }, [isElectron]);
+
+  // Waiter Mobile: Send periodic heartbeat every 12 seconds when connected
+  useEffect(() => {
+    if (isElectron || !counterSyncUrl.trim() || !isSyncConnected) return;
+
+    let cleanUrl = counterSyncUrl.trim();
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      cleanUrl = `http://${cleanUrl}`;
+    }
+    if (!cleanUrl.match(/:\d+$/)) {
+      cleanUrl = `${cleanUrl}:5050`;
+    }
+
+    const sendHeartbeat = async () => {
+      try {
+        await fetch(`${cleanUrl}/api/waiter/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            serverName,
+            activeTable,
+            deviceInfo: Capacitor.isNativePlatform() ? 'Android APK' : 'Mobile Web Browser',
+          }),
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch {
+        // quiet
+      }
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 12000);
+    return () => clearInterval(interval);
+  }, [isElectron, counterSyncUrl, isSyncConnected, serverName, activeTable]);
 
   // Windows: Real-time listener for incoming orders from Waiter Android phones
   useEffect(() => {
@@ -416,7 +519,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
     const pollSync = async () => {
       try {
-        const res = await fetch(`${cleanUrl}/api/tables`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${cleanUrl}/api/tables`, { signal: AbortSignal.timeout(5000) });
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {
@@ -932,17 +1035,31 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
             {/* Local Wi-Fi Sync Button */}
             {isElectron ? (
-              <button
-                type="button"
-                onClick={() => setIsSyncModalOpen(true)}
-                className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 active:scale-95 transition-all"
-                title="Counter Wi-Fi Sync Server (Click for IP & QR Code)"
-              >
-                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-[10px] font-mono hidden sm:inline">
-                  {syncInfo?.ip ? `${syncInfo.ip}:5050` : 'Sync Server'}
-                </span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsSyncModalOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 active:scale-95 transition-all"
+                  title="Counter Wi-Fi Sync Server (Click for IP & QR Code)"
+                >
+                  <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-[10px] font-mono hidden sm:inline">
+                    {syncInfo?.ip ? `${syncInfo.ip}:5050` : 'Sync Server'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsWaitersModalOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 text-xs font-semibold flex items-center gap-1.5 border border-blue-500/30 active:scale-95 transition-all"
+                  title="View active waiters connected to this Counter"
+                >
+                  <Users className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="text-[10px] font-bold hidden sm:inline">
+                    {connectedWaiters.filter((w) => w.status === 'online').length} Waiters Online
+                  </span>
+                </button>
+              </div>
             ) : (
               <div className="flex items-center gap-1">
                 <button
@@ -2046,6 +2163,29 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                     <li>Type Counter IP: <strong className="text-white font-mono">{syncInfo?.ip || '127.0.0.1'}</strong>.</li>
                   </ol>
                 </div>
+
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if ((window as any).ElectronAPI?.fixFirewall) {
+                        setFirewallStatusMsg('Applying firewall rule (check Windows prompt)...');
+                        const res = await (window as any).ElectronAPI.fixFirewall();
+                        setFirewallStatusMsg(res?.message || 'Rule applied');
+                        setTimeout(() => setFirewallStatusMsg(null), 4000);
+                      }
+                    }}
+                    className="w-full py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+                  >
+                    <ShieldAlert className="w-4 h-4 text-amber-400" />
+                    <span>Unblock Windows Firewall (Port 5050)</span>
+                  </button>
+                  {firewallStatusMsg && (
+                    <div className="text-[10px] text-center font-mono text-amber-300 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
+                      {firewallStatusMsg}
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <>
@@ -2077,6 +2217,23 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                     Look at the Counter POS screen on Windows to see the exact IP address.
                   </p>
                 </div>
+
+                {syncErrorDetail && (
+                  <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-300 space-y-2">
+                    <div className="font-bold flex items-center gap-1.5 text-rose-400">
+                      <ShieldAlert className="w-4 h-4 shrink-0" />
+                      <span>Sync Troubleshooting</span>
+                    </div>
+                    <div className="text-[10px] text-sand-300 font-mono bg-black/40 p-2 rounded-lg border border-white/5 break-words">
+                      {syncErrorDetail}
+                    </div>
+                    <div className="space-y-1 text-[10px] text-sand-400">
+                      <div>1. Ensure phone & PC are on the <strong>same Wi-Fi router</strong>.</div>
+                      <div>2. On Desktop Counter POS, click <strong>"Unblock Windows Firewall"</strong> to allow Port 5050.</div>
+                      <div>3. Verify IP on Counter POS screen matches what you typed.</div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2 pt-2">
                   <button
@@ -2118,6 +2275,124 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 11b. ACTIVE WAITERS & COUNTER NETWORK MODAL */}
+      {isWaitersModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-[#11131c] border border-blue-500/30 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-400" />
+                <div>
+                  <h3 className="font-bold text-sm text-white">Active Waiters Station</h3>
+                  <p className="text-[10px] text-sand-400">
+                    Live devices connected to this Counter POS (Port 5050)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsWaitersModalOpen(false)}
+                className="p-1 rounded-full text-sand-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Firewall Quick Action Card */}
+            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-white flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Windows Firewall Rule
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if ((window as any).ElectronAPI?.fixFirewall) {
+                      setFirewallStatusMsg('Applying rule (check UAC popup)...');
+                      const res = await (window as any).ElectronAPI.fixFirewall();
+                      setFirewallStatusMsg(res?.message || 'Rule applied');
+                      setTimeout(() => setFirewallStatusMsg(null), 4000);
+                    }
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-[11px] border border-emerald-500/30 active:scale-95 transition-all"
+                >
+                  Unblock Port 5050
+                </button>
+              </div>
+              <p className="text-[10px] text-sand-400">
+                If mobile waiters get "signal timeout", click above to allow incoming Wi-Fi connections through Windows Defender.
+              </p>
+              {firewallStatusMsg && (
+                <div className="text-[10px] text-center font-mono text-amber-300 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
+                  {firewallStatusMsg}
+                </div>
+              )}
+            </div>
+
+            {/* Waiters List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[45vh]">
+              {connectedWaiters.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-zinc-900/40 border border-white/5 space-y-2">
+                  <Users className="w-8 h-8 text-sand-600 mx-auto" />
+                  <div className="text-xs font-semibold text-sand-300">No Waiters Connected Yet</div>
+                  <p className="text-[11px] text-sand-500 max-w-xs mx-auto">
+                    Waiters will appear here automatically as soon as they tap "Connect & Sync Now" or work on a table from their Android app.
+                  </p>
+                </div>
+              ) : (
+                connectedWaiters.map((w) => (
+                  <div
+                    key={w.id}
+                    className="p-3 rounded-2xl bg-zinc-900/80 border border-white/10 flex items-center justify-between gap-3 hover:border-blue-500/30 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center text-xs shrink-0">
+                        {w.name?.charAt(0) || 'W'}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-white">{w.name}</span>
+                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            ONLINE
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-sand-400 font-mono flex items-center gap-2 mt-0.5">
+                          <span>IP: {w.ip}</span>
+                          <span>•</span>
+                          <span className="text-sand-300">{w.device}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="text-[11px] font-bold text-amber-300">
+                        {w.activeTable ? `Viewing ${w.activeTable}` : 'Lobby'}
+                      </div>
+                      <div className="text-[9px] text-sand-500 font-mono mt-0.5">
+                        {new Date(w.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-sand-400">
+              <span>Total Active: <strong className="text-white">{connectedWaiters.length}</strong></span>
+              <button
+                type="button"
+                onClick={() => setIsWaitersModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs active:scale-95 transition-all"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
