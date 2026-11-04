@@ -34,7 +34,10 @@ import {
   Users,
   ShieldCheck,
   ShieldAlert,
+  ChefHat,
+  PlusCircle,
 } from 'lucide-react';
+import { parseItemPrice } from '../utils/priceUtils';
 
 interface WaiterItemRecord {
   item: MenuItem;
@@ -611,6 +614,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [customizingItem, setCustomizingItem] = useState<{ id: string; name: string; notes?: string } | null>(null);
   const [customNoteText, setCustomNoteText] = useState<string>('');
 
+  // Custom dish / service modal
+  const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [customDishName, setCustomDishName] = useState('');
+  const [customDishPrice, setCustomDishPrice] = useState('');
+  const [customDietary, setCustomDietary] = useState<DietaryType>('non-veg');
+  const [customQuantity, setCustomQuantity] = useState(1);
+  const [customNotes, setCustomNotes] = useState('');
+
   // Haptic feedback helper
   const triggerHaptic = (ms = 35) => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -618,6 +629,68 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         navigator.vibrate(ms);
       } catch {}
     }
+  };
+
+  // Add custom dish / hotel service (e.g. Chicken Making Charge)
+  const handleAddCustomDish = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const name = customDishName.trim();
+    if (!name) return;
+    const price = parseFloat(customDishPrice) || 0;
+    if (price < 0) return;
+
+    const customId = `cst-${Date.now()}`;
+    const customItem: MenuItem = {
+      id: customId,
+      name,
+      price,
+      dietary: customDietary,
+      category: 'custom-services',
+      isCustom: true,
+      description: 'Custom preparation or hotel service charge',
+      image: customDietary === 'non-veg' ? './images/food/chicken-curry.jpg' : './images/food/hero-veg-starters.jpg',
+    };
+
+    triggerHaptic(35);
+    setTables((prev) => {
+      const existingTable = prev[activeTable] || {
+        tableId: activeTable,
+        serverName,
+        openedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'active',
+        kotNumber: 1,
+        items: {},
+      };
+
+      return {
+        ...prev,
+        [activeTable]: {
+          ...existingTable,
+          status: 'active',
+          openedAt: existingTable.openedAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          updatedAt: Date.now(),
+          items: {
+            ...existingTable.items,
+            [customId]: {
+              item: customItem,
+              quantity: Math.max(1, customQuantity),
+              notes: customNotes.trim(),
+              firedCount: 0,
+            },
+          },
+        },
+      };
+    });
+
+    setPrintSuccessMsg(`✅ Added custom "${name}" (₹${price}) to ${activeTable}`);
+    setTimeout(() => setPrintSuccessMsg(null), 3500);
+
+    // Reset and close
+    setCustomDishName('');
+    setCustomDishPrice('');
+    setCustomNotes('');
+    setCustomQuantity(1);
+    setIsCustomModalOpen(false);
   };
 
   // Add / Increment Item on Active Table
@@ -734,7 +807,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   const subtotalPrice = useMemo(() => {
     return currentItemsList.reduce((sum, ci) => {
-      const p = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
+      const p = parseItemPrice(ci.item.price);
       return sum + p * ci.quantity;
     }, 0);
   }, [currentItemsList]);
@@ -853,7 +926,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       items: currentItemsList.map((ci) => ({
         name: ci.item.name,
         quantity: ci.quantity,
-        price: typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0,
+        price: parseItemPrice(ci.item.price),
         notes: ci.notes,
       })),
       subtotal: subtotalPrice,
@@ -910,7 +983,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const handleSendWhatsApp = () => {
     const itemsListStr = currentItemsList
       .map((ci) => {
-        const p = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
+        const p = parseItemPrice(ci.item.price);
         return `• ${ci.quantity}x ${ci.item.name} - ₹${p * ci.quantity}${ci.notes ? ` [${ci.notes}]` : ''}`;
       })
       .join('\n');
@@ -1318,6 +1391,15 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             <button
               type="button"
+              onClick={() => setIsCustomModalOpen(true)}
+              className="px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black flex items-center gap-1.5 shadow-md active:scale-95 transition-all shrink-0"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+ Custom Dish / Service</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setSelectedCategory('all')}
               className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                 selectedCategory === 'all'
@@ -1384,7 +1466,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 {category.items.map((dish) => {
                   const record = currentOrder.items[dish.id];
                   const inCartQty = record?.quantity || 0;
-                  const priceNum = typeof dish.price === 'number' ? dish.price : parseInt(String(dish.price).replace(/\D/g, ''), 10) || 0;
+                  const priceNum = parseItemPrice(dish.price);
 
                   return (
                     <div
@@ -1421,6 +1503,13 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                             }`}
                           />
                         </span>
+
+                        {/* Custom Service Tag */}
+                        {dish.isCustom && (
+                          <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-amber-400 text-black text-[8.5px] font-black uppercase tracking-wider shadow z-10">
+                            Service
+                          </span>
+                        )}
 
                         {/* Price Badge */}
                         <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/85 backdrop-blur-xs font-mono text-xs font-bold text-amber-300 shadow">
@@ -1592,9 +1681,17 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             {/* Modal Body */}
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
               {currentItemsList.length === 0 ? (
-                <div className="py-12 text-center text-sand-400">
+                <div className="py-10 text-center text-sand-400 space-y-3">
                   <p className="text-sm font-medium">{activeTable} is empty.</p>
-                  <p className="text-xs mt-1">Tap dishes on the menu to add items.</p>
+                  <p className="text-xs">Tap dishes on the menu or add a custom service below.</p>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 py-2 px-4 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-xs font-bold shadow-sm"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>+ Add Custom Service / Chicken Prep</span>
+                  </button>
                 </div>
               ) : (
                 <>
@@ -1616,7 +1713,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                           .filter((ci) => ci.quantity > ci.firedCount)
                           .map((ci) => {
                             const unfiredQty = ci.quantity - ci.firedCount;
-                            const price = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
+                            const price = parseItemPrice(ci.item.price);
 
                             return (
                               <div key={ci.item.id} className="py-2.5 flex items-start justify-between gap-2">
@@ -1687,6 +1784,16 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                       </div>
                     </div>
                   )}
+
+                  {/* Add Custom Item / Service Charge Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomModalOpen(true)}
+                    className="w-full py-2.5 px-3 rounded-2xl bg-amber-400/10 hover:bg-amber-400/20 border border-dashed border-amber-400/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>+ Add Custom Dish / Chicken Making Charge</span>
+                  </button>
 
                   {/* Tax / GST Selection Radio Option */}
                   <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
@@ -1807,6 +1914,194 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 9B. CUSTOM DISH & HOTEL SERVICE MODAL */}
+      {isCustomModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-[#131622] border border-amber-400/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-full bg-amber-400/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-400/30">
+                  <ChefHat className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-white">Add Custom Dish / Service</h4>
+                  <p className="text-[10px] text-amber-400 font-mono">Adding to Table: <strong>{activeTable}</strong></p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCustomModalOpen(false)}
+                className="p-1.5 rounded-full text-sand-400 hover:text-white bg-white/5 hover:bg-white/10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Presets for Highway Hotel & Dhaba Services */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1.5">
+                ⚡ Quick Presets (Tap to Auto-Fill):
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { name: 'Chicken Making Charge (1 Kg)', price: '200', diet: 'non-veg' as const },
+                  { name: 'Desi Chicken Making Charge', price: '250', diet: 'non-veg' as const },
+                  { name: 'Mutton Making Charge (1 Kg)', price: '300', diet: 'non-veg' as const },
+                  { name: 'Fish Making / Fry Charge', price: '180', diet: 'non-veg' as const },
+                  { name: 'Ice Bucket & Glass Service', price: '50', diet: 'veg' as const },
+                  { name: 'Packing & Container Charge', price: '30', diet: 'veg' as const },
+                ].map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => {
+                      setCustomDishName(preset.name);
+                      setCustomDishPrice(preset.price);
+                      setCustomDietary(preset.diet);
+                    }}
+                    className="p-2 rounded-xl bg-white/5 hover:bg-amber-400/15 border border-white/5 hover:border-amber-400/30 text-left text-[11px] text-sand-200 hover:text-white flex items-center justify-between transition-colors active:scale-98"
+                  >
+                    <span className="truncate">{preset.name}</span>
+                    <span className="font-mono text-amber-300 font-bold shrink-0 ml-1">₹{preset.price}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddCustomDish} className="space-y-3.5 pt-1">
+              {/* Dish / Service Name */}
+              <div>
+                <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
+                  Dish or Service Name *
+                </label>
+                <input
+                  type="text"
+                  value={customDishName}
+                  onChange={(e) => setCustomDishName(e.target.value)}
+                  placeholder="e.g. Chicken Making Charge, Desi Mutton Handi..."
+                  className="w-full bg-zinc-900 text-xs sm:text-sm text-white px-3 py-2 rounded-xl border border-white/10 focus:border-amber-400 focus:outline-none placeholder:text-sand-500 font-medium"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              {/* Price & Quantity Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
+                    Charge / Price (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sand-400 font-bold text-xs">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={customDishPrice}
+                      onChange={(e) => setCustomDishPrice(e.target.value)}
+                      placeholder="e.g. 200"
+                      className="w-full bg-zinc-900 text-xs sm:text-sm text-white pl-7 pr-3 py-2 rounded-xl border border-white/10 focus:border-amber-400 focus:outline-none placeholder:text-sand-500 font-mono font-bold"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
+                    Quantity
+                  </label>
+                  <div className="flex items-center bg-zinc-900 rounded-xl border border-white/10 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setCustomQuantity((q) => Math.max(1, q - 1))}
+                      className="p-2 hover:bg-white/10 text-white"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="flex-1 text-center font-mono text-xs font-bold text-white">
+                      {customQuantity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCustomQuantity((q) => q + 1)}
+                      className="p-2 hover:bg-white/10 text-white"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dietary Toggle */}
+              <div>
+                <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
+                  Item Category:
+                </label>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setCustomDietary('non-veg')}
+                    className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      customDietary === 'non-veg'
+                        ? 'bg-rose-500/20 border-rose-500 text-rose-300'
+                        : 'bg-zinc-900 border-white/10 text-sand-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🔴 Non-Veg (Chicken/Meat)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCustomDietary('veg')}
+                    className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      customDietary === 'veg'
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                        : 'bg-zinc-900 border-white/10 text-sand-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🟢 Veg / Hotel Service</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Special Instructions / Kitchen Note */}
+              <div>
+                <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
+                  Kitchen Cooking Note / Instructions (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={customNotes}
+                  onChange={(e) => setCustomNotes(e.target.value)}
+                  placeholder="e.g. Customer brought 1.5kg chicken, spicy handi style, less oil..."
+                  className="w-full bg-zinc-900 text-xs text-white px-3 py-2 rounded-xl border border-white/10 focus:border-amber-400 focus:outline-none placeholder:text-sand-500"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sand-300 hover:text-white text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={!customDishName.trim()}
+                  className="flex-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Add to Table {activeTable}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

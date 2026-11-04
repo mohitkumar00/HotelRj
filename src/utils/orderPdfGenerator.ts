@@ -1,4 +1,5 @@
 import { CartItem } from '../types';
+import { parseItemPrice } from './priceUtils';
 
 export interface GeneratePdfOptions {
   cart: { [itemId: string]: CartItem };
@@ -359,11 +360,7 @@ export async function generateOrderPdf(options: GeneratePdfOptions): Promise<voi
 
   // Food Items Listing
   items.forEach((ci) => {
-    const rawPrice = ci.item.price;
-    const itemPrice =
-      typeof rawPrice === 'number'
-        ? rawPrice
-        : parseInt(String(rawPrice).replace(/\D/g, ''), 10) || 0;
+    const itemPrice = parseItemPrice(ci.item.price);
     const itemTotal = itemPrice * ci.quantity;
 
     // Dish Name

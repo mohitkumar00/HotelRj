@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MENU_CATEGORIES, TOTAL_MENU_ITEMS_COUNT } from '../data/menuData';
 import { DietaryType, MenuItem, CartItem } from '../types';
+import { parseItemPrice } from '../utils/priceUtils';
 import { HOTEL_INFO } from '../data/hotelData';
 import { generateOrderPdf } from '../utils/orderPdfGenerator';
 import { InstagramIcon, FacebookIcon } from '../components/SocialIcons';
@@ -138,7 +139,7 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
 
   const totalPrice = useMemo(() => {
     return Object.values(cart).reduce((sum, ci) => {
-      const p = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
+      const p = parseItemPrice(ci.item.price);
       return sum + p * ci.quantity;
     }, 0);
   }, [cart]);
@@ -204,7 +205,7 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
     const dateStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const itemsList = Object.values(cart)
       .map((ci) => {
-        const itemTotal = (typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0) * ci.quantity;
+        const itemTotal = parseItemPrice(ci.item.price) * ci.quantity;
         return `• ${ci.quantity}x ${ci.item.name} - ₹${itemTotal}`;
       })
       .join('\n');
@@ -1056,7 +1057,7 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
 
                   <div className="space-y-1.5 py-1 text-xs sm:text-sm">
                     {Object.values(cart).map((ci) => {
-                      const itemPrice = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
+                      const itemPrice = parseItemPrice(ci.item.price);
                       return (
                         <div key={ci.item.id} className="flex items-start justify-between gap-2 border-b border-stone-200 pb-1">
                           <span className="font-black text-black">
@@ -1090,7 +1091,7 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                 <div className="space-y-3">
                   <div className="divide-y divide-white/5">
                     {Object.values(cart).map((ci) => {
-                      const itemPrice = typeof ci.item.price === 'number' ? ci.item.price : parseInt(String(ci.item.price).replace(/\D/g, ''), 10) || 0;
+                      const itemPrice = parseItemPrice(ci.item.price);
                       return (
                         <div key={ci.item.id} className="py-2.5 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 min-w-0">

@@ -75,6 +75,7 @@ export interface MenuItem {
   popular?: boolean;
   image?: string;
   description?: string;
+  isCustom?: boolean;
 }
 
 export interface MenuCategory {
