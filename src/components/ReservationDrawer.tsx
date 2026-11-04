@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Room, BookingDetails } from '../types';
-import { X, Users, ShieldCheck, CheckCircle2, ArrowRight, Phone, MessageSquare } from 'lucide-react';
+import { X, Users, ShieldCheck, CheckCircle2, ArrowRight, Phone, MessageSquare, Mail, AlertCircle } from 'lucide-react';
 import { HOTEL_INFO } from '../data/hotelData';
 
 interface ReservationDrawerProps {
@@ -41,6 +41,7 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
   const [specialRequests, setSpecialRequests] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [emailDelivered, setEmailDelivered] = useState<boolean | null>(null);
   const [reservationCode, setReservationCode] = useState('');
 
   // Calculations
@@ -72,51 +73,108 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
     const code = `RJ-${Math.floor(100000 + Math.random() * 900000)}`;
     setReservationCode(code);
 
-    try {
-      // Send real email notification to hotelrj.info@gmail.com via FormSubmit
-      await fetch('https://formsubmit.co/ajax/hotelrj.info@gmail.com', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          _subject: `🏨 New Booking Request: ${guestName} - ${selectedRoom?.name || 'Room'} (Ref: ${code})`,
-          _template: 'table',
-          _captcha: 'false',
-          'Booking Reference': code,
-          'Guest Name': guestName,
-          'Guest Phone / Mobile': guestPhone,
-          'Guest Email': guestEmail || 'Not provided',
-          'Selected Room': selectedRoom?.name,
-          'Room Rate (Per Night)': `₹${selectedRoom?.pricePerNight.toLocaleString()}`,
-          'Check-In Date': checkIn,
-          'Check-Out Date': checkOut,
-          'Total Nights': `${nights} ${nights === 1 ? 'Night' : 'Nights'}`,
-          'Number of Guests': guests,
-          'Add-on Station Transfer': addOnTransfer ? 'Yes (₹350)' : 'No',
-          'Add-on Dinner Thali': addOnDinnerThali ? 'Yes (₹450)' : 'No',
-          'Add-on Extra Bed': addOnExtraBed ? 'Yes (₹300)' : 'No',
-          'Estimated Total Tariff': `₹${grandTotal.toLocaleString()}`,
-          'Special Requests': specialRequests.trim() || 'None',
-          'Submission Timestamp': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-        }),
-      });
+    let sentOk = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // Max 5s timeout, never hang
 
-      setIsSubmitted(true);
+    try {
+      const web3Key =
+        (HOTEL_INFO as Record<string, unknown>).web3formsAccessKey ||
+        (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_WEB3FORMS_ACCESS_KEY;
+
+      if (web3Key && typeof web3Key === 'string' && web3Key.trim()) {
+        // Send via Web3Forms using FormData (Official recommended format, zero CORS/redirect issues)
+        const formData = new FormData();
+        formData.append('access_key', web3Key.trim());
+        formData.append('subject', `🏨 New Booking Request: ${guestName} - ${selectedRoom?.name || 'Room'} (Ref: ${code})`);
+        formData.append('from_name', 'Hotel RJ Web Reservation');
+        formData.append('Booking Reference', code);
+        formData.append('Guest Name', guestName);
+        formData.append('Guest Phone / Mobile', guestPhone);
+        formData.append('Guest Email', guestEmail || 'Not provided');
+        formData.append('Selected Room', selectedRoom?.name || 'Room');
+        formData.append('Room Rate (Per Night)', `₹${selectedRoom?.pricePerNight.toLocaleString()}`);
+        formData.append('Check-In Date', checkIn);
+        formData.append('Check-Out Date', checkOut);
+        formData.append('Total Nights', `${nights} ${nights === 1 ? 'Night' : 'Nights'}`);
+        formData.append('Number of Guests', String(guests));
+        formData.append('Add-on Station Transfer', addOnTransfer ? 'Yes (₹350)' : 'No');
+        formData.append('Add-on Dinner Thali', addOnDinnerThali ? 'Yes (₹450)' : 'No');
+        formData.append('Add-on Extra Bed', addOnExtraBed ? 'Yes (₹300)' : 'No');
+        formData.append('Estimated Total Tariff', `₹${grandTotal.toLocaleString()}`);
+        formData.append('Special Requests', specialRequests.trim() || 'None');
+        formData.append('Submission Timestamp', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+
+        const response = await fetch('https://api.web3forms.com/submit', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        });
+
+        const data = await response.json();
+        sentOk = response.ok && data.success === true;
+      } else {
+        // Attempt FormSubmit with 5s timeout & detection
+        const response = await fetch('https://formsubmit.co/ajax/hotelrj.info@gmail.com', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            _subject: `🏨 New Booking Request: ${guestName} - ${selectedRoom?.name || 'Room'} (Ref: ${code})`,
+            _template: 'table',
+            _captcha: 'false',
+            'Booking Reference': code,
+            'Guest Name': guestName,
+            'Guest Phone / Mobile': guestPhone,
+            'Guest Email': guestEmail || 'Not provided',
+            'Selected Room': selectedRoom?.name,
+            'Room Rate (Per Night)': `₹${selectedRoom?.pricePerNight.toLocaleString()}`,
+            'Check-In Date': checkIn,
+            'Check-Out Date': checkOut,
+            'Total Nights': `${nights} ${nights === 1 ? 'Night' : 'Nights'}`,
+            'Number of Guests': guests,
+            'Add-on Station Transfer': addOnTransfer ? 'Yes (₹350)' : 'No',
+            'Add-on Dinner Thali': addOnDinnerThali ? 'Yes (₹450)' : 'No',
+            'Add-on Extra Bed': addOnExtraBed ? 'Yes (₹300)' : 'No',
+            'Estimated Total Tariff': `₹${grandTotal.toLocaleString()}`,
+            'Special Requests': specialRequests.trim() || 'None',
+            'Submission Timestamp': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          }),
+          signal: controller.signal,
+        });
+
+        sentOk = response.ok;
+      }
     } catch (err) {
-      console.warn('FormSubmit dispatch error:', err);
-      // Still show the confirmation screen so the guest has their reference code and WhatsApp fallback
-      setIsSubmitted(true);
+      console.warn('Booking dispatch notification warning (handled gracefully):', err);
+      sentOk = false;
     } finally {
+      clearTimeout(timeoutId);
+      setEmailDelivered(sentOk);
+      setIsSubmitted(true);
       setIsSubmitting(false);
     }
   };
 
   const handleReset = () => {
     setIsSubmitted(false);
+    setEmailDelivered(null);
     onClose();
   };
+
+  const bookingSummaryText = `*Hotel RJ Booking Request*
+Ref: ${reservationCode}
+Guest: ${guestName}
+Phone: ${guestPhone}
+Email: ${guestEmail || 'N/A'}
+Room: ${selectedRoom?.name || 'Room'}
+Check-In: ${checkIn}
+Check-Out: ${checkOut} (${nights} ${nights === 1 ? 'Night' : 'Nights'})
+Guests: ${guests}
+Estimated Total: ₹${grandTotal.toLocaleString()}
+Special Requests: ${specialRequests.trim() || 'None'}`;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/80 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
@@ -146,53 +204,84 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
 
           {isSubmitted ? (
             /* Success / Confirmation State */
-            <div className="py-12 text-center animate-in zoom-in-95 duration-200">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto mb-6">
+            <div className="py-8 text-center animate-in zoom-in-95 duration-200">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto mb-4">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <span className="text-xs uppercase tracking-widest text-gold-400 font-semibold block mb-2">
-                Booking Request Received
+              <span className="text-xs uppercase tracking-widest text-gold-400 font-semibold block mb-1">
+                Booking Request Generated
               </span>
-              <h3 className="font-serif text-3xl text-white font-medium">We Look Forward to Welcoming You</h3>
-              <p className="mt-3 text-xs sm:text-sm text-sand-300 max-w-md mx-auto leading-relaxed">
-                Thank you, <strong className="text-white">{guestName || 'Valued Guest'}</strong>. Your reservation request has been dispatched directly to Hotel RJ at <strong className="text-gold-300">hotelrj.info@gmail.com</strong>. We have recorded your mobile number <strong className="text-white">{guestPhone}</strong>.
-              </p>
+              <h3 className="font-serif text-2xl sm:text-3xl text-white font-medium">
+                We Look Forward to Welcoming You
+              </h3>
+
+              {emailDelivered ? (
+                <div className="mt-3 p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-xs text-emerald-200 max-w-md mx-auto">
+                  ✓ An automated reservation notification has been dispatched to Hotel RJ front desk at <strong className="text-white">hotelrj.info@gmail.com</strong>.
+                </div>
+              ) : (
+                <div className="mt-3 p-3 bg-amber-950/30 border border-amber-500/30 rounded-xl text-xs text-amber-200/90 max-w-md mx-auto text-left flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-amber-300">Instant Front Desk Dispatch</p>
+                    <p className="text-[11px] text-amber-200/80 leading-relaxed mt-0.5">
+                      Your booking reference is generated. Tap <strong>WhatsApp</strong> or <strong>Email</strong> below to send this directly to the reception team for instant confirmation.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Confirmation Code Card */}
-              <div className="my-6 p-6 rounded-2xl bg-zinc-900 border border-white/10 max-w-sm mx-auto text-center">
+              <div className="my-5 p-5 rounded-2xl bg-zinc-900 border border-white/10 max-w-sm mx-auto text-center">
                 <span className="text-[10px] uppercase tracking-widest text-sand-400 block mb-1">Booking Reference</span>
                 <span className="font-mono text-2xl font-bold text-gold-300 tracking-wider">{reservationCode}</span>
                 <div className="mt-3 pt-3 border-t border-white/5 text-xs text-sand-300 space-y-1">
+                  <p><strong className="text-white">{guestName}</strong> • {guestPhone}</p>
                   <p>{nights} Night(s) • {selectedRoom?.name}</p>
-                  <p className="font-semibold text-white">Estimated Amount: ₹{grandTotal.toLocaleString()}</p>
+                  <p className="font-semibold text-gold-400">Estimated Total: ₹{grandTotal.toLocaleString()}</p>
                 </div>
               </div>
 
-              {/* Direct Call / WhatsApp Actions */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 max-w-sm mx-auto mb-6">
+              {/* Direct Call / WhatsApp / Email Actions */}
+              <div className="space-y-2.5 max-w-sm mx-auto mb-6">
                 <a
-                  href={`tel:${HOTEL_INFO.phone}`}
-                  className="w-full sm:w-auto flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2"
-                >
-                  <Phone className="w-4 h-4 text-gold-400" />
-                  <span>Call Reception</span>
-                </a>
-                <a
-                  href={`https://wa.me/917004865824?text=Hello%20Hotel%20RJ,%20I%20have%20submitted%20booking%20reference%20${reservationCode}%20for%20${encodeURIComponent(guestName)}`}
+                  href={`https://wa.me/917004865824?text=${encodeURIComponent(bookingSummaryText)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full sm:w-auto flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-2"
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg transition-all"
                 >
                   <MessageSquare className="w-4 h-4" />
-                  <span>Confirm on WhatsApp</span>
+                  <span>Send Booking on WhatsApp (Instant)</span>
                 </a>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={`mailto:hotelrj.info@gmail.com?subject=${encodeURIComponent(
+                      `Hotel RJ Booking Ref ${reservationCode} - ${guestName}`
+                    )}&body=${encodeURIComponent(
+                      `Hello Hotel RJ Front Desk,\n\nI would like to confirm my room booking:\n\n• Reference: ${reservationCode}\n• Guest Name: ${guestName}\n• Phone: ${guestPhone}\n• Email: ${guestEmail || 'N/A'}\n• Room: ${selectedRoom?.name}\n• Check-In: ${checkIn}\n• Check-Out: ${checkOut} (${nights} nights)\n• Estimated Total: ₹${grandTotal.toLocaleString()}\n• Special Requests: ${specialRequests.trim() || 'None'}\n\nPlease confirm room availability.\nThank you!`
+                    )}`}
+                    className="py-2.5 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-200 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Mail className="w-4 h-4 text-blue-300" />
+                    <span>Send via Email</span>
+                  </a>
+
+                  <a
+                    href={`tel:${HOTEL_INFO.phone}`}
+                    className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Phone className="w-4 h-4 text-gold-400" />
+                    <span>Call Reception</span>
+                  </a>
+                </div>
               </div>
 
               <button
                 onClick={handleReset}
-                className="px-8 py-3 rounded-full bg-gold-400 text-black text-xs font-semibold uppercase tracking-wider shadow-lg hover:bg-gold-300 transition-colors"
+                className="px-8 py-2.5 rounded-full bg-gold-400 text-black text-xs font-semibold uppercase tracking-wider shadow-lg hover:bg-gold-300 transition-colors"
               >
-                Return to Site
+                Close & Return
               </button>
             </div>
           ) : (

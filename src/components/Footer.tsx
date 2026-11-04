@@ -42,27 +42,52 @@ export const Footer: React.FC<FooterProps> = ({ theme = 'dark' }) => {
     const emailVal = input ? input.value : '';
 
     setIsSubmittingEmail(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+
     try {
-      await fetch('https://formsubmit.co/ajax/hotelrj.info@gmail.com', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          _subject: `📩 New Contact / Stay Connected Inquiry from ${emailVal}`,
-          _template: 'table',
-          _captcha: 'false',
-          'Visitor Email': emailVal,
-          'Inquiry Type': 'General / Offers / Banquet Inquiry',
-          'Submitted At': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-        }),
-      });
+      const web3Key =
+        (HOTEL_INFO as Record<string, unknown>).web3formsAccessKey ||
+        (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_WEB3FORMS_ACCESS_KEY;
+
+      if (web3Key && typeof web3Key === 'string' && web3Key.trim()) {
+        const formData = new FormData();
+        formData.append('access_key', web3Key.trim());
+        formData.append('subject', `📩 New Newsletter / Inquiry from ${emailVal}`);
+        formData.append('from_name', 'Hotel RJ Web Visitor');
+        formData.append('Visitor Email', emailVal);
+        formData.append('Inquiry Type', 'General / Offers / Banquet Inquiry');
+        formData.append('Submitted At', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+
+        await fetch('https://api.web3forms.com/submit', {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        });
+      } else {
+        await fetch('https://formsubmit.co/ajax/hotelrj.info@gmail.com', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            _subject: `📩 New Contact / Stay Connected Inquiry from ${emailVal}`,
+            _template: 'table',
+            _captcha: 'false',
+            'Visitor Email': emailVal,
+            'Inquiry Type': 'General / Offers / Banquet Inquiry',
+            'Submitted At': new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          }),
+          signal: controller.signal,
+        });
+      }
       setEmailSubscribed(true);
     } catch (err) {
-      console.warn('FormSubmit error:', err);
+      console.warn('Subscription dispatch error (handled gracefully):', err);
       setEmailSubscribed(true);
     } finally {
+      clearTimeout(timeoutId);
       setIsSubmittingEmail(false);
     }
   };

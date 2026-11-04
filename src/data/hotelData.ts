@@ -9,6 +9,8 @@ export const HOTEL_INFO = {
   phone: '+91 7004865824',
   secondaryPhone: '+91 7004153034',
   email: 'hotelrj.info@gmail.com',
+  // Web3Forms Access Key for automated email delivery without CORS errors
+  web3formsAccessKey: '6fa5bab7-3c3d-469a-b872-7377def417a0',
   rating: 4.8,
   reviewCount: 168,
   established: '2024',
