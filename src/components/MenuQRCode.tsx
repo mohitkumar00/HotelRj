@@ -23,7 +23,7 @@ export const MenuQRCode: React.FC<MenuQRCodeProps> = ({
       const base = window.location.origin + window.location.pathname.replace(/\/$/, '');
       return `${base}/?view=menu`;
     }
-    return 'https://mohitkumar00.github.io/HotelRJ/?view=menu';
+    return 'https://www.hotelrj.co.in/?view=menu';
   };
 
   const menuUrl = getMenuUrl();

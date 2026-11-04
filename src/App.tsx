@@ -138,7 +138,6 @@ export const App: React.FC = () => {
     return (
       <DigitalMenuPage
         onBackToHotel={handleBackToHotel}
-        onOpenPosMode={() => setIsPosMode(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
