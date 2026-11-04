@@ -139,7 +139,7 @@ export const AMENITIES: AmenityHighlight[] = [
     description: 'Elegantly decorated, air-conditioned banquet hall with integrated sound system, stage lighting, and custom catering for weddings, receptions, birthdays, and business conferences.',
     category: 'events',
     iconName: 'Sparkles',
-    imageUrl: './images/food/venue-banquet.jpg',
+    imageUrl: './images/food/hotel-rj-banquet-catering.jpg',
     colSpan: 'md:col-span-1 md:row-span-1',
     badge: 'Events & Parties',
   },
@@ -223,7 +223,7 @@ export const DINING_VENUES: DiningVenue[] = [
     chefQuote: '"Making your weddings, birthdays, and celebrations memorable with royal hospitality."',
     description:
       'Comprehensive catering and banquet hall services for weddings, ring ceremonies, birthday parties, anniversary celebrations, and corporate get-togethers with live counters and customized thali spreads.',
-    heroImage: './images/food/venue-banquet.jpg',
+    heroImage: './images/food/hotel-rj-banquet-catering.jpg',
     signatureDishes: [
       {
         name: 'Royal Wedding Thali Spread',
