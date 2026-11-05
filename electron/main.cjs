@@ -238,8 +238,12 @@ ipcMain.handle('fix-firewall', async () => {
 // -------------------------------------------------------------
 // Database & Analytics IPC Handlers
 // -------------------------------------------------------------
-ipcMain.handle('get-analytics', async (event, period) => {
-  return db.getAnalytics(period);
+ipcMain.handle('get-analytics', async (event, query) => {
+  return db.getAnalytics(query);
+});
+
+ipcMain.handle('export-backup', async () => {
+  return db.exportBackup();
 });
 
 ipcMain.handle('settle-bill', async (event, bill) => {

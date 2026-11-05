@@ -635,6 +635,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   // Settlement & DB billing modal
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+  const [settleDepartment, setSettleDepartment] = useState<'restaurant' | 'rooms' | 'banquet'>('restaurant');
   const [settlePaymentMethod, setSettlePaymentMethod] = useState<'cash' | 'upi' | 'card' | 'room-folio'>('cash');
   const [settleRoomNumber, setSettleRoomNumber] = useState('Room 101');
   const [settleCustomerPhone, setSettleCustomerPhone] = useState('');
@@ -1050,6 +1051,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   // Action: OPEN SETTLE MODAL OR DIRECT CLEAR IF EMPTY
   const handleOpenSettleModal = () => {
+    if (activeTable.startsWith('R-') || activeTable.includes('Room')) {
+      setSettleDepartment('rooms');
+    } else if (activeTable.toLowerCase().includes('banquet') || activeTable.toLowerCase().includes('hall') || activeTable.toLowerCase().includes('lawn')) {
+      setSettleDepartment('banquet');
+    } else {
+      setSettleDepartment('restaurant');
+    }
+
     if (currentItemsList.length === 0) {
       if (confirm(`Mark ${activeTable} as Vacant?`)) {
         triggerHaptic(40);
@@ -1079,7 +1088,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     try {
       const payload: SettleBillPayload = {
         tableId: activeTable,
-        orderType: isTakeawayActive ? 'takeaway' : activeTable.startsWith('R-') ? 'room-service' : 'dine-in',
+        department: settleDepartment,
+        orderType: isTakeawayActive ? 'takeaway' : activeTable.startsWith('R-') ? 'room-service' : settleDepartment === 'banquet' ? 'banquet' : 'dine-in',
         roomNumber: settlePaymentMethod === 'room-folio' ? settleRoomNumber : undefined,
         serverName,
         settledBy: 'Counter Cashier',
@@ -2307,6 +2317,46 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               <span className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total Payable Amount</span>
               <div className="text-3xl font-black text-gold-300 font-mono mt-1">₹{grandTotal}</div>
               {applyGst && <span className="text-[10px] text-stone-400">Includes 5% GST (₹{gstAmount})</span>}
+            </div>
+
+            {/* Department Selection */}
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-1.5">Business Department:</label>
+              <div className="grid grid-cols-3 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSettleDepartment('restaurant')}
+                  className={`py-2 px-2 rounded-xl font-bold border transition-all text-center ${
+                    settleDepartment === 'restaurant'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                      : 'bg-stone-950 text-stone-400 border-stone-800'
+                  }`}
+                >
+                  🍽️ Restaurant
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettleDepartment('rooms')}
+                  className={`py-2 px-2 rounded-xl font-bold border transition-all text-center ${
+                    settleDepartment === 'rooms'
+                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
+                      : 'bg-stone-950 text-stone-400 border-stone-800'
+                  }`}
+                >
+                  🛏️ Rooms
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettleDepartment('banquet')}
+                  className={`py-2 px-2 rounded-xl font-bold border transition-all text-center ${
+                    settleDepartment === 'banquet'
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/50'
+                      : 'bg-stone-950 text-stone-400 border-stone-800'
+                  }`}
+                >
+                  🎉 Banquet
+                </button>
+              </div>
             </div>
 
             {/* Payment Mode Selection */}

@@ -13,12 +13,20 @@ import {
   Lock,
   AlertTriangle,
   Receipt,
+  Download,
+  Building,
+  PartyPopper,
+  UtensilsCrossed,
+  Calendar,
+  Layers,
 } from 'lucide-react';
 import {
   fetchAnalytics,
   addExpense,
   removeExpense,
+  exportDatabaseBackup,
   AnalyticsSummary,
+  AnalyticsQueryOptions,
 } from '../utils/analyticsApi';
 import { HOTEL_INFO } from '../data/hotelData';
 
@@ -34,9 +42,15 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<boolean>(false);
 
-  const [period, setPeriod] = useState<'today' | 'yesterday' | 'last7days' | 'all'>('today');
+  // Filter States
+  const [period, setPeriod] = useState<AnalyticsQueryOptions['period']>('today');
+  const [department, setDepartment] = useState<'all' | 'restaurant' | 'rooms' | 'banquet'>('all');
+  const [selectedYear, setSelectedYear] = useState<string>('2026');
+  const [selectedMonth, setSelectedMonth] = useState<string>('2026-11');
+
   const [loading, setLoading] = useState<boolean>(true);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+  const [exporting, setExporting] = useState<boolean>(false);
 
   // Expense modal state
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState<boolean>(false);
@@ -52,10 +66,15 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
     return localStorage.getItem('hotel_rj_owner_phone') || '';
   });
 
-  const loadData = async (selectedPeriod = period) => {
+  const loadData = async () => {
     setLoading(true);
     try {
-      const data = await fetchAnalytics(selectedPeriod);
+      const data = await fetchAnalytics({
+        period,
+        department,
+        year: selectedYear,
+        month: selectedMonth,
+      });
       setAnalytics(data);
     } catch (e) {
       console.error('Error loading analytics:', e);
@@ -66,13 +85,12 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadData(period);
+      loadData();
     }
-  }, [isAuthenticated, period]);
+  }, [isAuthenticated, period, department, selectedYear, selectedMonth]);
 
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Default Owner PIN is 1234 or 8888
     if (enteredPin === '1234' || enteredPin === '8888') {
       setIsAuthenticated(true);
       sessionStorage.setItem('hotel_rj_owner_auth', 'true');
@@ -100,13 +118,48 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
     setExpenseAmount('');
     setExpenseNotes('');
     setIsExpenseModalOpen(false);
-    loadData(period);
+    loadData();
   };
 
   const handleDeleteExpense = async (id: string) => {
     if (confirm('Are you sure you want to delete this expense record?')) {
       await removeExpense(id);
-      loadData(period);
+      loadData();
+    }
+  };
+
+  // 1-Click Database Export to CSV / Excel
+  const handleExportBackup = async (format: 'csv' | 'json' = 'csv') => {
+    setExporting(true);
+    try {
+      const result = await exportDatabaseBackup();
+      if (!result.success) {
+        alert('Could not export backup. Please ensure POS server is active.');
+        return;
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      if (format === 'csv' && result.csvContent) {
+        const blob = new Blob([result.csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `HotelRJ-Bills-Backup-${timestamp}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else if (result.jsonData) {
+        const blob = new Blob([JSON.stringify(result.jsonData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `HotelRJ-Database-Backup-${timestamp}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err: any) {
+      alert(`Export failed: ${err.message}`);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -120,37 +173,42 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
       .map((d, i) => `${i + 1}. ${d.name} (${d.quantity} plates - ₹${d.revenue})`)
       .join('\n');
 
+    const restRev = analytics.departments.restaurant.revenue;
+    const roomRev = analytics.departments.rooms.revenue;
+    const banqRev = analytics.departments.banquet.revenue;
+
     return `🏨 *HOTEL RJ — EXECUTIVE BUSINESS DIGEST*
 📅 *Period:* ${analytics.period.toUpperCase()} (${dateStr})
+🏢 *Filter:* ${department === 'all' ? 'All Departments' : department.toUpperCase()}
 ⏰ *Generated:* ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
 
-💰 *REVENUE BREAKDOWN:*
-• Gross Sales: *₹${analytics.grossRevenue.toLocaleString('en-IN')}* (${analytics.billsCount} Bills)
+💰 *TOTAL GROSS REVENUE: ₹${analytics.grossRevenue.toLocaleString('en-IN')}* (${analytics.billsCount} Bills)
+
+🏢 *DEPARTMENT BREAKDOWN:*
+• 🍽️ Restaurant & Dhaba: *₹${restRev.toLocaleString('en-IN')}* (${analytics.departments.restaurant.count} orders)
+  └─ Custom Meat Making: ₹${analytics.departments.restaurant.customCookingRevenue.toLocaleString('en-IN')} (${analytics.departments.restaurant.customKgEstimate} Kg)
+• 🛏️ Rooms & Lodging: *₹${roomRev.toLocaleString('en-IN')}* (${analytics.departments.rooms.count} stays)
+• 🎉 Banquet & Events: *₹${banqRev.toLocaleString('en-IN')}* (${analytics.departments.banquet.count} functions)
+
+💵 *PAYMENT COLLECTIONS:*
 • Cash in Drawer: ₹${analytics.paymentSplit.cash.toLocaleString('en-IN')}
 • UPI Collections: ₹${analytics.paymentSplit.upi.toLocaleString('en-IN')}
 ${analytics.paymentSplit.roomFolio > 0 ? `• Room Folios: ₹${analytics.paymentSplit.roomFolio.toLocaleString('en-IN')}\n` : ''}
 ${analytics.paymentSplit.card > 0 ? `• Card/POS: ₹${analytics.paymentSplit.card.toLocaleString('en-IN')}\n` : ''}
-🍗 *CUSTOM COOKING & DHABA SERVICES:*
-• Total Service Charges: ₹${analytics.customCooking.revenue.toLocaleString('en-IN')}
-• Customer Meat Prepared: ${analytics.customCooking.kgEstimate} Kg (${analytics.customCooking.count} orders)
 
-📉 *PETTY EXPENSES & NET PROFIT:*
-• Daily Expenses: ₹${analytics.expenses.total.toLocaleString('en-IN')}
+📉 *EXPENSES & NET MARGIN:*
+• Petty Expenses: ₹${analytics.expenses.total.toLocaleString('en-IN')}
 • *Net Profit:* *₹${analytics.netProfit.toLocaleString('en-IN')}*
 
-🛡️ *ANTI-THEFT & AUDIT LOG:*
+🛡️ *ANTI-THEFT & VOID AUDIT:*
 • Voided Items: ${analytics.antiTheft.voidsCount} items (₹${analytics.antiTheft.voidAmount.toLocaleString('en-IN')})
-${
-  analytics.antiTheft.recentAudits.length > 0
-    ? `• Latest Void: "${analytics.antiTheft.recentAudits[0].itemName || 'Item'}" by ${analytics.antiTheft.recentAudits[0].staffName} (${analytics.antiTheft.recentAudits[0].reason})\n`
-    : ''
-}
-🏆 *TOP 5 DISHES SOLD:*
-${topDishesList || '• No dishes recorded yet'}
+
+🏆 *TOP 5 RESTAURANT DISHES:*
+${topDishesList || '• None recorded'}
 
 --------------------------------
-_Generated automatically from Hotel RJ POS System_`;
-  }, [analytics]);
+_Saved permanently in Hotel RJ Database_`;
+  }, [analytics, department]);
 
   const handleShareWhatsApp = (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,8 +291,8 @@ _Generated automatically from Hotel RJ POS System_`;
   // -------------------------------------------------------------
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-stone-900/95 backdrop-blur-md border-b border-stone-800 px-4 py-3 flex items-center justify-between gap-3">
+      {/* Top Header Bar */}
+      <header className="sticky top-0 z-40 bg-stone-900/95 backdrop-blur-md border-b border-stone-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -247,53 +305,36 @@ _Generated automatically from Hotel RJ POS System_`;
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-lg font-bold font-serif text-gold-200">Owner Insights</h1>
               <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                Live DB
+                Persistent DB
               </span>
             </div>
             <p className="text-[11px] text-stone-400 hidden sm:block">
-              {HOTEL_INFO.name} • Executive Intelligence & Anti-Theft Ledger
+              {HOTEL_INFO.name} • Restaurant, Rooms & Banquet Revenue Intelligence
             </p>
           </div>
         </div>
 
-        {/* Right Action Controls */}
-        <div className="flex items-center gap-2">
-          {/* Period Selector */}
-          <div className="flex bg-stone-950 p-1 rounded-xl border border-stone-800 text-xs">
-            <button
-              onClick={() => setPeriod('today')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                period === 'today' ? 'bg-gold-500 text-black font-bold shadow' : 'text-stone-400 hover:text-white'
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => setPeriod('yesterday')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                period === 'yesterday' ? 'bg-gold-500 text-black font-bold shadow' : 'text-stone-400 hover:text-white'
-              }`}
-            >
-              Yesterday
-            </button>
-            <button
-              onClick={() => setPeriod('last7days')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
-                period === 'last7days' ? 'bg-gold-500 text-black font-bold shadow' : 'text-stone-400 hover:text-white'
-              }`}
-            >
-              7 Days
-            </button>
-          </div>
-
+        {/* Right Header Action Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Refresh */}
           <button
-            onClick={() => loadData(period)}
+            onClick={loadData}
             disabled={loading}
             className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 transition-all active:scale-95 disabled:opacity-50"
             title="Refresh Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-gold-400' : ''}`} />
+          </button>
+
+          {/* Export to Excel (CSV) Button */}
+          <button
+            onClick={() => handleExportBackup('csv')}
+            disabled={exporting}
+            className="px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+            title="Download full Excel CSV spreadsheet backup"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{exporting ? 'Exporting...' : 'Export to Excel'}</span>
           </button>
 
           {/* WhatsApp Share Button */}
@@ -302,19 +343,254 @@ _Generated automatically from Hotel RJ POS System_`;
             className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
           >
             <Share2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">WhatsApp Report</span>
+            <span>WhatsApp Report</span>
           </button>
         </div>
       </header>
 
+      {/* Main Filter & Navigation Strip */}
+      <section className="bg-stone-900 border-b border-stone-800 px-4 py-3">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* 1. Department Tabs */}
+          <div className="flex items-center gap-1.5 bg-stone-950 p-1 rounded-2xl border border-stone-800 text-xs overflow-x-auto">
+            <button
+              onClick={() => setDepartment('all')}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                department === 'all'
+                  ? 'bg-gold-500 text-black shadow-md'
+                  : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>All Outlets</span>
+            </button>
+            <button
+              onClick={() => setDepartment('restaurant')}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                department === 'restaurant'
+                  ? 'bg-amber-500 text-black shadow-md'
+                  : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <UtensilsCrossed className="w-3.5 h-3.5" />
+              <span>Restaurant & Dhaba</span>
+            </button>
+            <button
+              onClick={() => setDepartment('rooms')}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                department === 'rooms'
+                  ? 'bg-sky-500 text-black shadow-md'
+                  : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <Building className="w-3.5 h-3.5" />
+              <span>Rooms & Lodging</span>
+            </button>
+            <button
+              onClick={() => setDepartment('banquet')}
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                department === 'banquet'
+                  ? 'bg-purple-500 text-black shadow-md'
+                  : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              <PartyPopper className="w-3.5 h-3.5" />
+              <span>Banquet & Events</span>
+            </button>
+          </div>
+
+          {/* 2. Time Granularity Selector */}
+          <div className="flex items-center gap-1.5 bg-stone-950 p-1 rounded-2xl border border-stone-800 text-xs overflow-x-auto">
+            <button
+              onClick={() => setPeriod('today')}
+              className={`px-2.5 py-1.5 rounded-xl font-medium transition-all shrink-0 ${
+                period === 'today' ? 'bg-stone-800 text-white font-bold' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setPeriod('yesterday')}
+              className={`px-2.5 py-1.5 rounded-xl font-medium transition-all shrink-0 ${
+                period === 'yesterday' ? 'bg-stone-800 text-white font-bold' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              Yesterday
+            </button>
+            <button
+              onClick={() => setPeriod('this_month')}
+              className={`px-2.5 py-1.5 rounded-xl font-medium transition-all shrink-0 ${
+                period === 'this_month' ? 'bg-stone-800 text-white font-bold' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => setPeriod('last_month')}
+              className={`px-2.5 py-1.5 rounded-xl font-medium transition-all shrink-0 ${
+                period === 'last_month' ? 'bg-stone-800 text-white font-bold' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              Last Month
+            </button>
+            <button
+              onClick={() => setPeriod('this_year')}
+              className={`px-2.5 py-1.5 rounded-xl font-medium transition-all shrink-0 ${
+                period === 'this_year' ? 'bg-stone-800 text-white font-bold' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              Year {selectedYear}
+            </button>
+            <button
+              onClick={() => setPeriod('all')}
+              className={`px-2.5 py-1.5 rounded-xl font-medium transition-all shrink-0 ${
+                period === 'all' ? 'bg-stone-800 text-white font-bold' : 'text-stone-400 hover:text-white'
+              }`}
+            >
+              All Time
+            </button>
+
+            {/* Month & Year Selectors */}
+            <div className="flex items-center gap-1.5 pl-1.5 border-l border-stone-800 shrink-0">
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => {
+                  setSelectedMonth(e.target.value);
+                  setPeriod('custom_month');
+                }}
+                className="bg-stone-900 text-stone-300 text-[11px] px-2 py-1 rounded-lg border border-stone-750 focus:outline-none focus:border-gold-400"
+                title="Select Specific Month"
+              />
+              <select
+                value={selectedYear}
+                onChange={(e) => {
+                  setSelectedYear(e.target.value);
+                  setPeriod('custom_year');
+                }}
+                className="bg-stone-900 text-stone-300 text-[11px] px-2 py-1 rounded-lg border border-stone-750 focus:outline-none focus:border-gold-400"
+                title="Select Specific Year"
+              >
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+                <option value="2024">2024</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
-        {/* KPI Cards Grid */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Gross Revenue */}
-          <div className="bg-gradient-to-br from-stone-900 to-stone-900/60 border border-gold-500/30 rounded-2xl p-4 sm:p-5 relative overflow-hidden shadow-lg">
+        {/* Active Filter Label */}
+        <div className="flex items-center justify-between text-xs text-stone-400 pb-1">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gold-400" />
+            <span className="font-semibold text-white">Showing: {analytics?.dateFormatted}</span>
+            <span>•</span>
+            <span className="capitalize font-bold text-gold-300">
+              {department === 'all' ? 'Consolidated (All Outlets)' : `${department} Only`}
+            </span>
+          </div>
+          <span className="font-mono text-stone-500">{analytics?.billsCount || 0} Bills Recorded</span>
+        </div>
+
+        {/* 1. THREE DEPARTMENT REVENUE CARDS (Consolidated View) */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Restaurant Card */}
+          <div
+            onClick={() => setDepartment('restaurant')}
+            className={`cursor-pointer transition-all rounded-2xl p-5 border shadow-lg ${
+              department === 'restaurant' || department === 'all'
+                ? 'bg-gradient-to-br from-amber-950/40 via-stone-900 to-stone-900 border-amber-500/40 hover:border-amber-400'
+                : 'bg-stone-900/60 border-stone-800 opacity-60 hover:opacity-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Gross Revenue</span>
+              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                <UtensilsCrossed className="w-4 h-4" /> Restaurant & Dhaba
+              </span>
+              <span className="text-xs font-mono text-stone-400">
+                {analytics?.departments.restaurant.count || 0} Orders
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-black text-amber-400 font-mono">
+                ₹{(analytics?.departments.restaurant.revenue || 0).toLocaleString('en-IN')}
+              </div>
+              <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs text-stone-400">
+                <span>Custom Meat Cooked:</span>
+                <span className="text-amber-200 font-bold">
+                  {analytics?.departments.restaurant.customKgEstimate || 0} Kg (₹
+                  {(analytics?.departments.restaurant.customCookingRevenue || 0).toLocaleString('en-IN')})
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Rooms Card */}
+          <div
+            onClick={() => setDepartment('rooms')}
+            className={`cursor-pointer transition-all rounded-2xl p-5 border shadow-lg ${
+              department === 'rooms' || department === 'all'
+                ? 'bg-gradient-to-br from-sky-950/40 via-stone-900 to-stone-900 border-sky-500/40 hover:border-sky-400'
+                : 'bg-stone-900/60 border-stone-800 opacity-60 hover:opacity-100'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Building className="w-4 h-4" /> Rooms & Lodging
+              </span>
+              <span className="text-xs font-mono text-stone-400">
+                {analytics?.departments.rooms.count || 0} Stays
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-black text-sky-400 font-mono">
+                ₹{(analytics?.departments.rooms.revenue || 0).toLocaleString('en-IN')}
+              </div>
+              <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs text-stone-400">
+                <span>Room Tariffs & Room Service:</span>
+                <span className="text-sky-200 font-bold">Consolidated Folio</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Banquet & Events Card */}
+          <div
+            onClick={() => setDepartment('banquet')}
+            className={`cursor-pointer transition-all rounded-2xl p-5 border shadow-lg ${
+              department === 'banquet' || department === 'all'
+                ? 'bg-gradient-to-br from-purple-950/40 via-stone-900 to-stone-900 border-purple-500/40 hover:border-purple-400'
+                : 'bg-stone-900/60 border-stone-800 opacity-60 hover:opacity-100'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                <PartyPopper className="w-4 h-4" /> Banquet & Lawn Events
+              </span>
+              <span className="text-xs font-mono text-stone-400">
+                {analytics?.departments.banquet.count || 0} Functions
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl sm:text-3xl font-black text-purple-400 font-mono">
+                ₹{(analytics?.departments.banquet.revenue || 0).toLocaleString('en-IN')}
+              </div>
+              <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-xs text-stone-400">
+                <span>Marriage / Birthday / Hall:</span>
+                <span className="text-purple-200 font-bold">Advance & Final</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 2. CORE FINANCIAL & OPERATIONAL KPIs */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card: Total Gross Revenue */}
+          <div className="bg-stone-900 border border-gold-500/30 rounded-2xl p-4 sm:p-5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Total Gross Revenue</span>
               <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
                 <TrendingUp className="w-4 h-4" />
               </div>
@@ -324,13 +600,13 @@ _Generated automatically from Hotel RJ POS System_`;
                 ₹{(analytics?.grossRevenue || 0).toLocaleString('en-IN')}
               </span>
               <div className="flex items-center justify-between text-xs text-stone-400 mt-2">
-                <span>{analytics?.billsCount || 0} Bills Settled</span>
+                <span>{analytics?.billsCount || 0} Bills</span>
                 <span>Avg: ₹{analytics?.avgBillValue || 0}</span>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Cash vs UPI Breakdown */}
+          {/* Card: Cash vs UPI Breakdown */}
           <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-lg">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Payment Collections</span>
@@ -341,7 +617,7 @@ _Generated automatically from Hotel RJ POS System_`;
             <div className="mt-3 space-y-1.5 text-xs">
               <div className="flex justify-between items-center">
                 <span className="text-stone-400 flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Cash in Drawer:
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Cash:
                 </span>
                 <span className="font-bold font-mono text-emerald-400">
                   ₹{(analytics?.paymentSplit.cash || 0).toLocaleString('en-IN')}
@@ -349,7 +625,7 @@ _Generated automatically from Hotel RJ POS System_`;
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-stone-400 flex items-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-sky-400" /> UPI (GPay/PhonePe):
+                  <Smartphone className="w-3.5 h-3.5 text-sky-400" /> UPI:
                 </span>
                 <span className="font-bold font-mono text-sky-400">
                   ₹{(analytics?.paymentSplit.upi || 0).toLocaleString('en-IN')}
@@ -366,26 +642,7 @@ _Generated automatically from Hotel RJ POS System_`;
             </div>
           </div>
 
-          {/* Card 3: Custom Cooking & Hotel Services */}
-          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-lg">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Custom Cooking Services</span>
-              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <ChefHat className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="mt-3">
-              <span className="text-2xl sm:text-3xl font-black text-amber-400 font-mono">
-                ₹{(analytics?.customCooking.revenue || 0).toLocaleString('en-IN')}
-              </span>
-              <div className="flex items-center justify-between text-xs text-stone-400 mt-2">
-                <span>{analytics?.customCooking.count || 0} Making Charges</span>
-                <span className="text-amber-300 font-bold">~{analytics?.customCooking.kgEstimate || 0} Kg Cooked</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Net Profit (Revenue - Expenses) */}
+          {/* Card: Petty Expenses & Net Margin */}
           <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-lg">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Net Shift Margin</span>
@@ -407,13 +664,119 @@ _Generated automatically from Hotel RJ POS System_`;
               </span>
               <div className="flex items-center justify-between text-xs text-stone-400 mt-2">
                 <span>Expenses: ₹{(analytics?.expenses.total || 0).toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-stone-500">{analytics?.expenses.count || 0} logs</span>
+                <span className="text-[11px] text-stone-500">{analytics?.expenses.count || 0} entries</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card: Anti-Theft Void Audits */}
+          <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">Anti-Theft Audits</span>
+              <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <span className="text-2xl sm:text-3xl font-black text-rose-400 font-mono">
+                {analytics?.antiTheft.voidsCount || 0} Voids
+              </span>
+              <div className="flex items-center justify-between text-xs text-stone-400 mt-2">
+                <span>Amount: ₹{(analytics?.antiTheft.voidAmount || 0).toLocaleString('en-IN')}</span>
+                <span className="text-[11px] text-stone-500">Tracked KOTs</span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Anti-Theft Void & Cancellation Banner / Section */}
+        {/* 3. TIME-BASED TREND BREAKDOWN (MONTHLY / DAILY) */}
+        {(period === 'this_year' || period === 'all') && analytics?.monthlyTrends && analytics.monthlyTrends.length > 0 && (
+          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-gold-400" />
+                  <span>Month-by-Month Revenue Breakdown (Year 2026)</span>
+                </h3>
+                <p className="text-xs text-stone-400">Annual performance across Restaurant, Rooms, and Banquet</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-800 text-stone-400 uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3">Month</th>
+                    <th className="py-2.5 px-3">🍽️ Restaurant</th>
+                    <th className="py-2.5 px-3">🛏️ Rooms</th>
+                    <th className="py-2.5 px-3">🎉 Banquet</th>
+                    <th className="py-2.5 px-3">Bills Count</th>
+                    <th className="py-2.5 px-3 font-bold text-white">Total Revenue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-800/60 font-mono">
+                  {analytics.monthlyTrends.map((m) => (
+                    <tr key={m.month} className="hover:bg-stone-800/30 transition-colors">
+                      <td className="py-2.5 px-3 text-gold-300 font-bold font-sans">
+                        {m.monthName} ({m.month})
+                      </td>
+                      <td className="py-2.5 px-3 text-amber-300">₹{m.restaurant.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-sky-300">₹{m.rooms.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-purple-300">₹{m.banquet.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-stone-400 font-sans">{m.billsCount}</td>
+                      <td className="py-2.5 px-3 text-emerald-400 font-bold text-sm">₹{m.total.toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {(period === 'this_month' || period === 'last_month') && analytics?.dailyTrends && analytics.dailyTrends.length > 0 && (
+          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-gold-400" />
+                  <span>Day-by-Day Sales in this Month</span>
+                </h3>
+                <p className="text-xs text-stone-400">Daily sales progression across all 3 departments</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-72">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-800 text-stone-400 uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">🍽️ Restaurant</th>
+                    <th className="py-2.5 px-3">🛏️ Rooms</th>
+                    <th className="py-2.5 px-3">🎉 Banquet</th>
+                    <th className="py-2.5 px-3">Bills</th>
+                    <th className="py-2.5 px-3 font-bold text-white">Daily Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-800/60 font-mono">
+                  {analytics.dailyTrends.map((d) => (
+                    <tr key={d.date} className="hover:bg-stone-800/30 transition-colors">
+                      <td className="py-2.5 px-3 text-gold-300 font-bold font-sans">
+                        Day {d.day} ({d.date})
+                      </td>
+                      <td className="py-2.5 px-3 text-amber-300">₹{d.restaurant.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-sky-300">₹{d.rooms.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-purple-300">₹{d.banquet.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 text-stone-400 font-sans">{d.billsCount}</td>
+                      <td className="py-2.5 px-3 text-emerald-400 font-bold">₹{d.total.toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* 4. ANTI-THEFT AUDIT LOG TABLE */}
         <section className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-6 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-800">
             <div className="flex items-center gap-2.5">
@@ -442,10 +805,9 @@ _Generated automatically from Hotel RJ POS System_`;
             </button>
           </div>
 
-          {/* Voids Table */}
           <div className="mt-4 overflow-x-auto">
             {(!analytics?.antiTheft.recentAudits || analytics.antiTheft.recentAudits.length === 0) ? (
-              <div className="text-center py-8 text-stone-500 text-xs">
+              <div className="text-center py-6 text-stone-500 text-xs">
                 ✅ Clean shift! No suspicious item cancellations or voided KOTs recorded for this period.
               </div>
             ) : (
@@ -481,12 +843,15 @@ _Generated automatically from Hotel RJ POS System_`;
           </div>
         </section>
 
-        {/* Lower Grid: Top Dishes & Daily Expenses */}
+        {/* 4B. TOP DISHES & PETTY CASH EXPENSES */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Top Selling Dishes */}
           <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-xl">
             <h3 className="text-sm font-bold text-white mb-3 flex items-center justify-between">
-              <span>Top Dishes Sold</span>
+              <span className="flex items-center gap-2">
+                <ChefHat className="w-4 h-4 text-amber-400" />
+                <span>Top Selling Dishes & Services</span>
+              </span>
               <span className="text-xs text-stone-400 font-normal">Ranked by volume</span>
             </h3>
 
@@ -572,7 +937,7 @@ _Generated automatically from Hotel RJ POS System_`;
           </div>
         </section>
 
-        {/* Recent Settled Bills Section */}
+        {/* 5. RECENT BILLS SECTION */}
         <section className="bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-xl">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -580,22 +945,31 @@ _Generated automatically from Hotel RJ POS System_`;
                 <Receipt className="w-4 h-4 text-gold-400" />
                 <span>Recent Settled Bills ({analytics?.recentBills.length || 0})</span>
               </h3>
-              <p className="text-xs text-stone-400">Completed table orders archived in local database</p>
+              <p className="text-xs text-stone-400">Historical transactions saved in database</p>
             </div>
+
+            <button
+              onClick={() => handleExportBackup('csv')}
+              className="text-xs text-gold-400 hover:text-gold-300 font-semibold flex items-center gap-1"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Excel Backup</span>
+            </button>
           </div>
 
           {(!analytics?.recentBills || analytics.recentBills.length === 0) ? (
-            <p className="text-center py-6 text-stone-500 text-xs">No settled bills recorded yet.</p>
+            <p className="text-center py-6 text-stone-500 text-xs">No settled bills recorded for this selection.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-stone-800 text-stone-400 uppercase tracking-wider text-[10px]">
                     <th className="py-2.5 px-3">Bill #</th>
-                    <th className="py-2.5 px-3">Time</th>
-                    <th className="py-2.5 px-3">Table</th>
+                    <th className="py-2.5 px-3">Date & Time</th>
+                    <th className="py-2.5 px-3">Department</th>
+                    <th className="py-2.5 px-3">Table/Room</th>
                     <th className="py-2.5 px-3">Items Count</th>
-                    <th className="py-2.5 px-3">Payment Mode</th>
+                    <th className="py-2.5 px-3">Mode</th>
                     <th className="py-2.5 px-3">Total Amount</th>
                   </tr>
                 </thead>
@@ -604,14 +978,28 @@ _Generated automatically from Hotel RJ POS System_`;
                     <tr key={bill.id} className="hover:bg-stone-800/30 transition-colors">
                       <td className="py-2.5 px-3 text-stone-400 font-sans font-bold">#{bill.billNumber}</td>
                       <td className="py-2.5 px-3 text-stone-400 font-sans">
+                        {new Date(bill.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
                         {new Date(bill.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
+                            bill.department === 'rooms'
+                              ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                              : bill.department === 'banquet'
+                              ? 'bg-purple-500/10 text-purple-300 border-purple-500/30'
+                              : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                          }`}
+                        >
+                          {bill.department || 'restaurant'}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3 text-gold-300 font-bold font-sans">{bill.tableId}</td>
                       <td className="py-2.5 px-3 text-stone-300 font-sans">
                         {bill.items.reduce((s, it) => s + (it.quantity || 1), 0)} items
                       </td>
                       <td className="py-2.5 px-3 font-sans">
-                        <span className="uppercase text-[10px] font-bold px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 border border-stone-700">
+                        <span className="uppercase text-[10px] font-bold px-2 py-0.5 rounded bg-stone-800 text-stone-300">
                           {bill.paymentMethod}
                         </span>
                       </td>

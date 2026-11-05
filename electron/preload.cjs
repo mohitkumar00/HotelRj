@@ -41,10 +41,11 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
   fixFirewall: () => ipcRenderer.invoke('fix-firewall'),
 
   // Local Database & Owner Analytics
-  getAnalytics: (period) => ipcRenderer.invoke('get-analytics', period),
+  getAnalytics: (query) => ipcRenderer.invoke('get-analytics', query),
   settleBill: (bill) => ipcRenderer.invoke('settle-bill', bill),
   saveAuditLog: (log) => ipcRenderer.invoke('save-audit-log', log),
   saveExpense: (expense) => ipcRenderer.invoke('save-expense', expense),
   deleteExpense: (id) => ipcRenderer.invoke('delete-expense', id),
   getBills: () => ipcRenderer.invoke('get-bills'),
+  exportBackup: () => ipcRenderer.invoke('export-backup'),
 });

@@ -3,8 +3,9 @@
 export interface SettleBillPayload {
   id?: string;
   billNumber?: number;
+  department?: 'restaurant' | 'rooms' | 'banquet';
   tableId: string;
-  orderType?: 'dine-in' | 'takeaway' | 'room-service';
+  orderType?: 'dine-in' | 'takeaway' | 'room-service' | 'banquet';
   roomNumber?: string;
   serverName?: string;
   settledBy?: string;
@@ -49,22 +50,65 @@ export interface ExpensePayload {
   recordedBy?: string;
 }
 
+export interface AnalyticsQueryOptions {
+  period?: 'today' | 'yesterday' | 'this_month' | 'last_month' | 'this_year' | 'last7days' | 'custom_month' | 'custom_year' | 'all';
+  department?: 'all' | 'restaurant' | 'rooms' | 'banquet';
+  year?: string;
+  month?: string;
+}
+
+export interface MonthlyTrendItem {
+  month: string;
+  monthName: string;
+  total: number;
+  restaurant: number;
+  rooms: number;
+  banquet: number;
+  billsCount: number;
+}
+
+export interface DailyTrendItem {
+  date: string;
+  day: string;
+  restaurant: number;
+  rooms: number;
+  banquet: number;
+  total: number;
+  billsCount: number;
+}
+
 export interface AnalyticsSummary {
   period: string;
+  department: string;
   dateFormatted: string;
+  currentYear: string;
+  currentMonth: string;
   grossRevenue: number;
   billsCount: number;
   avgBillValue: number;
+  departments: {
+    restaurant: {
+      revenue: number;
+      count: number;
+      customCookingRevenue: number;
+      customKgEstimate: number;
+    };
+    rooms: {
+      revenue: number;
+      count: number;
+    };
+    banquet: {
+      revenue: number;
+      count: number;
+    };
+  };
+  monthlyTrends: MonthlyTrendItem[];
+  dailyTrends: DailyTrendItem[];
   paymentSplit: {
     cash: number;
     upi: number;
     card: number;
     roomFolio: number;
-  };
-  customCooking: {
-    revenue: number;
-    count: number;
-    kgEstimate: number;
   };
   expenses: {
     total: number;
@@ -104,6 +148,7 @@ export interface AnalyticsSummary {
   recentBills: Array<{
     id: string;
     billNumber: number;
+    department?: string;
     tableId: string;
     total: number;
     paymentMethod: string;
@@ -116,23 +161,26 @@ export interface AnalyticsSummary {
 // Determine API Base URL
 function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  // Check if sync server address is saved in localStorage (from WaiterPOS pairing)
   const savedSyncUrl = localStorage.getItem('hotel_rj_sync_server_url');
   if (savedSyncUrl) {
     return savedSyncUrl.replace(/\/+$/, '');
   }
-  // If running in browser served from port 5050
   if (window.location.port === '5050') {
     return '';
   }
   return 'http://127.0.0.1:5050';
 }
 
-export async function fetchAnalytics(period: 'today' | 'yesterday' | 'last7days' | 'all' = 'today'): Promise<AnalyticsSummary | null> {
+export async function fetchAnalytics(
+  query: AnalyticsQueryOptions | string = 'today'
+): Promise<AnalyticsSummary | null> {
+  const options: AnalyticsQueryOptions =
+    typeof query === 'string' ? { period: query as any } : query;
+
   // 1. Electron API
   if (typeof window !== 'undefined' && (window as any).ElectronAPI?.getAnalytics) {
     try {
-      const data = await (window as any).ElectronAPI.getAnalytics(period);
+      const data = await (window as any).ElectronAPI.getAnalytics(options);
       if (data) return data;
     } catch (e) {
       console.warn('[Analytics] Electron getAnalytics failed:', e);
@@ -142,7 +190,13 @@ export async function fetchAnalytics(period: 'today' | 'yesterday' | 'last7days'
   // 2. HTTP Server API
   try {
     const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/analytics?period=${period}`);
+    const params = new URLSearchParams();
+    if (options.period) params.set('period', options.period);
+    if (options.department) params.set('department', options.department);
+    if (options.year) params.set('year', options.year);
+    if (options.month) params.set('month', options.month);
+
+    const res = await fetch(`${base}/api/analytics?${params.toString()}`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.analytics) return json.analytics;
@@ -151,15 +205,28 @@ export async function fetchAnalytics(period: 'today' | 'yesterday' | 'last7days'
     console.warn('[Analytics] HTTP fetchAnalytics failed:', err);
   }
 
-  // 3. Fallback: Mock / LocalStorage estimate if offline in standalone web
+  // 3. Fallback blank response
+  const now = new Date();
+  const yearStr = String(now.getFullYear());
+  const monthStr = `${yearStr}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
   return {
-    period,
-    dateFormatted: new Date().toISOString().split('T')[0],
+    period: options.period || 'today',
+    department: options.department || 'all',
+    dateFormatted: now.toISOString().split('T')[0],
+    currentYear: yearStr,
+    currentMonth: monthStr,
     grossRevenue: 0,
     billsCount: 0,
     avgBillValue: 0,
+    departments: {
+      restaurant: { revenue: 0, count: 0, customCookingRevenue: 0, customKgEstimate: 0 },
+      rooms: { revenue: 0, count: 0 },
+      banquet: { revenue: 0, count: 0 },
+    },
+    monthlyTrends: [],
+    dailyTrends: [],
     paymentSplit: { cash: 0, upi: 0, card: 0, roomFolio: 0 },
-    customCooking: { revenue: 0, count: 0, kgEstimate: 0 },
     expenses: { total: 0, count: 0, list: [] },
     netProfit: 0,
     antiTheft: { voidsCount: 0, voidAmount: 0, recentAudits: [] },
@@ -199,7 +266,6 @@ export async function settleBill(payload: SettleBillPayload): Promise<boolean> {
 }
 
 export async function recordAuditLog(payload: AuditLogPayload): Promise<boolean> {
-  // 1. Electron API
   if (typeof window !== 'undefined' && (window as any).ElectronAPI?.saveAuditLog) {
     try {
       const res = await (window as any).ElectronAPI.saveAuditLog(payload);
@@ -209,7 +275,6 @@ export async function recordAuditLog(payload: AuditLogPayload): Promise<boolean>
     }
   }
 
-  // 2. HTTP Server API
   try {
     const base = getApiBaseUrl();
     const res = await fetch(`${base}/api/audit-log`, {
@@ -229,7 +294,6 @@ export async function recordAuditLog(payload: AuditLogPayload): Promise<boolean>
 }
 
 export async function addExpense(payload: ExpensePayload): Promise<boolean> {
-  // 1. Electron API
   if (typeof window !== 'undefined' && (window as any).ElectronAPI?.saveExpense) {
     try {
       const res = await (window as any).ElectronAPI.saveExpense(payload);
@@ -239,7 +303,6 @@ export async function addExpense(payload: ExpensePayload): Promise<boolean> {
     }
   }
 
-  // 2. HTTP Server API
   try {
     const base = getApiBaseUrl();
     const res = await fetch(`${base}/api/expense`, {
@@ -259,7 +322,6 @@ export async function addExpense(payload: ExpensePayload): Promise<boolean> {
 }
 
 export async function removeExpense(id: string): Promise<boolean> {
-  // 1. Electron API
   if (typeof window !== 'undefined' && (window as any).ElectronAPI?.deleteExpense) {
     try {
       const res = await (window as any).ElectronAPI.deleteExpense(id);
@@ -269,7 +331,6 @@ export async function removeExpense(id: string): Promise<boolean> {
     }
   }
 
-  // 2. HTTP Server API
   try {
     const base = getApiBaseUrl();
     const res = await fetch(`${base}/api/expense/delete`, {
@@ -286,4 +347,33 @@ export async function removeExpense(id: string): Promise<boolean> {
   }
 
   return false;
+}
+
+// -------------------------------------------------------------
+// Backup Export (Excel CSV and JSON download)
+// -------------------------------------------------------------
+export async function exportDatabaseBackup(): Promise<{ success: boolean; csvContent?: string; jsonData?: any }> {
+  // 1. Electron API
+  if (typeof window !== 'undefined' && (window as any).ElectronAPI?.exportBackup) {
+    try {
+      const data = await (window as any).ElectronAPI.exportBackup();
+      if (data && data.success) return data;
+    } catch (e) {
+      console.warn('[Analytics] Electron exportBackup failed:', e);
+    }
+  }
+
+  // 2. HTTP Server API
+  try {
+    const base = getApiBaseUrl();
+    const res = await fetch(`${base}/api/export-backup`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json;
+    }
+  } catch (err) {
+    console.warn('[Analytics] HTTP exportBackup failed:', err);
+  }
+
+  return { success: false };
 }

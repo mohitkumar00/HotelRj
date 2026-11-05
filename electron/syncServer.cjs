@@ -249,12 +249,29 @@ class LocalSyncServer {
       // GET /api/analytics (Owner Insights)
       if (req.method === 'GET' && url.pathname === '/api/analytics') {
         const period = url.searchParams.get('period') || 'today';
+        const department = url.searchParams.get('department') || 'all';
+        const year = url.searchParams.get('year') || undefined;
+        const month = url.searchParams.get('month') || undefined;
         try {
-          const stats = db.getAnalytics(period);
+          const stats = db.getAnalytics({ period, department, year, month });
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, analytics: stats }));
         } catch (err) {
           logger.error('SyncServer', 'Error generating analytics', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+        return;
+      }
+
+      // GET /api/export-backup (Excel CSV & JSON Backup)
+      if (req.method === 'GET' && url.pathname === '/api/export-backup') {
+        try {
+          const backup = db.exportBackup();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(backup));
+        } catch (err) {
+          logger.error('SyncServer', 'Error exporting backup', err);
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: err.message }));
         }
