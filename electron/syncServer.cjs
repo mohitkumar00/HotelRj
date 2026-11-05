@@ -3,6 +3,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger.cjs');
+const db = require('./database.cjs');
 
 function mergeTables(local, remote) {
   if (!remote || typeof remote !== 'object') return local;
@@ -242,6 +243,148 @@ class LocalSyncServer {
             res.end(JSON.stringify({ error: 'Invalid JSON' }));
           }
         });
+        return;
+      }
+
+      // GET /api/analytics (Owner Insights)
+      if (req.method === 'GET' && url.pathname === '/api/analytics') {
+        const period = url.searchParams.get('period') || 'today';
+        try {
+          const stats = db.getAnalytics(period);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, analytics: stats }));
+        } catch (err) {
+          logger.error('SyncServer', 'Error generating analytics', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message }));
+        }
+        return;
+      }
+
+      // POST /api/settle-bill (Save completed bill and mark table vacant)
+      if (req.method === 'POST' && url.pathname === '/api/settle-bill') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const bill = data.bill;
+            if (!bill) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing bill object' }));
+              return;
+            }
+
+            const record = db.saveSettledBill(bill);
+
+            // Vacate table if tableId provided
+            if (bill.tableId) {
+              const currentTable = this.tablesState[bill.tableId];
+              this.tablesState[bill.tableId] = {
+                tableId: bill.tableId,
+                serverName: bill.serverName || 'Staff',
+                openedAt: '',
+                status: 'vacant',
+                kotNumber: currentTable ? (currentTable.kotNumber || 1) + 1 : 1,
+                items: {},
+                generalNote: '',
+                updatedAt: Date.now(),
+              };
+
+              if (this.onUpdateCallback) {
+                this.onUpdateCallback(this.tablesState, { [bill.tableId]: this.tablesState[bill.tableId] });
+              }
+            }
+
+            logger.warn('SyncServer', `Bill settled for ${bill.tableId} (₹${bill.total}, ${bill.paymentMethod}) by ${bill.settledBy || clientIp}`);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, bill: record }));
+          } catch (err) {
+            logger.error('SyncServer', 'Failed to settle bill', err);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // POST /api/audit-log (Anti-theft void / cancellation / discount tracking)
+      if (req.method === 'POST' && url.pathname === '/api/audit-log') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const logEntry = data.log;
+            if (!logEntry) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing log object' }));
+              return;
+            }
+
+            const record = db.saveAuditLog(logEntry);
+            logger.warn('SyncServer', `Audit Event [${logEntry.type}] on ${logEntry.tableId} by ${logEntry.staffName}: "${logEntry.reason}"`);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, log: record }));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // POST /api/expense (Petty Cash Expense logging)
+      if (req.method === 'POST' && url.pathname === '/api/expense') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const expense = data.expense;
+            if (!expense) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing expense object' }));
+              return;
+            }
+
+            const record = db.saveExpense(expense);
+            logger.warn('SyncServer', `Expense recorded: ${expense.category} (₹${expense.amount}) - "${expense.notes}"`);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, expense: record }));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // DELETE /api/expense
+      if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/expense/delete') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const id = data.id || url.searchParams.get('id');
+            if (id) {
+              db.deleteExpense(id);
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // GET /api/bills (Recent settled bills list)
+      if (req.method === 'GET' && url.pathname === '/api/bills') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, bills: db.data.settledBills.slice(0, 50) }));
         return;
       }
 

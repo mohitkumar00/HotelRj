@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const logger = require('./logger.cjs');
 const syncServer = require('./syncServer.cjs');
+const db = require('./database.cjs');
 
 // Global Exception Handlers (Writes to Windows logs folder)
 process.on('uncaughtException', (error) => {
@@ -232,4 +233,55 @@ ipcMain.handle('fix-firewall', async () => {
       }
     });
   });
+});
+
+// -------------------------------------------------------------
+// Database & Analytics IPC Handlers
+// -------------------------------------------------------------
+ipcMain.handle('get-analytics', async (event, period) => {
+  return db.getAnalytics(period);
+});
+
+ipcMain.handle('settle-bill', async (event, bill) => {
+  const record = db.saveSettledBill(bill);
+  if (bill && bill.tableId) {
+    const currentTable = syncServer.tablesState[bill.tableId];
+    const vacantTable = {
+      tableId: bill.tableId,
+      serverName: bill.serverName || 'Staff',
+      openedAt: '',
+      status: 'vacant',
+      kotNumber: currentTable ? (currentTable.kotNumber || 1) + 1 : 1,
+      items: {},
+      generalNote: '',
+      updatedAt: Date.now(),
+    };
+    syncServer.updateState({ [bill.tableId]: vacantTable });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('sync-tables-updated', {
+        tables: syncServer.tablesState,
+        incomingPatch: { [bill.tableId]: vacantTable },
+      });
+    }
+  }
+  return { success: true, bill: record };
+});
+
+ipcMain.handle('save-audit-log', async (event, log) => {
+  const record = db.saveAuditLog(log);
+  return { success: true, log: record };
+});
+
+ipcMain.handle('save-expense', async (event, expense) => {
+  const record = db.saveExpense(expense);
+  return { success: true, expense: record };
+});
+
+ipcMain.handle('delete-expense', async (event, id) => {
+  db.deleteExpense(id);
+  return { success: true };
+});
+
+ipcMain.handle('get-bills', async () => {
+  return db.data.settledBills.slice(0, 50);
 });

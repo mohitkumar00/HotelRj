@@ -39,4 +39,12 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
 
   // Prompt to add inbound Windows Firewall rule for port 5050
   fixFirewall: () => ipcRenderer.invoke('fix-firewall'),
+
+  // Local Database & Owner Analytics
+  getAnalytics: (period) => ipcRenderer.invoke('get-analytics', period),
+  settleBill: (bill) => ipcRenderer.invoke('settle-bill', bill),
+  saveAuditLog: (log) => ipcRenderer.invoke('save-audit-log', log),
+  saveExpense: (expense) => ipcRenderer.invoke('save-expense', expense),
+  deleteExpense: (id) => ipcRenderer.invoke('delete-expense', id),
+  getBills: () => ipcRenderer.invoke('get-bills'),
 });

@@ -36,8 +36,16 @@ import {
   ShieldAlert,
   ChefHat,
   PlusCircle,
+  TrendingUp,
+  DollarSign,
+  Smartphone,
+  CreditCard,
+  Building2,
+  CheckCircle,
 } from 'lucide-react';
 import { parseItemPrice } from '../utils/priceUtils';
+import { OwnerInsights } from './OwnerInsights';
+import { settleBill, recordAuditLog, SettleBillPayload } from '../utils/analyticsApi';
 
 interface WaiterItemRecord {
   item: MenuItem;
@@ -622,6 +630,23 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [customQuantity, setCustomQuantity] = useState(1);
   const [customNotes, setCustomNotes] = useState('');
 
+  // Owner Insights View State
+  const [showOwnerInsights, setShowOwnerInsights] = useState(false);
+
+  // Settlement & DB billing modal
+  const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
+  const [settlePaymentMethod, setSettlePaymentMethod] = useState<'cash' | 'upi' | 'card' | 'room-folio'>('cash');
+  const [settleRoomNumber, setSettleRoomNumber] = useState('Room 101');
+  const [settleCustomerPhone, setSettleCustomerPhone] = useState('');
+  const [settleCustomerName, setSettleCustomerName] = useState('');
+  const [isSubmittingSettlement, setIsSubmittingSettlement] = useState(false);
+
+  // Anti-Theft Void Interception Modal
+  const [isVoidModalOpen, setIsVoidModalOpen] = useState(false);
+  const [voidCandidate, setVoidCandidate] = useState<{ itemId: string; item: MenuItem; quantity: number; firedCount?: number } | null>(null);
+  const [voidReason, setVoidReason] = useState('Customer cancelled after delay');
+  const [customVoidReason, setCustomVoidReason] = useState('');
+
   // Haptic feedback helper
   const triggerHaptic = (ms = 35) => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -733,19 +758,30 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Decrement / Remove Item
   const handleRemoveItem = (itemId: string) => {
     triggerHaptic(20);
+    const existingTable = tables[activeTable];
+    if (!existingTable || !existingTable.items[itemId]) return;
+
+    const record = existingTable.items[itemId];
+    // If item was already fired to kitchen on KOT, prompt for Anti-Theft Void Reason!
+    if ((record.firedCount || 0) > 0) {
+      setVoidCandidate({ itemId, item: record.item, quantity: 1, firedCount: record.firedCount });
+      setIsVoidModalOpen(true);
+      return;
+    }
+
     setTables((prev) => {
-      const existingTable = prev[activeTable];
-      if (!existingTable || !existingTable.items[itemId]) return prev;
+      const curTable = prev[activeTable];
+      if (!curTable || !curTable.items[itemId]) return prev;
 
-      const record = existingTable.items[itemId];
-      const newItems = { ...existingTable.items };
+      const rec = curTable.items[itemId];
+      const newItems = { ...curTable.items };
 
-      if (record.quantity <= 1) {
+      if (rec.quantity <= 1) {
         delete newItems[itemId];
       } else {
         newItems[itemId] = {
-          ...record,
-          quantity: record.quantity - 1,
+          ...rec,
+          quantity: rec.quantity - 1,
         };
       }
 
@@ -754,13 +790,67 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       return {
         ...prev,
         [activeTable]: {
-          ...existingTable,
-          status: hasRemaining ? existingTable.status : 'vacant',
+          ...curTable,
+          status: hasRemaining ? curTable.status : 'vacant',
           updatedAt: Date.now(),
           items: newItems,
         },
       };
     });
+  };
+
+  // Confirm Anti-Theft Void and save audit log
+  const handleConfirmVoid = async () => {
+    if (!voidCandidate) return;
+    const reason = (customVoidReason.trim() || voidReason).trim();
+
+    await recordAuditLog({
+      type: 'ITEM_VOID',
+      tableId: activeTable,
+      staffName: serverName,
+      itemName: voidCandidate.item.name,
+      itemPrice: parseItemPrice(voidCandidate.item.price),
+      quantity: 1,
+      reason,
+    });
+
+    const itemId = voidCandidate.itemId;
+    setTables((prev) => {
+      const curTable = prev[activeTable];
+      if (!curTable || !curTable.items[itemId]) return prev;
+
+      const rec = curTable.items[itemId];
+      const newItems = { ...curTable.items };
+
+      if (rec.quantity <= 1) {
+        delete newItems[itemId];
+      } else {
+        newItems[itemId] = {
+          ...rec,
+          quantity: rec.quantity - 1,
+          firedCount: Math.max(0, (rec.firedCount || 1) - 1),
+        };
+      }
+
+      const hasRemaining = Object.keys(newItems).length > 0;
+
+      return {
+        ...prev,
+        [activeTable]: {
+          ...curTable,
+          status: hasRemaining ? curTable.status : 'vacant',
+          updatedAt: Date.now(),
+          items: newItems,
+        },
+      };
+    });
+
+    setPrintSuccessMsg(`🛡️ Void recorded in Audit Log: "${reason}"`);
+    setTimeout(() => setPrintSuccessMsg(null), 3500);
+
+    setVoidCandidate(null);
+    setIsVoidModalOpen(false);
+    setCustomVoidReason('');
   };
 
   // Open note editor for item
@@ -958,10 +1048,65 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }
   };
 
-  // Action: SETTLE & CLEAR TABLE
-  const handleClearTable = () => {
-    if (confirm(`Clear all items and mark ${activeTable} as Vacant?`)) {
-      triggerHaptic(40);
+  // Action: OPEN SETTLE MODAL OR DIRECT CLEAR IF EMPTY
+  const handleOpenSettleModal = () => {
+    if (currentItemsList.length === 0) {
+      if (confirm(`Mark ${activeTable} as Vacant?`)) {
+        triggerHaptic(40);
+        setTables((prev) => ({
+          ...prev,
+          [activeTable]: {
+            tableId: activeTable,
+            serverName,
+            openedAt: '',
+            status: 'vacant',
+            kotNumber: 1,
+            items: {},
+            generalNote: '',
+            updatedAt: Date.now(),
+          },
+        }));
+        setIsOrderDrawerOpen(false);
+      }
+      return;
+    }
+    setIsSettleModalOpen(true);
+  };
+
+  // Action: CONFIRM SETTLEMENT & SAVE TO DATABASE
+  const handleConfirmSettlement = async () => {
+    setIsSubmittingSettlement(true);
+    try {
+      const payload: SettleBillPayload = {
+        tableId: activeTable,
+        orderType: isTakeawayActive ? 'takeaway' : activeTable.startsWith('R-') ? 'room-service' : 'dine-in',
+        roomNumber: settlePaymentMethod === 'room-folio' ? settleRoomNumber : undefined,
+        serverName,
+        settledBy: 'Counter Cashier',
+        customerPhone: settleCustomerPhone.trim() || undefined,
+        customerName: settleCustomerName.trim() || undefined,
+        items: currentItemsList.map((ci) => ({
+          name: ci.item.name,
+          quantity: ci.quantity,
+          price: parseItemPrice(ci.item.price),
+          notes: ci.notes,
+          isCustom: ci.item.isCustom,
+          dietary: ci.item.dietary,
+        })),
+        subtotal: subtotalPrice,
+        tax: applyGst ? gstAmount : 0,
+        total: grandTotal,
+        paymentMethod: settlePaymentMethod,
+        paymentDetails: {
+          cashAmount: settlePaymentMethod === 'cash' ? grandTotal : 0,
+          upiAmount: settlePaymentMethod === 'upi' ? grandTotal : 0,
+          cardAmount: settlePaymentMethod === 'card' ? grandTotal : 0,
+        },
+      };
+
+      await settleBill(payload);
+
+      triggerHaptic(50);
       setTables((prev) => ({
         ...prev,
         [activeTable]: {
@@ -975,7 +1120,20 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           updatedAt: Date.now(),
         },
       }));
+
+      setPrintSuccessMsg(`✅ Bill (₹${grandTotal}) settled via ${settlePaymentMethod.toUpperCase()} & saved to DB!`);
+      setTimeout(() => setPrintSuccessMsg(null), 3500);
+
+      setIsSettleModalOpen(false);
       setIsOrderDrawerOpen(false);
+      setSettleCustomerPhone('');
+      setSettleCustomerName('');
+    } catch (err: any) {
+      Logger.error('Settle', `Failed to settle bill: ${err?.message || err}`);
+      setPrintSuccessMsg(`❌ Settlement error: ${err?.message || 'Check connection'}`);
+      setTimeout(() => setPrintSuccessMsg(null), 4000);
+    } finally {
+      setIsSubmittingSettlement(false);
     }
   };
 
@@ -1050,6 +1208,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }
     return ALL_TABLE_IDS;
   }, [tableFilter, tables]);
+
+  if (showOwnerInsights) {
+    return <OwnerInsights onBack={() => setShowOwnerInsights(false)} serverUrl={syncInfo?.localUrl} />;
+  }
 
   return (
     <div className="min-h-screen bg-[#08090d] text-sand-50 select-none pb-28 font-sans">
@@ -1205,6 +1367,17 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   {logs.length}
                 </span>
               )}
+            </button>
+
+            {/* Owner Insights & Anti-Theft Analytics Button */}
+            <button
+              type="button"
+              onClick={() => setShowOwnerInsights(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-gold-500/20 hover:from-amber-500/30 hover:to-gold-500/30 text-gold-300 text-xs font-bold flex items-center gap-1.5 border border-gold-500/30 active:scale-95 transition-all shadow-sm"
+              title="Open Owner Analytics, Anti-Theft Ledger & Daily Kharacha"
+            >
+              <TrendingUp className="w-3.5 h-3.5 text-gold-400" />
+              <span className="text-[10px] hidden sm:inline">Owner Insights</span>
             </button>
 
             {/* Browser preview exit (hidden on Android native APK and Windows Desktop App) */}
@@ -1897,10 +2070,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 <div className="flex items-center justify-between pt-1">
                   <button
                     type="button"
-                    onClick={handleClearTable}
-                    className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1"
+                    onClick={handleOpenSettleModal}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 active:scale-95 transition-all"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <CheckCircle className="w-3.5 h-3.5" />
                     <span>Settle & Mark Vacant</span>
                   </button>
 
@@ -2102,6 +2275,240 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 9C. BILL SETTLEMENT & LOCAL DATABASE SAVE MODAL */}
+      {isSettleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-stone-900 border border-gold-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-white">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-400" />
+                  <span>Settle Bill & Vacate {activeTable}</span>
+                </h3>
+                <p className="text-xs text-stone-400 mt-0.5">
+                  {currentItemsList.reduce((s, ci) => s + ci.quantity, 0)} items • Subtotal: ₹{subtotalPrice}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSettleModalOpen(false)}
+                className="p-1 rounded-full text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Grand Total Display */}
+            <div className="p-4 rounded-2xl bg-stone-950 border border-gold-500/30 text-center">
+              <span className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total Payable Amount</span>
+              <div className="text-3xl font-black text-gold-300 font-mono mt-1">₹{grandTotal}</div>
+              {applyGst && <span className="text-[10px] text-stone-400">Includes 5% GST (₹{gstAmount})</span>}
+            </div>
+
+            {/* Payment Mode Selection */}
+            <div>
+              <label className="block text-xs font-semibold text-stone-300 mb-2">Select Payment Mode:</label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSettlePaymentMethod('cash')}
+                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                    settlePaymentMethod === 'cash'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-md'
+                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
+                  }`}
+                >
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  <span>Cash</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettlePaymentMethod('upi')}
+                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                    settlePaymentMethod === 'upi'
+                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-md'
+                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
+                  }`}
+                >
+                  <Smartphone className="w-4 h-4 text-sky-400" />
+                  <span>UPI (GPay/PhonePe)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettlePaymentMethod('card')}
+                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                    settlePaymentMethod === 'card'
+                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-md'
+                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
+                  }`}
+                >
+                  <CreditCard className="w-4 h-4 text-purple-400" />
+                  <span>Card / POS</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettlePaymentMethod('room-folio')}
+                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                    settlePaymentMethod === 'room-folio'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md'
+                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
+                  }`}
+                >
+                  <Building2 className="w-4 h-4 text-amber-400" />
+                  <span>Post to Room</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Room Selection Dropdown if room-folio */}
+            {settlePaymentMethod === 'room-folio' && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5 text-xs">
+                <label className="block text-amber-300 font-semibold">Select Guest Room:</label>
+                <select
+                  value={settleRoomNumber}
+                  onChange={(e) => setSettleRoomNumber(e.target.value)}
+                  className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-lg text-white font-medium focus:outline-none focus:border-amber-400"
+                >
+                  <option value="Room 101">Room 101 (Deluxe AC)</option>
+                  <option value="Room 102">Room 102 (Deluxe AC)</option>
+                  <option value="Room 103">Room 103 (Executive)</option>
+                  <option value="Room 201">Room 201 (Super Deluxe)</option>
+                  <option value="Room 202">Room 202 (Family Suite)</option>
+                  <option value="Room 203">Room 203 (Standard AC)</option>
+                  <option value="Room 204">Room 204 (Standard Non-AC)</option>
+                </select>
+                <p className="text-[11px] text-stone-400">
+                  Restaurant bill will be posted to this room's folio and billed upon checkout.
+                </p>
+              </div>
+            )}
+
+            {/* Customer Phone (Optional) */}
+            <div className="text-xs">
+              <label className="block text-stone-400 mb-1">Customer Mobile Number (Optional for WhatsApp CRM):</label>
+              <input
+                type="tel"
+                placeholder="e.g. 9876543210"
+                value={settleCustomerPhone}
+                onChange={(e) => setSettleCustomerPhone(e.target.value)}
+                className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white font-mono focus:outline-none focus:border-gold-400"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsSettleModalOpen(false)}
+                className="flex-1 py-3 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingSettlement}
+                onClick={handleConfirmSettlement}
+                className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>{isSubmittingSettlement ? 'Saving to DB...' : 'Confirm & Settle'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9D. ANTI-THEFT KOT VOID INTERCEPTION MODAL */}
+      {isVoidModalOpen && voidCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-stone-900 border border-rose-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-white">
+            <div className="flex items-center gap-3 border-b border-stone-800 pb-3 text-rose-400">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Anti-Theft Security Alert</h3>
+                <p className="text-xs text-rose-300">Item already dispatched to kitchen on KOT</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-stone-950 border border-rose-500/20 rounded-xl space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-stone-400">Dish to Cancel:</span>
+                <span className="font-bold text-white">{voidCandidate.item.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-400">Price:</span>
+                <span className="font-mono text-rose-400 font-bold">₹{parseItemPrice(voidCandidate.item.price)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-400">Table:</span>
+                <span className="text-gold-300 font-bold">{activeTable}</span>
+              </div>
+            </div>
+
+            <div className="text-xs space-y-2">
+              <label className="block text-stone-300 font-semibold">Select Cancellation Reason (Recorded in Audit Log):</label>
+              <div className="grid grid-cols-1 gap-1.5">
+                {[
+                  'Customer cancelled after long delay',
+                  'Customer changed mind / Left table',
+                  'Wrong item punched by waiter',
+                  'Kitchen out of stock / Burnt in kitchen',
+                ].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => {
+                      setVoidReason(r);
+                      setCustomVoidReason('');
+                    }}
+                    className={`py-2 px-3 rounded-lg text-left transition-all border text-[11px] ${
+                      voidReason === r && !customVoidReason
+                        ? 'bg-rose-500/20 text-rose-200 border-rose-500/40 font-bold'
+                        : 'bg-stone-950 text-stone-400 border-stone-800 hover:text-white'
+                    }`}
+                  >
+                    • {r}
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-1">
+                <input
+                  type="text"
+                  placeholder="Or type custom reason..."
+                  value={customVoidReason}
+                  onChange={(e) => setCustomVoidReason(e.target.value)}
+                  className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-lg text-white text-xs focus:outline-none focus:border-rose-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setVoidCandidate(null);
+                  setIsVoidModalOpen(false);
+                }}
+                className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
+              >
+                Keep Item
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmVoid}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Confirm Void</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
