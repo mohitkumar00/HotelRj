@@ -377,3 +377,115 @@ export async function exportDatabaseBackup(): Promise<{ success: boolean; csvCon
 
   return { success: false };
 }
+
+// -------------------------------------------------------------
+// Supabase Cloud Sync API Helpers
+// -------------------------------------------------------------
+export interface CloudSyncPublicConfig {
+  isConfigured: boolean;
+  supabaseUrl: string;
+  hasAnonKey: boolean;
+  anonKeyMasked: string;
+  lastSyncTime: string | null;
+  lastSyncStatus: 'idle' | 'syncing' | 'success' | 'error';
+  lastSyncError: string | null;
+  autoSyncEnabled: boolean;
+  connected?: boolean;
+  pendingBills?: number;
+}
+
+export async function getCloudSyncConfig(): Promise<CloudSyncPublicConfig | null> {
+  if (typeof window !== 'undefined' && (window as any).ElectronAPI?.getCloudConfig) {
+    try {
+      return await (window as any).ElectronAPI.getCloudConfig();
+    } catch (e) {
+      console.warn('[CloudSync] Electron getCloudConfig failed:', e);
+    }
+  }
+
+  try {
+    const base = getApiBaseUrl();
+    const res = await fetch(`${base}/api/cloud-sync/status`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.config) return json.config;
+    }
+  } catch (err) {
+    console.warn('[CloudSync] HTTP getCloudConfig failed:', err);
+  }
+
+  return null;
+}
+
+export async function saveCloudSyncConfig(config: {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  autoSyncEnabled?: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  if (typeof window !== 'undefined' && (window as any).ElectronAPI?.saveCloudConfig) {
+    try {
+      return await (window as any).ElectronAPI.saveCloudConfig(config);
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Failed to save in Electron' };
+    }
+  }
+
+  try {
+    const base = getApiBaseUrl();
+    const res = await fetch(`${base}/api/cloud-sync/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function testCloudSyncConnection(
+  url: string,
+  key: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  if (typeof window !== 'undefined' && (window as any).ElectronAPI?.testCloudConnection) {
+    try {
+      return await (window as any).ElectronAPI.testCloudConnection(url, key);
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Test failed' };
+    }
+  }
+
+  try {
+    const base = getApiBaseUrl();
+    const res = await fetch(`${base}/api/cloud-sync/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, key }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function triggerCloudSyncNow(): Promise<{
+  success: boolean;
+  syncedBills?: number;
+  error?: string;
+}> {
+  if (typeof window !== 'undefined' && (window as any).ElectronAPI?.syncCloudNow) {
+    try {
+      return await (window as any).ElectronAPI.syncCloudNow();
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Sync trigger failed' };
+    }
+  }
+
+  try {
+    const base = getApiBaseUrl();
+    const res = await fetch(`${base}/api/cloud-sync/sync`, { method: 'POST' });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}

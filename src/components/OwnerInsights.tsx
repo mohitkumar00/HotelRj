@@ -19,14 +19,22 @@ import {
   UtensilsCrossed,
   Calendar,
   Layers,
+  Cloud,
+  Database,
+  Check,
 } from 'lucide-react';
 import {
   fetchAnalytics,
   addExpense,
   removeExpense,
   exportDatabaseBackup,
+  getCloudSyncConfig,
+  saveCloudSyncConfig,
+  testCloudSyncConnection,
+  triggerCloudSyncNow,
   AnalyticsSummary,
   AnalyticsQueryOptions,
+  CloudSyncPublicConfig,
 } from '../utils/analyticsApi';
 import { HOTEL_INFO } from '../data/hotelData';
 
@@ -60,11 +68,32 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   const [expenseNotes, setExpenseNotes] = useState<string>('');
   const [expenseSubmitting, setExpenseSubmitting] = useState<boolean>(false);
 
+  // Cloud Sync state
+  const [cloudConfig, setCloudConfig] = useState<CloudSyncPublicConfig | null>(null);
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
+  const [inputSupabaseUrl, setInputSupabaseUrl] = useState<string>('');
+  const [inputSupabaseKey, setInputSupabaseKey] = useState<string>('');
+  const [testingCloud, setTestingCloud] = useState<boolean>(false);
+  const [testResult, setTestResult] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
+  const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
+
   // WhatsApp share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [targetPhone, setTargetPhone] = useState<string>(() => {
     return localStorage.getItem('hotel_rj_owner_phone') || '';
   });
+
+  const loadCloudConfig = async () => {
+    try {
+      const cfg = await getCloudSyncConfig();
+      if (cfg) {
+        setCloudConfig(cfg);
+        if (cfg.supabaseUrl && !inputSupabaseUrl) setInputSupabaseUrl(cfg.supabaseUrl);
+      }
+    } catch (e) {
+      console.warn('Failed to load cloud config:', e);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -86,8 +115,59 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   useEffect(() => {
     if (isAuthenticated) {
       loadData();
+      loadCloudConfig();
     }
   }, [isAuthenticated, period, department, selectedYear, selectedMonth]);
+
+  const handleTestCloudConnection = async () => {
+    setTestingCloud(true);
+    setTestResult(null);
+    try {
+      const result = await testCloudSyncConnection(inputSupabaseUrl, inputSupabaseKey);
+      setTestResult(result);
+    } catch (err: any) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setTestingCloud(false);
+    }
+  };
+
+  const handleSaveCloudConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await saveCloudSyncConfig({
+        supabaseUrl: inputSupabaseUrl.trim(),
+        supabaseAnonKey: inputSupabaseKey.trim(),
+        autoSyncEnabled: true,
+      });
+      if (res.success) {
+        alert('✅ Supabase configuration saved! Background cloud sync is active.');
+        loadCloudConfig();
+        setIsCloudModalOpen(false);
+      } else {
+        alert(`Failed to save: ${res.error}`);
+      }
+    } catch (err: any) {
+      alert(`Error saving cloud config: ${err.message}`);
+    }
+  };
+
+  const handleTriggerCloudSync = async () => {
+    setSyncingCloud(true);
+    try {
+      const res = await triggerCloudSyncNow();
+      if (res.success) {
+        alert(`✅ Synced ${res.syncedBills || 0} bills to Supabase successfully!`);
+        loadCloudConfig();
+      } else {
+        alert(`Cloud sync issue: ${res.error || 'Check internet connection'}`);
+      }
+    } catch (err: any) {
+      alert(`Sync error: ${err.message}`);
+    } finally {
+      setSyncingCloud(false);
+    }
+  };
 
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,6 +404,33 @@ _Saved permanently in Hotel RJ Database_`;
             title="Refresh Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-gold-400' : ''}`} />
+          </button>
+
+          {/* Cloud Sync Status / Config Button */}
+          <button
+            onClick={() => setIsCloudModalOpen(true)}
+            className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all ${
+              cloudConfig?.connected
+                ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/40 text-emerald-300'
+                : cloudConfig?.isConfigured
+                ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-300'
+                : 'bg-stone-800/80 hover:bg-stone-700 border-stone-700 text-stone-300'
+            }`}
+            title="Configure or view Supabase Cloud Database Sync"
+          >
+            <Cloud className={`w-3.5 h-3.5 ${syncingCloud ? 'animate-pulse text-gold-400' : ''}`} />
+            <span>
+              {syncingCloud
+                ? 'Syncing...'
+                : cloudConfig?.connected
+                ? 'Cloud Synced'
+                : cloudConfig?.isConfigured
+                ? 'Cloud Offline'
+                : 'Supabase Sync'}
+            </span>
+            {cloudConfig?.connected && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            )}
           </button>
 
           {/* Export to Excel (CSV) Button */}
@@ -1169,6 +1276,208 @@ _Saved permanently in Hotel RJ Database_`;
                 >
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Open WhatsApp</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------- */}
+      {/* Supabase Cloud Sync Configuration Modal */}
+      {/* ----------------------------------------------------------- */}
+      {isCloudModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-stone-900 border border-stone-700 rounded-2xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Cloud className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Supabase Cloud Sync</h3>
+                  <p className="text-[11px] text-stone-400">
+                    Real-time cloud backup of all bills, audit logs & expenses
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCloudModalOpen(false)}
+                className="text-stone-400 hover:text-white p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Cloud Status Card */}
+            <div className="bg-stone-950 border border-stone-800 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-stone-400 font-medium">Sync Status:</span>
+                <span
+                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${
+                    cloudConfig?.connected
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : cloudConfig?.isConfigured
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-stone-800 text-stone-400 border-stone-700'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      cloudConfig?.connected ? 'bg-emerald-400 animate-pulse' : 'bg-stone-400'
+                    }`}
+                  />
+                  {cloudConfig?.connected
+                    ? 'Connected & Active'
+                    : cloudConfig?.isConfigured
+                    ? 'Configured (Offline/Checking)'
+                    : 'Not Configured (Offline Mode)'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                <div className="bg-stone-900/60 p-2 rounded-lg border border-stone-800/80">
+                  <span className="text-stone-400 block">Last Synced:</span>
+                  <span className="font-semibold text-stone-200">
+                    {cloudConfig?.lastSyncTime
+                      ? new Date(cloudConfig.lastSyncTime).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })
+                      : 'Never'}
+                  </span>
+                </div>
+                <div className="bg-stone-900/60 p-2 rounded-lg border border-stone-800/80">
+                  <span className="text-stone-400 block">Queued Bills:</span>
+                  <span className="font-semibold text-stone-200">
+                    {cloudConfig?.pendingBills ?? 0} bills pending upload
+                  </span>
+                </div>
+              </div>
+
+              {cloudConfig?.isConfigured && (
+                <div className="pt-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleTriggerCloudSync}
+                    disabled={syncingCloud}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingCloud ? 'animate-spin' : ''}`} />
+                    <span>{syncingCloud ? 'Syncing...' : 'Sync All Records Now'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Supabase Credentials Form */}
+            <form onSubmit={handleSaveCloudConfig} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-stone-300 font-semibold mb-1">
+                  Supabase Project URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://your-project-id.supabase.co"
+                  value={inputSupabaseUrl}
+                  onChange={(e) => setInputSupabaseUrl(e.target.value)}
+                  className="w-full py-2.5 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-400"
+                />
+                <span className="text-[10px] text-stone-500 mt-1 block">
+                  Found in: Supabase Dashboard &gt; Project Settings &gt; API &gt; Project URL
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-stone-300 font-semibold mb-1">
+                  Supabase Anon Public API Key
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  value={inputSupabaseKey}
+                  onChange={(e) => setInputSupabaseKey(e.target.value)}
+                  className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-400 resize-none"
+                />
+                <span className="text-[10px] text-stone-500 mt-1 block">
+                  Found in: Supabase Dashboard &gt; Project Settings &gt; API &gt; Project API keys &gt; <code className="text-stone-400">anon public</code>
+                </span>
+              </div>
+
+              {/* Live Test Connection Section */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestCloudConnection}
+                  disabled={testingCloud || !inputSupabaseUrl.trim() || !inputSupabaseKey.trim()}
+                  className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-200 font-semibold flex items-center gap-1.5 transition-all disabled:opacity-40"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${testingCloud ? 'animate-spin text-gold-400' : ''}`} />
+                  <span>{testingCloud ? 'Testing...' : 'Test Connection'}</span>
+                </button>
+
+                {testResult && (
+                  <div
+                    className={`flex-1 py-1.5 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 ${
+                      testResult.success
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    }`}
+                  >
+                    {testResult.success ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Connected! Supabase bills table verified.</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        <span className="truncate">{testResult.error || 'Connection failed'}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Free Setup Instructions Box */}
+              <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-3 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-gold-400 font-bold text-xs">
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Quick Setup Guide (100% Free Forever)</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-[11px] text-stone-400 leading-relaxed">
+                  <li>
+                    Create a free project at <span className="text-emerald-400 font-medium">supabase.com</span>.
+                  </li>
+                  <li>
+                    In Supabase, open the <strong className="text-stone-300">SQL Editor</strong> and paste the contents of <code className="text-stone-300 bg-stone-900 px-1 py-0.5 rounded">supabase_schema.sql</code> (located in the app folder).
+                  </li>
+                  <li>
+                    Click <strong className="text-emerald-400">Run</strong> to create tables, indexes, and cloud permissions.
+                  </li>
+                  <li>
+                    Copy your <strong className="text-stone-300">Project URL</strong> and <strong className="text-stone-300">anon public key</strong> into the boxes above and click <strong className="text-stone-300">Save &amp; Enable Sync</strong>.
+                  </li>
+                </ol>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCloudModalOpen(false)}
+                  className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>Save &amp; Enable Sync</span>
                 </button>
               </div>
             </form>

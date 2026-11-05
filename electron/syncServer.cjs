@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger.cjs');
 const db = require('./database.cjs');
+const cloudSync = require('./cloudSync.cjs');
 
 function mergeTables(local, remote) {
   if (!remote || typeof remote !== 'object') return local;
@@ -278,6 +279,64 @@ class LocalSyncServer {
         return;
       }
 
+      // GET /api/cloud-sync/status
+      if (req.method === 'GET' && url.pathname === '/api/cloud-sync/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, config: cloudSync.getPublicConfig() }));
+        return;
+      }
+
+      // POST /api/cloud-sync/config
+      if (req.method === 'POST' && url.pathname === '/api/cloud-sync/config') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = cloudSync.saveConfig(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
+      // POST /api/cloud-sync/test
+      if (req.method === 'POST' && url.pathname === '/api/cloud-sync/test') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', async () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = await cloudSync.testConnection(data.url, data.key);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
+      // POST /api/cloud-sync/sync
+      if (req.method === 'POST' && url.pathname === '/api/cloud-sync/sync') {
+        cloudSync
+          .syncAll()
+          .then((result) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          })
+          .catch((err) => {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+          });
+        return;
+      }
+
       // POST /api/settle-bill (Save completed bill and mark table vacant)
       if (req.method === 'POST' && url.pathname === '/api/settle-bill') {
         let body = '';
@@ -314,6 +373,12 @@ class LocalSyncServer {
             }
 
             logger.warn('SyncServer', `Bill settled for ${bill.tableId} (₹${bill.total}, ${bill.paymentMethod}) by ${bill.settledBy || clientIp}`);
+            
+            // Background cloud push to Supabase if configured
+            if (cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, bill: record }));
           } catch (err) {

@@ -48,4 +48,10 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
   deleteExpense: (id) => ipcRenderer.invoke('delete-expense', id),
   getBills: () => ipcRenderer.invoke('get-bills'),
   exportBackup: () => ipcRenderer.invoke('export-backup'),
+
+  // Supabase Cloud Sync
+  getCloudConfig: () => ipcRenderer.invoke('get-cloud-config'),
+  saveCloudConfig: (config) => ipcRenderer.invoke('save-cloud-config', config),
+  testCloudConnection: (url, key) => ipcRenderer.invoke('test-cloud-connection', { url, key }),
+  syncCloudNow: () => ipcRenderer.invoke('sync-cloud-now'),
 });

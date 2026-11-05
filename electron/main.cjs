@@ -4,6 +4,7 @@ const fs = require('fs');
 const logger = require('./logger.cjs');
 const syncServer = require('./syncServer.cjs');
 const db = require('./database.cjs');
+const cloudSync = require('./cloudSync.cjs');
 
 // Global Exception Handlers (Writes to Windows logs folder)
 process.on('uncaughtException', (error) => {
@@ -288,4 +289,23 @@ ipcMain.handle('delete-expense', async (event, id) => {
 
 ipcMain.handle('get-bills', async () => {
   return db.data.settledBills.slice(0, 50);
+});
+
+// -------------------------------------------------------------
+// Supabase Cloud Sync IPC Handlers
+// -------------------------------------------------------------
+ipcMain.handle('get-cloud-config', async () => {
+  return cloudSync.getPublicConfig();
+});
+
+ipcMain.handle('save-cloud-config', async (event, config) => {
+  return cloudSync.saveConfig(config);
+});
+
+ipcMain.handle('test-cloud-connection', async (event, { url, key }) => {
+  return cloudSync.testConnection(url, key);
+});
+
+ipcMain.handle('sync-cloud-now', async () => {
+  return cloudSync.syncAll();
 });

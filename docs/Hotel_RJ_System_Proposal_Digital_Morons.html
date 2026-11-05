@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hotel RJ - Commercial Proposal & System Handover | Digital Morons</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap');
+
+    @page {
+      size: A4;
+      margin: 11mm 14mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1e293b;
+      background: #ffffff;
+      font-size: 10.5pt;
+      line-height: 1.45;
+    }
+
+    .page {
+      page-break-after: always;
+      position: relative;
+    }
+
+    .page:last-child {
+      page-break-after: avoid;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+
+    .agency-brand {
+      font-size: 19pt;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #0f172a;
+      text-transform: uppercase;
+    }
+
+    .agency-tag {
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #b45309;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+
+    .doc-meta {
+      text-align: right;
+      font-size: 8.5pt;
+      color: #64748b;
+      line-height: 1.35;
+    }
+
+    .doc-meta strong {
+      color: #0f172a;
+    }
+
+    /* Typography */
+    h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 21pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+      line-height: 1.2;
+    }
+
+    h2 {
+      font-size: 12pt;
+      font-weight: 700;
+      color: #0f172a;
+      border-left: 4px solid #c59b27;
+      padding-left: 10px;
+      margin: 14px 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    p {
+      margin-bottom: 8px;
+      color: #334155;
+      font-size: 9.5pt;
+    }
+
+    /* Client Banner */
+    .client-banner {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      font-size: 9pt;
+    }
+
+    .client-banner div span {
+      display: block;
+      color: #64748b;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 600;
+    }
+
+    .client-banner div strong {
+      color: #0f172a;
+      font-size: 9.5pt;
+    }
+
+    /* Highlights Badges */
+    .badges-row {
+      display: flex;
+      gap: 8px;
+      margin: 10px 0 14px 0;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 8pt;
+      font-weight: 600;
+      color: #0f172a;
+    }
+
+    .badge.gold {
+      background: #fef3c7;
+      border-color: #fde68a;
+      color: #92400e;
+    }
+
+    .badge.green {
+      background: #dcfce7;
+      border-color: #bbf7d0;
+      color: #166534;
+    }
+
+    /* Grid cards */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .card {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #ffffff;
+    }
+
+    .card.highlight {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+    }
+
+    .card h4 {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card ul {
+      list-style-type: disc;
+      padding-left: 14px;
+      font-size: 8pt;
+      color: #475569;
+      line-height: 1.4;
+    }
+
+    .card ul li {
+      margin-bottom: 2px;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 14px 0;
+      font-size: 8.5pt;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      text-align: left;
+      padding: 7px 9px;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 7.5pt;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 7px 9px;
+      border-bottom: 1px solid #e2e8f0;
+      color: #334155;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    /* Team Matrix */
+    .team-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 10px 0 14px 0;
+    }
+
+    .team-box {
+      border-left: 3px solid #0f172a;
+      background: #f8fafc;
+      padding: 7px 10px;
+      border-radius: 0 6px 6px 0;
+    }
+
+    .team-box .role {
+      font-size: 8.5pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .team-box .focus {
+      font-size: 7.5pt;
+      color: #64748b;
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+
+    /* Total Callout Box */
+    .callout-box {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #ffffff;
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin: 14px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .callout-box .text h3 {
+      color: #fde68a;
+      font-size: 12pt;
+      margin: 0 0 2px 0;
+    }
+
+    .callout-box .text p {
+      color: #cbd5e1;
+      font-size: 8pt;
+      margin: 0;
+    }
+
+    .callout-box .price-tag {
+      text-align: right;
+    }
+
+    .callout-box .price-tag .amount {
+      font-size: 20pt;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+    }
+
+    .callout-box .price-tag .sub {
+      font-size: 7.5pt;
+      color: #a7f3d0;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-top: 3px;
+    }
+
+    /* Sign-off section */
+    .sign-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid #cbd5e1;
+    }
+
+    .sign-box {
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fafafa;
+    }
+
+    .sign-box span {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #64748b;
+      display: block;
+      margin-bottom: 20px;
+    }
+
+    .sign-box .line {
+      border-top: 1px solid #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .sign-box p {
+      font-size: 8pt;
+      color: #0f172a;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 7pt;
+      color: #94a3b8;
+      margin-top: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PAGE 1: EXECUTIVE PROPOSAL & SOLUTION -->
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="agency-brand">Digital Morons</div>
+        <div class="agency-tag">Advanced Technology & Digital Engineering</div>
+      </div>
+      <div class="doc-meta">
+        <div><strong>Proposal Ref:</strong> DM-PROP-2026-HRJ</div>
+        <div><strong>Date:</strong> November 4, 2026</div>
+        <div><strong>Status:</strong> Ready for Client Sign-Off</div>
+      </div>
+    </div>
+
+    <h1>Comprehensive Hospitality & POS Suite Handover</h1>
+    <p>A unified digital ecosystem engineered exclusively for <strong>Hotel RJ</strong> to automate tableside ordering, counter operations, web guest acquisition, and social marketing with <strong>Zero Ongoing Monthly Cloud SaaS Fees</strong>.</p>
+
+    <div class="client-banner">
+      <div>
+        <span>Prepared For (Client):</span>
+        <strong>Hotel RJ (Management Board)</strong><br>
+        Suriya Road, Bagodar, Giridih, Jharkhand – 825322
+      </div>
+      <div>
+        <span>Developed By (Agency):</span>
+        <strong>Digital Morons</strong><br>
+        Lead Engineering Unit & Hospitality Systems
+      </div>
+    </div>
+
+    <div class="badges-row">
+      <span class="badge gold">★ Full IP & Source Handover</span>
+      <span class="badge green">✓ ₹0 Monthly Software SaaS</span>
+      <span class="badge">Annual Domain & Hosting Covered</span>
+      <span class="badge">Social Media Ads Launch</span>
+      <span class="badge green">3 Months Free Support Included</span>
+    </div>
+
+    <h2>1. The Integrated Solution Architecture</h2>
+    <div class="cards-grid">
+      <div class="card highlight">
+        <h4>🌐 1. Luxury Web Portal, Domain & Hosting</h4>
+        <ul>
+          <li><strong>Domain & Hosting:</strong> Live at <code>https://www.hotelrj.co.in</code> (₹1,199/yr domain + ₹599/mo cloud hosting).</li>
+          <li><strong>Direct Bookings:</strong> Direct WhatsApp/Call room reservations, avoiding 18%–25% OTA fees.</li>
+          <li><strong>Interactive Guest Menu:</strong> Clean categorized digital food menu with instant QR code access.</li>
+          <li><strong>Google Indexing & SEO:</strong> Schema.org Hotel metadata, sitemap.xml, robots.txt, and Search Console.</li>
+          <li><strong>Guest Privacy:</strong> Staff Waiter POS navigation completely secluded from public sight.</li>
+        </ul>
+      </div>
+
+      <div class="card highlight">
+        <h4>📱 2. Staff Android Waiter POS App (APK)</h4>
+        <ul>
+          <li><strong>Floor Staff Optimized:</strong> High-contrast touch UI for waiters of any education level.</li>
+          <li><strong>Live 20-Table Control:</strong> Visual status indicators (Occupied, Billing, Vacant).</li>
+          <li><strong>Wave & Round Ordering:</strong> Fire appetizers first, add entrees later with zero duplication.</li>
+          <li><strong>Preset Cooking Notes:</strong> 1-tap fast notes ("Less Spicy", "No Onion", "Crispy").</li>
+          <li><strong>Bluetooth Thermal KOT:</strong> Fast ticket printing on 58mm/80mm wireless ESC/POS printers.</li>
+          <li><strong>Live Heartbeat:</strong> Broadcasts waiter presence to counter terminal every 12 seconds.</li>
+        </ul>
+      </div>
+
+      <div class="card highlight">
+        <h4>🖥️ 3. Windows Desktop POS & Embedded Sync Hub</h4>
+        <ul>
+          <li><strong>All-in-One Desktop Package:</strong> Electron desktop station with built-in Port 5050 sync server.</li>
+          <li><strong>Zero-Cloud Local Wi-Fi Sync:</strong> Instant communication between mobile APKs & counter without internet.</li>
+          <li><strong>Live Floor Staff Monitor:</strong> Real-time overview of active waiters, active tables, and open checks.</li>
+          <li><strong>Silent Thermal Billing:</strong> Virtual Serial COM5 integration for Seznik 2in1 thermal printer.</li>
+          <li><strong>Firewall Automation:</strong> Automatic Windows Defender Port 5050 configuration script.</li>
+          <li><strong>Audit Logging:</strong> Warning, sync, and audit trace persistence in local <code>%APPDATA%</code>.</li>
+        </ul>
+      </div>
+
+      <div class="card highlight">
+        <h4>📢 4. Social Media Ads & Digital Campaign</h4>
+        <ul>
+          <li><strong>Grand Trunk Road (NH-19) Corridor:</strong> Targeted campaigns attracting highway travelers and tourists.</li>
+          <li><strong>Local Dining & Banquet Reach:</strong> Social media promotions targeting Bagodar, Suriya & Giridih districts.</li>
+          <li><strong>Google Business Profile Optimization:</strong> Verified location, phone hooks, menu, and customer photo showcases.</li>
+          <li><strong>Meta/Instagram Ad Creatives:</strong> Custom visual ad concepts promoting rooftop banquet hall and family dining.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>2. Dedicated Engineering & Growth Team (5 Specialists)</h2>
+    <p style="font-size: 8pt; margin-bottom: 6px;">To deliver this integrated multi-platform ecosystem, Digital Morons deployed 5 dedicated specialists:</p>
+    <div class="team-grid">
+      <div class="team-box">
+        <div class="role">1. Principal Systems & Full-Stack Architect</div>
+        <div class="focus">Architected the embedded Port 5050 sync engine, 2-way table state merging, Electron daemon, and cloud hosting infrastructure.</div>
+      </div>
+      <div class="team-box">
+        <div class="role">2. Senior UI/UX & Frontend Designer</div>
+        <div class="focus">Crafted the luxury obsidian-gold responsive web branding, intuitive touch layout for floor staff, and high-contrast digital KOT tickets.</div>
+      </div>
+      <div class="team-box">
+        <div class="role">3. Native Android & Mobile Bridge Specialist</div>
+        <div class="focus">Developed Capacitor native plugins, Android 9-14 network security policies, Bluetooth ESC/POS print spooler, and floor heartbeat.</div>
+      </div>
+      <div class="team-box">
+        <div class="role">4. Desktop Systems & Hardware Integration Engineer</div>
+        <div class="focus">Built Windows Electron counter app, NSIS packaging, Seznik COM5 Bluetooth driver mapping, and automated firewall scripts.</div>
+      </div>
+      <div class="team-box" style="grid-column: span 2;">
+        <div class="role">5. Digital Marketing, Technical SEO & QA Lead</div>
+        <div class="focus">Executed domain/DNS routing, Google Search Console & Schema.org indexing, local Meta/Instagram ad setup, and multi-device Wi-Fi QA.</div>
+      </div>
+    </div>
+
+    <div class="footer-note">Digital Morons • Confidential Client Proposal • Page 1 of 2</div>
+  </div>
+
+  <!-- PAGE 2: VALUATION, COMMERCIAL OFFER & SIGN-OFF -->
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="agency-brand">Digital Morons</div>
+        <div class="agency-tag">Advanced Technology & Digital Engineering</div>
+      </div>
+      <div class="doc-meta">
+        <div><strong>Client:</strong> Hotel RJ</div>
+        <div><strong>Proposal Ref:</strong> DM-PROP-2026-HRJ</div>
+        <div><strong>Date:</strong> November 4, 2026</div>
+      </div>
+    </div>
+
+    <h2>3. Fair Market Value vs. Hotel RJ Package Pricing</h2>
+    <p style="font-size: 8pt; margin-bottom: 6px;">Standard enterprise market costs in India for custom hospitality development, local synchronization, hardware engineering, and digital setup range from ₹3,25,000 to ₹5,50,000. Under our client partnership, Digital Morons provides this complete package:</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Module / Scope of Deliverable</th>
+          <th style="width: 110px;">Market Value</th>
+          <th style="width: 125px; text-align: right;">Package Rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <strong>1. Custom Commercial Domain Registration (1 Year)</strong><br>
+            <span style="font-size: 7pt; color: #64748b;">Official domain name <code>hotelrj.co.in</code>, DNS configuration, and nameserver delegation.</span>
+          </td>
+          <td>₹1,500</td>
+          <td style="text-align: right;"><strong>₹1,199</strong></td>
+        </tr>
+        <tr>
+          <td>
+            <strong>2. Cloud Hosting & SSL Infrastructure (1 Year / ₹599 mo)</strong><br>
+            <span style="font-size: 7pt; color: #64748b;">High-speed cloud hosting at ₹599/month billed annually (12 mos), automated SSL, and global CDN.</span>
+          </td>
+          <td>₹12,000</td>
+          <td style="text-align: right;"><strong>₹7,188</strong></td>
+        </tr>
+        <tr>
+          <td>
+            <strong>3. Social Media Ads & Local Digital Marketing Campaign</strong><br>
+            <span style="font-size: 7pt; color: #64748b;">Targeted Meta (Facebook/Instagram) ad setup, creative direction, and Google Business Profile optimization.</span>
+          </td>
+          <td>₹35,000</td>
+          <td style="text-align: right;"><strong>₹15,613</strong></td>
+        </tr>
+        <tr>
+          <td>
+            <strong>4. Luxury Responsive Web Portal & Digital Guest Menu</strong><br>
+            <span style="font-size: 7pt; color: #64748b;">Luxury web design, direct WhatsApp reservations, interactive menu, Schema.org Hotel SEO.</span>
+          </td>
+          <td>₹65,000</td>
+          <td style="text-align: right;"><strong>₹28,000</strong></td>
+        </tr>
+        <tr>
+          <td>
+            <strong>5. Staff Android Waiter POS Mobile Application</strong><br>
+            <span style="font-size: 7pt; color: #64748b;">Native APK, 20-table management, wave ordering, ESC/POS Bluetooth thermal printing, staff heartbeat.</span>
+          </td>
+          <td>₹95,000</td>
+          <td style="text-align: right;"><strong>₹35,000</strong></td>
+        </tr>
+        <tr>
+          <td>
+            <strong>6. Windows Desktop Counter POS & Integrated Local Sync Engine</strong><br>
+            <span style="font-size: 7pt; color: #64748b;">Dedicated Electron counter app with embedded Port 5050 Wi-Fi sync server, live floor monitor, and bill generator.</span>
+          </td>
+          <td>₹1,20,000</td>
+          <td style="text-align: right;"><strong>₹45,000</strong></td>
+        </tr>
+        <tr>
+          <td>
+            <strong>7. Hardware Calibration, Serial COM5 Setup & Thermal Spooler</strong><br>
+            <span style="font-size: 7pt; color: #64748b;">Seznik 2in1 Bluetooth thermal printer driver mapping, ESC/POS ticket styling, and LAN optimization.</span>
+          </td>
+          <td>₹20,000</td>
+          <td style="text-align: right;"><strong>₹8,000</strong></td>
+        </tr>
+        <tr style="background: #f0fdf4;">
+          <td>
+            <strong style="color: #166534;">8. Post-Handover Maintenance & On-Floor Staff Training</strong><br>
+            <span style="font-size: 7pt; color: #166534;">Full bug-fixing, printer adjustments, system recalibration, and staff training.</span>
+          </td>
+          <td style="color: #64748b; text-decoration: line-through;">₹25,000</td>
+          <td style="text-align: right;"><strong style="color: #166534;">FREE (3 Months)</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Callout Box -->
+    <div class="callout-box">
+      <div class="text">
+        <h3>Total Bundled Investment: ₹1,40,000</h3>
+        <p>Complete Ownership • Full Source Code • ₹0 Monthly SaaS • Domain & Hosting Included • 3 Mos Free Support</p>
+      </div>
+      <div class="price-tag">
+        <div class="amount">₹1,40,000</div>
+        <div class="sub">All Modules Included</div>
+      </div>
+    </div>
+
+    <h2>4. Deliverables & Warranty Commitments</h2>
+    <ul style="font-size: 8pt; color: #334155; line-height: 1.45; padding-left: 16px; margin-bottom: 12px;">
+      <li><strong>100% Intellectual Property & Source Code Ownership:</strong> Hotel RJ retains perpetual ownership of the entire codebase with zero vendor lock-in.</li>
+      <li><strong>3 Months Free Operational Maintenance:</strong> Includes bug fixes, printer recalibration, menu updates, and on-call technical assistance.</li>
+      <li><strong>Zero Recurring SaaS Subscriptions:</strong> No ongoing monthly software subscription fees. The local sync server runs on your counter desktop.</li>
+      <li><strong>Subsequent Optional AMC (After 3 Months):</strong> Completely optional maintenance at ₹1,500/month or ₹15,000/year (only if ongoing active updates are requested).</li>
+    </ul>
+
+    <!-- Sign-off Section -->
+    <div class="sign-section">
+      <div class="sign-box">
+        <span>Prepared & Delivered By:</span>
+        <div class="line"></div>
+        <p>Digital Morons</p>
+        <p style="font-weight: 400; font-size: 7pt; color: #64748b;">Lead Solutions Architect & Engineering Director</p>
+        <p style="font-weight: 400; font-size: 7pt; color: #64748b;">Date: November 4, 2026</p>
+      </div>
+
+      <div class="sign-box">
+        <span>Accepted & Approved By:</span>
+        <div class="line"></div>
+        <p>Hotel RJ (Management Board)</p>
+        <p style="font-weight: 400; font-size: 7pt; color: #64748b;">Authorized Signatory / Property Owner</p>
+        <p style="font-weight: 400; font-size: 7pt; color: #64748b;">Date: _________________________</p>
+      </div>
+    </div>
+
+    <div class="footer-note" style="margin-top: 18px;">Digital Morons • Confidential Client Proposal • Page 2 of 2</div>
+  </div>
+
+</body>
+</html>
