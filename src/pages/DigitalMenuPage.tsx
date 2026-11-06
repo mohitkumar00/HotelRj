@@ -52,7 +52,24 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
   const [liveMenuCategories, setLiveMenuCategories] = useState<MenuCategory[]>(() => {
     try {
       const cached = localStorage.getItem('hotel_rj_menu_cache');
-      if (cached) return JSON.parse(cached);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const baseMap = new Map<string, string>();
+          for (const cat of MENU_CATEGORIES) {
+            for (const item of cat.items) {
+              if (item.image) baseMap.set(item.id, item.image);
+            }
+          }
+          return parsed.map((cat: MenuCategory) => ({
+            ...cat,
+            items: (cat.items || []).map((it) => ({
+              ...it,
+              image: it.image || baseMap.get(it.id),
+            })),
+          }));
+        }
+      }
     } catch {}
     return MENU_CATEGORIES;
   });

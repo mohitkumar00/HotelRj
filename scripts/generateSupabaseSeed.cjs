@@ -91,11 +91,14 @@ CREATE TABLE IF NOT EXISTS menu_items (
   hindi_name TEXT,
   price NUMERIC(10, 2) NOT NULL DEFAULT 0,
   dietary TEXT DEFAULT 'veg', -- 'veg' | 'non-veg' | 'egg'
+  image TEXT,
   is_available BOOLEAN DEFAULT true,
   popular BOOLEAN DEFAULT false,
   description TEXT,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_menu_items_available ON menu_items(is_available);
 CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category_id);
@@ -206,7 +209,7 @@ ON CONFLICT (id) DO UPDATE SET
 -- ==============================================================================
 -- 10. INITIAL SEED DATA: DISHES & MENU ITEMS (300+ Dishes)
 -- ==============================================================================
-INSERT INTO menu_items (id, category_id, category_title, name, hindi_name, price, dietary, is_available, popular, description)
+INSERT INTO menu_items (id, category_id, category_title, name, hindi_name, price, dietary, image, is_available, popular, description)
 VALUES
 `;
 
@@ -215,7 +218,7 @@ for (const cat of DEFAULT_MENU_CATEGORIES) {
   if (Array.isArray(cat.items)) {
     for (const item of cat.items) {
       menuValues.push(
-        `  (${escapeSql(item.id)}, ${escapeSql(cat.id)}, ${escapeSql(cat.title)}, ${escapeSql(item.name)}, ${escapeSql(item.hindiName || null)}, ${Number(item.price) || 0}, ${escapeSql(item.dietary || 'veg')}, ${item.isAvailable !== false ? 'true' : 'false'}, ${item.popular ? 'true' : 'false'}, ${escapeSql(item.description || null)})`
+        `  (${escapeSql(item.id)}, ${escapeSql(cat.id)}, ${escapeSql(cat.title)}, ${escapeSql(item.name)}, ${escapeSql(item.hindiName || null)}, ${Number(item.price) || 0}, ${escapeSql(item.dietary || 'veg')}, ${escapeSql(item.image || null)}, ${item.isAvailable !== false ? 'true' : 'false'}, ${item.popular ? 'true' : 'false'}, ${escapeSql(item.description || null)})`
       );
     }
   }
@@ -230,6 +233,7 @@ ON CONFLICT (id) DO UPDATE SET
   hindi_name = EXCLUDED.hindi_name,
   price = EXCLUDED.price,
   dietary = EXCLUDED.dietary,
+  image = EXCLUDED.image,
   is_available = EXCLUDED.is_available,
   popular = EXCLUDED.popular,
   description = EXCLUDED.description;

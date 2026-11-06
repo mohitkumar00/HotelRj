@@ -117,28 +117,59 @@ export async function fetchMenuApi(): Promise<MenuCategory[]> {
     if (res.ok) {
       const items: any[] = await res.json();
       if (Array.isArray(items) && items.length > 0) {
+        // Build quick lookup of bundled dishes to preserve images & default assets
+        const baseItemMap = new Map<string, MenuItem>();
+        for (const cat of MENU_CATEGORIES) {
+          for (const it of cat.items) {
+            baseItemMap.set(it.id, it);
+          }
+        }
+
         const categoryMap = new Map<string, any[]>();
         for (const item of items) {
           const catId = item.category_id || 'chef-specials';
           if (!categoryMap.has(catId)) categoryMap.set(catId, []);
+          const base = baseItemMap.get(item.id);
           categoryMap.get(catId)!.push({
             id: item.id,
             name: item.name,
-            hindiName: item.hindi_name || undefined,
-            price: Number(item.price) || 0,
-            dietary: item.dietary || 'veg',
+            hindiName: item.hindi_name || base?.hindiName || undefined,
+            price: Number(item.price) || (typeof base?.price === 'number' ? base.price : 0),
+            dietary: item.dietary || base?.dietary || 'veg',
             category: catId,
-            popular: !!item.popular,
+            popular: item.popular !== undefined ? !!item.popular : !!base?.popular,
             isAvailable: item.is_available !== false,
-            description: item.description || undefined,
+            description: item.description || base?.description || undefined,
+            image: item.image || base?.image || undefined,
           });
         }
 
         const rebuilt: MenuCategory[] = MENU_CATEGORIES.map((baseCat) => {
           const dbItems = categoryMap.get(baseCat.id);
+          if (!dbItems || dbItems.length === 0) return baseCat;
+
+          const dbMap = new Map<string, any>(dbItems.map((i: any) => [i.id, i]));
+          const mergedItems: MenuItem[] = baseCat.items.map((bItem) => {
+            const dbItem = dbMap.get(bItem.id);
+            if (!dbItem) return bItem;
+            return {
+              ...bItem,
+              ...dbItem,
+              image: dbItem.image || bItem.image,
+            };
+          });
+
+          // Add any custom items added in this category that didn't exist in base
+          const baseIds = new Set(baseCat.items.map((i) => i.id));
+          for (const dbItem of dbItems) {
+            if (!baseIds.has(dbItem.id)) {
+              mergedItems.push(dbItem);
+            }
+          }
+
           return {
             ...baseCat,
-            items: dbItems && dbItems.length > 0 ? dbItems : baseCat.items,
+            items: mergedItems,
           };
         });
 
@@ -155,7 +186,21 @@ export async function fetchMenuApi(): Promise<MenuCategory[]> {
     const cached = localStorage.getItem('hotel_rj_menu_cache');
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const baseMap = new Map<string, string>();
+        for (const cat of MENU_CATEGORIES) {
+          for (const it of cat.items) {
+            if (it.image) baseMap.set(it.id, it.image);
+          }
+        }
+        return parsed.map((cat: MenuCategory) => ({
+          ...cat,
+          items: (cat.items || []).map((it: MenuItem) => ({
+            ...it,
+            image: it.image || baseMap.get(it.id),
+          })),
+        }));
+      }
     }
   } catch {}
 
@@ -261,6 +306,7 @@ export async function saveDishApi(dishData: Partial<MenuItem> & { categoryId?: s
       dietary: dishData.dietary || 'veg',
       popular: !!dishData.popular,
       is_available: dishData.isAvailable !== false,
+      image: dishData.image || null,
       description: dishData.description || null,
       updated_at: new Date().toISOString(),
     };
@@ -288,6 +334,7 @@ export async function saveDishApi(dishData: Partial<MenuItem> & { categoryId?: s
           dietary: r.dietary,
           popular: !!r.popular,
           isAvailable: r.is_available !== false,
+          image: r.image || undefined,
           description: r.description || undefined,
         },
       };
