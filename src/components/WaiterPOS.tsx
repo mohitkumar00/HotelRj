@@ -49,6 +49,7 @@ import {
   AlertOctagon,
   Sliders,
   AlertTriangle,
+  Split,
 } from 'lucide-react';
 import { parseItemPrice } from '../utils/priceUtils';
 import { OwnerInsights } from './OwnerInsights';
@@ -591,7 +592,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Settlement & DB billing modal
   const [isSettleModalOpen, setIsSettleModalOpen] = useState(false);
   const [settleDepartment, setSettleDepartment] = useState<'restaurant' | 'rooms' | 'banquet'>('restaurant');
-  const [settlePaymentMethod, setSettlePaymentMethod] = useState<'cash' | 'upi' | 'card' | 'room-folio'>('cash');
+  const [settlePaymentMethod, setSettlePaymentMethod] = useState<'cash' | 'upi' | 'card' | 'room-folio' | 'split'>('cash');
+  const [splitCashAmount, setSplitCashAmount] = useState<string>('');
+  const [splitUpiAmount, setSplitUpiAmount] = useState<string>('');
+  const [splitCardAmount, setSplitCardAmount] = useState<string>('');
   const [settleRoomNumber, setSettleRoomNumber] = useState('Room 101');
   const [settleCustomerPhone, setSettleCustomerPhone] = useState('');
   const [settleCustomerName, setSettleCustomerName] = useState('');
@@ -701,7 +705,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         subtotal: Number(bill.subtotal) || Number(bill.total) || 0,
         gstRate: bill.tax ? 5 : 0,
         grandTotal: Number(bill.total) || 0,
-        paymentMode: (bill.paymentMethod || 'cash').toUpperCase(),
+        paymentMode:
+          bill.paymentMethod === 'split'
+            ? `SPLIT (Cash ₹${bill.paymentDetails?.cashAmount || 0} + UPI ₹${bill.paymentDetails?.upiAmount || 0})`
+            : (bill.paymentMethod || 'cash').toUpperCase(),
       };
 
       const res = await BluetoothPrinter.printBill(printData);
@@ -1200,13 +1207,66 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       }
       return;
     }
+    setSplitCashAmount('');
+    setSplitUpiAmount('');
+    setSplitCardAmount('');
+    setSettlePaymentMethod('cash');
     setIsSettleModalOpen(true);
   };
+
+  const handleSplitCashChange = (val: string) => {
+    setSplitCashAmount(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && num >= 0 && num <= grandTotal) {
+      const remaining = Math.round((grandTotal - num - (parseFloat(splitCardAmount) || 0)) * 100) / 100;
+      setSplitUpiAmount(remaining >= 0 ? String(remaining) : '0');
+    }
+  };
+
+  const handleSplitUpiChange = (val: string) => {
+    setSplitUpiAmount(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && num >= 0 && num <= grandTotal) {
+      const remaining = Math.round((grandTotal - num - (parseFloat(splitCardAmount) || 0)) * 100) / 100;
+      setSplitCashAmount(remaining >= 0 ? String(remaining) : '0');
+    }
+  };
+
+  const currentSplitSum = useMemo(() => {
+    const c = parseFloat(splitCashAmount) || 0;
+    const u = parseFloat(splitUpiAmount) || 0;
+    const card = parseFloat(splitCardAmount) || 0;
+    return Math.round((c + u + card) * 100) / 100;
+  }, [splitCashAmount, splitUpiAmount, splitCardAmount]);
+
+  const splitDifference = useMemo(() => {
+    return Math.round((grandTotal - currentSplitSum) * 100) / 100;
+  }, [grandTotal, currentSplitSum]);
+
+  const isSplitBalanced = useMemo(() => {
+    return Math.abs(splitDifference) < 0.05 && currentSplitSum > 0;
+  }, [splitDifference, currentSplitSum]);
 
   // Action: CONFIRM SETTLEMENT & SAVE TO DATABASE
   const handleConfirmSettlement = async () => {
     setIsSubmittingSettlement(true);
     try {
+      if (settlePaymentMethod === 'split') {
+        const c = Number(splitCashAmount) || 0;
+        const u = Number(splitUpiAmount) || 0;
+        const card = Number(splitCardAmount) || 0;
+        const sum = Math.round((c + u + card) * 100) / 100;
+        if (Math.abs(sum - grandTotal) > 0.05) {
+          alert(`⚠️ Split amounts (₹${sum.toFixed(2)}) must equal the total bill (₹${grandTotal.toFixed(2)})!`);
+          setIsSubmittingSettlement(false);
+          return;
+        }
+      }
+
+      const cashAmt = settlePaymentMethod === 'cash' ? grandTotal : settlePaymentMethod === 'split' ? (Number(splitCashAmount) || 0) : 0;
+      const upiAmt = settlePaymentMethod === 'upi' ? grandTotal : settlePaymentMethod === 'split' ? (Number(splitUpiAmount) || 0) : 0;
+      const cardAmt = settlePaymentMethod === 'card' ? grandTotal : settlePaymentMethod === 'split' ? (Number(splitCardAmount) || 0) : 0;
+
       const payload: SettleBillPayload = {
         tableId: activeTable,
         department: settleDepartment,
@@ -1229,9 +1289,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         total: grandTotal,
         paymentMethod: settlePaymentMethod,
         paymentDetails: {
-          cashAmount: settlePaymentMethod === 'cash' ? grandTotal : 0,
-          upiAmount: settlePaymentMethod === 'upi' ? grandTotal : 0,
-          cardAmount: settlePaymentMethod === 'card' ? grandTotal : 0,
+          cashAmount: cashAmt,
+          upiAmount: upiAmt,
+          cardAmount: cardAmt,
         },
       };
 
@@ -1252,13 +1312,19 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         },
       }));
 
-      setPrintSuccessMsg(`✅ Bill (₹${grandTotal}) settled via ${settlePaymentMethod.toUpperCase()} & saved to DB!`);
+      const methodDisplay = settlePaymentMethod === 'split'
+        ? `SPLIT (Cash ₹${cashAmt} + UPI ₹${upiAmt})`
+        : settlePaymentMethod.toUpperCase();
+      setPrintSuccessMsg(`✅ Bill (₹${grandTotal}) settled via ${methodDisplay} & saved to DB!`);
       setTimeout(() => setPrintSuccessMsg(null), 3500);
 
       setIsSettleModalOpen(false);
       setIsOrderDrawerOpen(false);
       setSettleCustomerPhone('');
       setSettleCustomerName('');
+      setSplitCashAmount('');
+      setSplitUpiAmount('');
+      setSplitCardAmount('');
     } catch (err: any) {
       Logger.error('Settle', `Failed to settle bill: ${err?.message || err}`);
       setPrintSuccessMsg(`❌ Settlement error: ${err?.message || 'Check connection'}`);
@@ -2538,11 +2604,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             {/* Payment Mode Selection */}
             <div>
               <label className="block text-xs font-semibold text-stone-300 mb-2">Select Payment Mode:</label>
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => setSettlePaymentMethod('cash')}
-                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
                     settlePaymentMethod === 'cash'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-md'
                       : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
@@ -2554,19 +2620,19 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 <button
                   type="button"
                   onClick={() => setSettlePaymentMethod('upi')}
-                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
                     settlePaymentMethod === 'upi'
                       ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-md'
                       : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
                   }`}
                 >
                   <Smartphone className="w-4 h-4 text-sky-400" />
-                  <span>UPI (GPay/PhonePe)</span>
+                  <span>UPI (QR)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSettlePaymentMethod('card')}
-                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
                     settlePaymentMethod === 'card'
                       ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-md'
                       : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
@@ -2577,8 +2643,27 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    setSettlePaymentMethod('split');
+                    if (!splitCashAmount && !splitUpiAmount) {
+                      const half = Math.floor(grandTotal / 2);
+                      setSplitCashAmount(String(half));
+                      setSplitUpiAmount(String(Math.round((grandTotal - half) * 100) / 100));
+                    }
+                  }}
+                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                    settlePaymentMethod === 'split'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md ring-1 ring-amber-500/40'
+                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
+                  }`}
+                >
+                  <Split className="w-4 h-4 text-amber-400" />
+                  <span>Partial (Cash+UPI)</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setSettlePaymentMethod('room-folio')}
-                  className={`py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
+                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all col-span-2 sm:col-span-1 ${
                     settlePaymentMethod === 'room-folio'
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md'
                       : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
@@ -2589,6 +2674,157 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 </button>
               </div>
             </div>
+
+            {/* Split / Partial Payment Box */}
+            {settlePaymentMethod === 'split' && (
+              <div className="p-3 bg-gradient-to-br from-amber-500/10 via-stone-900/60 to-stone-950 border border-amber-500/30 rounded-2xl space-y-3 text-xs animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                    <Split className="w-4 h-4 text-amber-400" />
+                    <span>Partial Payment (Split Amount)</span>
+                  </div>
+                  <div className="text-[11px] font-mono font-bold text-white bg-black/50 px-2 py-0.5 rounded-lg border border-white/10">
+                    Total: ₹{grandTotal.toFixed(2)}
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-stone-400 font-medium">Quick Split:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const half = Math.floor(grandTotal / 2);
+                      setSplitCashAmount(String(half));
+                      setSplitUpiAmount(String(Math.round((grandTotal - half) * 100) / 100));
+                    }}
+                    className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] font-semibold border border-white/10 transition-all"
+                  >
+                    50% Cash / 50% UPI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSplitCashAmount('');
+                      setSplitUpiAmount('');
+                      setSplitCardAmount('');
+                    }}
+                    className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] border border-white/10 ml-auto transition-all"
+                  >
+                    Clear
+                  </button>
+                </div>
+
+                {/* Input Fields Grid */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Cash Portion */}
+                  <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-500/25 space-y-1">
+                    <div className="flex items-center justify-between text-emerald-400 font-semibold text-[11px]">
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="w-3.5 h-3.5" /> Cash Amount
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curU = parseFloat(splitUpiAmount) || 0;
+                          const rem = Math.max(0, grandTotal - curU);
+                          setSplitCashAmount(String(Math.round(rem * 100) / 100));
+                        }}
+                        className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded font-bold transition-all"
+                      >
+                        Auto
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 font-mono text-xs">₹</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={splitCashAmount}
+                        onChange={(e) => handleSplitCashChange(e.target.value)}
+                        className="w-full pl-6 pr-2 py-1.5 bg-stone-950 border border-stone-700 rounded-lg text-white font-mono text-sm font-bold focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* UPI Portion */}
+                  <div className="p-2.5 rounded-xl bg-black/40 border border-sky-500/25 space-y-1">
+                    <div className="flex items-center justify-between text-sky-400 font-semibold text-[11px]">
+                      <span className="flex items-center gap-1">
+                        <Smartphone className="w-3.5 h-3.5" /> UPI Amount
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curC = parseFloat(splitCashAmount) || 0;
+                          const rem = Math.max(0, grandTotal - curC);
+                          setSplitUpiAmount(String(Math.round(rem * 100) / 100));
+                        }}
+                        className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded font-bold transition-all"
+                      >
+                        Auto
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 font-mono text-xs">₹</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={splitUpiAmount}
+                        onChange={(e) => handleSplitUpiChange(e.target.value)}
+                        className="w-full pl-6 pr-2 py-1.5 bg-stone-950 border border-stone-700 rounded-lg text-white font-mono text-sm font-bold focus:outline-none focus:border-sky-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Balance validation bar */}
+                <div className={`p-2.5 rounded-xl text-[11px] font-medium flex items-center justify-between border transition-all ${
+                  isSplitBalanced
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : splitDifference > 0
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                }`}>
+                  <div className="flex items-center gap-1.5">
+                    {isSplitBalanced ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>✅ Balanced: Cash ₹{Number(splitCashAmount) || 0} + UPI ₹{Number(splitUpiAmount) || 0} = ₹{grandTotal}</span>
+                      </>
+                    ) : splitDifference > 0 ? (
+                      <>
+                        <AlertOctagon className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>₹{splitDifference.toFixed(2)} remaining to balance bill</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertOctagon className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>Overpaid by ₹{Math.abs(splitDifference).toFixed(2)}</span>
+                      </>
+                    )}
+                  </div>
+                  {!isSplitBalanced && splitDifference > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const curU = parseFloat(splitUpiAmount) || 0;
+                        setSplitUpiAmount(String(Math.round((curU + splitDifference) * 100) / 100));
+                      }}
+                      className="text-[10px] px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold rounded transition-all"
+                    >
+                      Fill into UPI
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Room Selection Dropdown if room-folio */}
             {settlePaymentMethod === 'room-folio' && (
@@ -2636,12 +2872,22 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </button>
               <button
                 type="button"
-                disabled={isSubmittingSettlement}
+                disabled={isSubmittingSettlement || (settlePaymentMethod === 'split' && !isSplitBalanced)}
                 onClick={handleConfirmSettlement}
-                className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className={`flex-1 py-3 font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5 ${
+                  isSubmittingSettlement || (settlePaymentMethod === 'split' && !isSplitBalanced)
+                    ? 'bg-stone-800 text-stone-500 border border-stone-700 cursor-not-allowed opacity-60'
+                    : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white shadow-emerald-950/50'
+                }`}
               >
                 <CheckCircle className="w-4 h-4" />
-                <span>{isSubmittingSettlement ? 'Saving to DB...' : 'Confirm & Settle'}</span>
+                <span>
+                  {isSubmittingSettlement
+                    ? 'Saving to DB...'
+                    : settlePaymentMethod === 'split' && !isSplitBalanced
+                    ? 'Balance Split to Settle'
+                    : 'Confirm & Settle'}
+                </span>
               </button>
             </div>
           </div>
@@ -3671,6 +3917,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1">
                               <Ban className="w-3 h-3" />
                               <span>CANCELLED</span>
+                            </span>
+                          ) : b.paymentMethod === 'split' ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              SPLIT (Cash ₹{b.paymentDetails?.cashAmount || 0} + UPI ₹{b.paymentDetails?.upiAmount || 0})
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">

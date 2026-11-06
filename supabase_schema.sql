@@ -36,6 +36,7 @@ ALTER TABLE bills ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'settled';
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_by TEXT;
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_details JSONB DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS idx_bills_date_str ON bills(date_str);
 CREATE INDEX IF NOT EXISTS idx_bills_department ON bills(department);

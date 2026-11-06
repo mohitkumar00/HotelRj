@@ -322,7 +322,12 @@ export async function fetchAnalytics(
         }
 
         const pm = (b.payment_method || 'cash').toLowerCase();
-        if (pm.includes('upi')) paymentSplit.upi += total;
+        if (pm === 'split') {
+          const details = b.payment_details || {};
+          paymentSplit.cash += Number(details.cashAmount) || 0;
+          paymentSplit.upi += Number(details.upiAmount) || 0;
+          paymentSplit.card += Number(details.cardAmount) || 0;
+        } else if (pm.includes('upi')) paymentSplit.upi += total;
         else if (pm.includes('card')) paymentSplit.card += total;
         else if (pm.includes('room')) paymentSplit.roomFolio += total;
         else paymentSplit.cash += total;
@@ -506,6 +511,7 @@ export async function settleBill(payload: SettleBillPayload): Promise<boolean> {
       discount: payload.discount || 0,
       total: payload.total || 0,
       payment_method: payload.paymentMethod || 'cash',
+      payment_details: payload.paymentDetails || {},
       items: payload.items || [],
       date_str: dateStr,
       timestamp,
@@ -684,6 +690,7 @@ export async function fetchRecentBills(limit: number = 60): Promise<Array<any>> 
           discount: Number(b.discount) || 0,
           total: Number(b.total) || 0,
           paymentMethod: b.payment_method,
+          paymentDetails: b.payment_details || undefined,
           items: Array.isArray(b.items) ? b.items : [],
           timestamp: b.timestamp,
           dateStr: b.date_str || (b.timestamp ? b.timestamp.split('T')[0] : ''),

@@ -325,6 +325,7 @@ class SupabaseCloudSync {
             discount: Number(b.discount) || 0,
             total: Number(b.total) || 0,
             payment_method: b.paymentMethod || 'cash',
+            payment_details: b.paymentDetails || {},
             items: b.items || [],
             date_str: b.dateStr || '',
             timestamp: b.timestamp || new Date().toISOString(),

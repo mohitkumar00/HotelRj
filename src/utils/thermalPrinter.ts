@@ -478,6 +478,15 @@ export function generateBillHtml(data: BillPrintData): string {
       <span>TOTAL:</span>
       <span>₹${data.grandTotal.toFixed(2)}</span>
     </div>
+    ${
+      data.paymentMode
+        ? `
+    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px;">
+      <span>Paid via:</span>
+      <span style="font-weight: bold;">${data.paymentMode}</span>
+    </div>`
+        : ''
+    }
     <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
     <div style="text-align: center; margin-top: 6px; font-size: 10px;">
       <strong>Scan & Pay via UPI:</strong><br/>
@@ -611,6 +620,10 @@ function generateBillEscPos(data: BillPrintData): Uint8Array {
   s += `${CMD.DOUBLE_ON}${line32('TOTAL:', `Rs.${data.grandTotal.toFixed(2)}`, 16)}${CMD.DOUBLE_OFF}`;
   s += CMD.BOLD_OFF;
   s += '================================\n';
+  if (data.paymentMode) {
+    s += line32('Paid via:', data.paymentMode);
+    s += '--------------------------------\n';
+  }
 
   s += CMD.ALIGN_CENTER;
   s += 'Pay via UPI: hotelrj.info@okaxis\n';
