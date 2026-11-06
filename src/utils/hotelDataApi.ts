@@ -63,6 +63,11 @@ function getApiBaseUrl(): string {
     if (window.location.origin.includes(`:${SYNC_SERVER_PORT}`)) {
       return window.location.origin;
     }
+    // In public web browsers on HTTPS (like Vercel / GitHub Pages) without a manually configured local sync IP,
+    // do not attempt http://127.0.0.1 (blocked by modern browsers as Mixed Content).
+    if (window.location.protocol === 'https:') {
+      return '';
+    }
   }
   return `http://127.0.0.1:${SYNC_SERVER_PORT}`;
 }
@@ -85,18 +90,20 @@ export async function fetchMenuApi(): Promise<MenuCategory[]> {
   }
 
   // 2. HTTP Server API (Waiter Android Wi-Fi)
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/menu`, { signal: AbortSignal.timeout(3000) });
-    if (res.ok) {
-      const json = await res.json();
-      if (json && Array.isArray(json.menu) && json.menu.length > 0) {
-        localStorage.setItem('hotel_rj_menu_cache', JSON.stringify(json.menu));
-        return json.menu;
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/menu`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.menu) && json.menu.length > 0) {
+          localStorage.setItem('hotel_rj_menu_cache', JSON.stringify(json.menu));
+          return json.menu;
+        }
       }
+    } catch {
+      // Sync server might not be running or client is on mobile data
     }
-  } catch {
-    // Sync server might not be running or client is on mobile data
   }
 
   // 3. Supabase Cloud API (For Guest QR Menu Scans on 4G/5G)
@@ -213,19 +220,21 @@ export async function toggleDishAvailabilityApi(
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/menu/toggle-availability`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dishId, isAvailable }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/menu/toggle-availability`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dishId, isAvailable }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] toggleDishAvailability HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] toggleDishAvailability HTTP error:', err);
   }
 
   // 3. Supabase Cloud API Fallback
@@ -270,19 +279,21 @@ export async function saveDishApi(dishData: Partial<MenuItem> & { categoryId?: s
     }
   }
 
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/menu/dish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dish: dishData }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/menu/dish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dish: dishData }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] saveDish HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] saveDish HTTP error:', err);
   }
 
   // Supabase Cloud API Fallback
@@ -346,19 +357,21 @@ export async function deleteDishApi(dishId: string): Promise<{ success: boolean 
     }
   }
 
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/menu/dish/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dishId }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/menu/dish/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dishId }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] deleteDish HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] deleteDish HTTP error:', err);
   }
 
   // Supabase Cloud API Fallback
@@ -394,17 +407,19 @@ export async function fetchRoomsApi(): Promise<HotelRoomRecord[]> {
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/rooms`, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const json = await res.json();
-      if (json && Array.isArray(json.rooms) && json.rooms.length > 0) {
-        localStorage.setItem('hotel_rj_rooms_cache', JSON.stringify(json.rooms));
-        return json.rooms;
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/rooms`, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.rooms) && json.rooms.length > 0) {
+          localStorage.setItem('hotel_rj_rooms_cache', JSON.stringify(json.rooms));
+          return json.rooms;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   // 3. Supabase Cloud API Fallback
   try {
@@ -470,19 +485,21 @@ export async function updateRoomStatusApi(
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/rooms/status`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId, status, guestDetails }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/rooms/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, status, guestDetails }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] updateRoomStatus HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] updateRoomStatus HTTP error:', err);
   }
 
   // 3. Supabase Cloud API Fallback
@@ -544,19 +561,21 @@ export async function saveRoomApi(roomData: Partial<HotelRoomRecord>): Promise<{
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/rooms`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room: roomData }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room: roomData }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] saveRoom HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] saveRoom HTTP error:', err);
   }
 
   // 3. Supabase Cloud API Fallback
@@ -622,19 +641,21 @@ export async function deleteRoomApi(roomId: string): Promise<{ success: boolean 
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/rooms/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roomId }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/rooms/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] deleteRoom HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] deleteRoom HTTP error:', err);
   }
 
   // 3. Supabase Cloud API Fallback
@@ -670,17 +691,19 @@ export async function fetchTablesConfigApi(): Promise<TableConfigItem[]> {
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/tables-config`, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const json = await res.json();
-      if (json && Array.isArray(json.tablesConfig) && json.tablesConfig.length > 0) {
-        localStorage.setItem('hotel_rj_tables_config_cache', JSON.stringify(json.tablesConfig));
-        return json.tablesConfig;
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/tables-config`, { signal: AbortSignal.timeout(4000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.tablesConfig) && json.tablesConfig.length > 0) {
+          localStorage.setItem('hotel_rj_tables_config_cache', JSON.stringify(json.tablesConfig));
+          return json.tablesConfig;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   // 3. Supabase Cloud API Fallback
   try {
@@ -730,19 +753,21 @@ export async function saveTableConfigApi(tableData: Partial<TableConfigItem>): P
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/tables-config`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ table: tableData }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/tables-config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: tableData }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] saveTableConfig HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] saveTableConfig HTTP error:', err);
   }
 
   // 3. Supabase Cloud API Fallback
@@ -796,19 +821,21 @@ export async function deleteTableConfigApi(tableId: string): Promise<{ success: 
   }
 
   // 2. HTTP Server API
-  try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/tables-config/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tableId }),
-      signal: AbortSignal.timeout(4000),
-    });
-    if (res.ok) {
-      return await res.json();
+  const base = getApiBaseUrl();
+  if (base) {
+    try {
+      const res = await fetch(`${base}/api/tables-config/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[HotelDataApi] deleteTableConfig HTTP error:', err);
     }
-  } catch (err) {
-    console.warn('[HotelDataApi] deleteTableConfig HTTP error:', err);
   }
 
   // 3. Supabase Cloud API Fallback

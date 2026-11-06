@@ -1,7 +1,7 @@
 // Client-side Analytics & Database API bridge
 import { DEFAULT_SUPABASE_URL } from './hotelDataApi';
 import { getSupabaseHeaders } from './deviceAuth';
-import { SUPABASE_ANON_KEY } from '../config';
+import { SUPABASE_ANON_KEY, STORAGE_KEYS } from '../config';
 
 export interface SettleBillPayload {
   id?: string;
@@ -174,14 +174,29 @@ export interface AnalyticsSummary {
 // Determine API Base URL
 function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  const savedSyncUrl = localStorage.getItem('hotel_rj_sync_server_url');
-  if (savedSyncUrl) {
-    return savedSyncUrl.replace(/\/+$/, '');
+  const savedSyncUrl = localStorage.getItem(STORAGE_KEYS.syncUrl) || localStorage.getItem('hotel_rj_sync_server_url');
+  if (savedSyncUrl && savedSyncUrl.trim()) {
+    let clean = savedSyncUrl.trim();
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = `http://${clean}`;
+    }
+    return clean.replace(/\/+$/, '');
   }
   if (window.location.port === '5050') {
     return '';
   }
+  // On public HTTPS web without a custom local sync URL, don't attempt http://127.0.0.1
+  if (window.location.protocol === 'https:') {
+    return '';
+  }
   return 'http://127.0.0.1:5050';
+}
+
+async function fetchHttpServer(endpoint: string, init?: RequestInit): Promise<Response | null> {
+  const base = getApiBaseUrl();
+  if (!base) return null;
+  const url = `${base}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  return fetch(url, init);
 }
 
 export async function fetchAnalytics(
@@ -202,15 +217,14 @@ export async function fetchAnalytics(
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
     const params = new URLSearchParams();
     if (options.period) params.set('period', options.period);
     if (options.department) params.set('department', options.department);
     if (options.year) params.set('year', options.year);
     if (options.month) params.set('month', options.month);
 
-    const res = await fetch(`${base}/api/analytics?${params.toString()}`);
-    if (res.ok) {
+    const res = await fetchHttpServer(`/api/analytics?${params.toString()}`);
+    if (res && res.ok) {
       const json = await res.json();
       if (json && json.analytics) return json.analytics;
     }
@@ -457,13 +471,12 @@ export async function settleBill(payload: SettleBillPayload): Promise<boolean> {
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/settle-bill`, {
+    const res = await fetchHttpServer('/api/settle-bill', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bill: payload }),
     });
-    if (res.ok) {
+    if (res && res.ok) {
       const json = await res.json();
       return !!json.success;
     }
@@ -524,13 +537,12 @@ export async function recordAuditLog(payload: AuditLogPayload): Promise<boolean>
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/audit-log`, {
+    const res = await fetchHttpServer('/api/audit-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ log: payload }),
     });
-    if (res.ok) {
+    if (res && res.ok) {
       const json = await res.json();
       return !!json.success;
     }
@@ -584,13 +596,14 @@ export async function cancelBillApi(payload: {
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/cancel-bill`, {
+    const res = await fetchHttpServer('/api/cancel-bill', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    return await res.json();
+    if (res && res.ok) {
+      return await res.json();
+    }
   } catch (err: any) {
     console.warn('[Analytics] HTTP cancelBill failed:', err);
   }
@@ -633,9 +646,8 @@ export async function fetchRecentBills(limit: number = 60): Promise<Array<any>> 
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/recent-bills?limit=${limit}`);
-    if (res.ok) {
+    const res = await fetchHttpServer(`/api/recent-bills?limit=${limit}`);
+    if (res && res.ok) {
       const data = await res.json();
       if (data?.bills) return data.bills;
     }
@@ -698,13 +710,12 @@ export async function addExpense(payload: ExpensePayload): Promise<boolean> {
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/expense`, {
+    const res = await fetchHttpServer('/api/expense', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ expense: payload }),
     });
-    if (res.ok) {
+    if (res && res.ok) {
       const json = await res.json();
       return !!json.success;
     }
@@ -753,13 +764,12 @@ export async function removeExpense(id: string): Promise<boolean> {
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/expense/delete`, {
+    const res = await fetchHttpServer('/api/expense/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
-    if (res.ok) {
+    if (res && res.ok) {
       const json = await res.json();
       return !!json.success;
     }
@@ -798,9 +808,8 @@ export async function exportDatabaseBackup(): Promise<{ success: boolean; csvCon
 
   // 2. HTTP Server API
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/export-backup`);
-    if (res.ok) {
+    const res = await fetchHttpServer('/api/export-backup');
+    if (res && res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
     }
@@ -837,9 +846,8 @@ export async function getCloudSyncConfig(): Promise<CloudSyncPublicConfig | null
   }
 
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/cloud-sync/status`);
-    if (res.ok) {
+    const res = await fetchHttpServer('/api/cloud-sync/status');
+    if (res && res.ok) {
       const json = await res.json();
       if (json && json.config) return json.config;
     }
@@ -876,16 +884,16 @@ export async function saveCloudSyncConfig(config: {
   }
 
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/cloud-sync/config`, {
+    const res = await fetchHttpServer('/api/cloud-sync/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config),
     });
-    return await res.json();
+    if (res && res.ok) return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+  return { success: false, error: 'Local server not reachable' };
 }
 
 export async function testCloudSyncConnection(
@@ -901,13 +909,12 @@ export async function testCloudSyncConnection(
   }
 
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/cloud-sync/test`, {
+    const res = await fetchHttpServer('/api/cloud-sync/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, key }),
     });
-    return await res.json();
+    if (res && res.ok) return await res.json();
   } catch (err: any) {
     console.warn('[CloudSync] HTTP testCloudConnection failed, testing directly:', err);
   }
@@ -948,10 +955,10 @@ export async function triggerCloudSyncNow(): Promise<{
   }
 
   try {
-    const base = getApiBaseUrl();
-    const res = await fetch(`${base}/api/cloud-sync/sync`, { method: 'POST' });
-    return await res.json();
+    const res = await fetchHttpServer('/api/cloud-sync/sync', { method: 'POST' });
+    if (res && res.ok) return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+  return { success: false };
 }
