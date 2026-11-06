@@ -22,6 +22,7 @@ import {
   Cloud,
   Database,
   Check,
+  Ban,
 } from 'lucide-react';
 import {
   fetchAnalytics,
@@ -37,6 +38,7 @@ import {
   CloudSyncPublicConfig,
 } from '../utils/analyticsApi';
 import { HOTEL_INFO } from '../data/hotelData';
+import { DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY } from '../utils/hotelDataApi';
 
 interface OwnerInsightsProps {
   onBack: () => void;
@@ -71,8 +73,8 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   // Cloud Sync state
   const [cloudConfig, setCloudConfig] = useState<CloudSyncPublicConfig | null>(null);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
-  const [inputSupabaseUrl, setInputSupabaseUrl] = useState<string>('');
-  const [inputSupabaseKey, setInputSupabaseKey] = useState<string>('');
+  const [inputSupabaseUrl, setInputSupabaseUrl] = useState<string>(() => DEFAULT_SUPABASE_URL);
+  const [inputSupabaseKey, setInputSupabaseKey] = useState<string>(() => DEFAULT_SUPABASE_ANON_KEY);
   const [testingCloud, setTestingCloud] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
   const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
@@ -282,6 +284,7 @@ ${analytics.paymentSplit.card > 0 ? `• Card/POS: ₹${analytics.paymentSplit.c
 
 🛡️ *ANTI-THEFT & VOID AUDIT:*
 • Voided Items: ${analytics.antiTheft.voidsCount} items (₹${analytics.antiTheft.voidAmount.toLocaleString('en-IN')})
+${analytics.antiTheft.cancelledBillsCount ? `• Cancelled Bills: ${analytics.antiTheft.cancelledBillsCount} bills (₹${(analytics.antiTheft.cancelledBillsAmount || 0).toLocaleString('en-IN')})\n` : ''}
 
 🏆 *TOP 5 RESTAURANT DISHES:*
 ${topDishesList || '• None recorded'}
@@ -786,11 +789,14 @@ _Saved permanently in Hotel RJ Database_`;
             </div>
             <div className="mt-3">
               <span className="text-2xl sm:text-3xl font-black text-rose-400 font-mono">
-                {analytics?.antiTheft.voidsCount || 0} Voids
+                {(analytics?.antiTheft.voidsCount || 0) + (analytics?.antiTheft.cancelledBillsCount || 0)} Audits
               </span>
               <div className="flex items-center justify-between text-xs text-stone-400 mt-2">
-                <span>Amount: ₹{(analytics?.antiTheft.voidAmount || 0).toLocaleString('en-IN')}</span>
-                <span className="text-[11px] text-stone-500">Tracked KOTs</span>
+                <span>
+                  {analytics?.antiTheft.voidsCount || 0} Voids (₹{(analytics?.antiTheft.voidAmount || 0).toLocaleString('en-IN')})
+                  {analytics?.antiTheft.cancelledBillsCount ? ` • ${analytics.antiTheft.cancelledBillsCount} Cancelled (₹${(analytics.antiTheft.cancelledBillsAmount || 0).toLocaleString('en-IN')})` : ''}
+                </span>
+                <span className="text-[11px] text-stone-500">Tracked</span>
               </div>
             </div>
           </div>
@@ -1072,6 +1078,7 @@ _Saved permanently in Hotel RJ Database_`;
                 <thead>
                   <tr className="border-b border-stone-800 text-stone-400 uppercase tracking-wider text-[10px]">
                     <th className="py-2.5 px-3">Bill #</th>
+                    <th className="py-2.5 px-3">Status</th>
                     <th className="py-2.5 px-3">Date & Time</th>
                     <th className="py-2.5 px-3">Department</th>
                     <th className="py-2.5 px-3">Table/Room</th>
@@ -1081,38 +1088,78 @@ _Saved permanently in Hotel RJ Database_`;
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-800/60 font-mono">
-                  {analytics.recentBills.map((bill) => (
-                    <tr key={bill.id} className="hover:bg-stone-800/30 transition-colors">
-                      <td className="py-2.5 px-3 text-stone-400 font-sans font-bold">#{bill.billNumber}</td>
-                      <td className="py-2.5 px-3 text-stone-400 font-sans">
-                        {new Date(bill.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
-                        {new Date(bill.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="py-2.5 px-3 font-sans">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
-                            bill.department === 'rooms'
-                              ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
-                              : bill.department === 'banquet'
-                              ? 'bg-purple-500/10 text-purple-300 border-purple-500/30'
-                              : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
-                          }`}
-                        >
-                          {bill.department || 'restaurant'}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-gold-300 font-bold font-sans">{bill.tableId}</td>
-                      <td className="py-2.5 px-3 text-stone-300 font-sans">
-                        {bill.items.reduce((s, it) => s + (it.quantity || 1), 0)} items
-                      </td>
-                      <td className="py-2.5 px-3 font-sans">
-                        <span className="uppercase text-[10px] font-bold px-2 py-0.5 rounded bg-stone-800 text-stone-300">
-                          {bill.paymentMethod}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-emerald-400 font-bold">₹{bill.total.toLocaleString('en-IN')}</td>
-                    </tr>
-                  ))}
+                  {analytics.recentBills.map((bill) => {
+                    const isCancelled = bill.status === 'cancelled';
+                    return (
+                      <tr
+                        key={bill.id}
+                        className={`transition-colors ${
+                          isCancelled ? 'bg-rose-950/20 text-stone-400' : 'hover:bg-stone-800/30'
+                        }`}
+                      >
+                        <td className="py-2.5 px-3 text-stone-400 font-sans font-bold">
+                          #{bill.billNumber}
+                        </td>
+                        <td className="py-2.5 px-3 font-sans">
+                          {isCancelled ? (
+                            <span
+                              className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1 w-fit"
+                              title={`Reason: ${bill.cancelReason || 'Not specified'}`}
+                            >
+                              <Ban className="w-2.5 h-2.5" />
+                              <span>CANCELLED</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                              SETTLED
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-stone-400 font-sans">
+                          {new Date(bill.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
+                          {new Date(bill.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="py-2.5 px-3 font-sans">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border ${
+                              bill.department === 'rooms'
+                                ? 'bg-sky-500/10 text-sky-300 border-sky-500/30'
+                                : bill.department === 'banquet'
+                                ? 'bg-purple-500/10 text-purple-300 border-purple-500/30'
+                                : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                            }`}
+                          >
+                            {bill.department || 'restaurant'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-gold-300 font-bold font-sans">{bill.tableId}</td>
+                        <td className="py-2.5 px-3 text-stone-300 font-sans">
+                          {(bill.items || []).reduce((s: number, it: any) => s + (it.quantity || 1), 0)} items
+                        </td>
+                        <td className="py-2.5 px-3 font-sans">
+                          <span className="uppercase text-[10px] font-bold px-2 py-0.5 rounded bg-stone-800 text-stone-300">
+                            {bill.paymentMethod}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 font-bold">
+                          {isCancelled ? (
+                            <div className="flex flex-col">
+                              <span className="line-through text-stone-500">
+                                ₹{bill.total.toLocaleString('en-IN')}
+                              </span>
+                              <span className="text-[10px] font-sans font-normal text-rose-400 italic">
+                                {bill.cancelReason || 'Voided'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-emerald-400">
+                              ₹{bill.total.toLocaleString('en-IN')}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1445,22 +1492,14 @@ _Saved permanently in Hotel RJ Database_`;
               <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-3 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-gold-400 font-bold text-xs">
                   <Database className="w-3.5 h-3.5" />
-                  <span>Quick Setup Guide (100% Free Forever)</span>
+                  <span>Cloud Database Status: Active &amp; Pre-configured</span>
                 </div>
-                <ol className="list-decimal list-inside space-y-1 text-[11px] text-stone-400 leading-relaxed">
-                  <li>
-                    Create a free project at <span className="text-emerald-400 font-medium">supabase.com</span>.
-                  </li>
-                  <li>
-                    In Supabase, open the <strong className="text-stone-300">SQL Editor</strong> and paste the contents of <code className="text-stone-300 bg-stone-900 px-1 py-0.5 rounded">supabase_schema.sql</code> (located in the app folder).
-                  </li>
-                  <li>
-                    Click <strong className="text-emerald-400">Run</strong> to create tables, indexes, and cloud permissions.
-                  </li>
-                  <li>
-                    Copy your <strong className="text-stone-300">Project URL</strong> and <strong className="text-stone-300">anon public key</strong> into the boxes above and click <strong className="text-stone-300">Save &amp; Enable Sync</strong>.
-                  </li>
-                </ol>
+                <p className="text-[11px] text-stone-300 leading-relaxed">
+                  Your Supabase cloud database is pre-configured with project <code className="text-emerald-400 font-mono">kupbuusakxvsfprwdpbr</code>. All 6 tables (<span className="text-stone-200">bills, audit_logs, expenses, menu_items, rooms, tables_config</span>) are synchronized in real-time.
+                </p>
+                <p className="text-[11px] text-stone-400">
+                  You can click <strong className="text-emerald-400">Sync All Records Now</strong> anytime to trigger an immediate force sync, or enter custom credentials if migrating to another Supabase project.
+                </p>
               </div>
 
               {/* Action Buttons */}

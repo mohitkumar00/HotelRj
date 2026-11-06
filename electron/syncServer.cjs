@@ -390,6 +390,44 @@ class LocalSyncServer {
         return;
       }
 
+      // POST /api/cancel-bill (Void settled bill with reason & staff identity)
+      if (req.method === 'POST' && url.pathname === '/api/cancel-bill') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const { billId, reason, cancelledBy } = data;
+            const result = db.cancelBill(billId, reason, cancelledBy || clientIp);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            logger.error('SyncServer', 'Failed to cancel bill', err);
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // GET /api/recent-bills
+      if (req.method === 'GET' && url.pathname === '/api/recent-bills') {
+        const limit = Number(url.searchParams.get('limit')) || 60;
+        try {
+          const bills = db.getRecentBills(limit);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, bills }));
+        } catch (err) {
+          logger.error('SyncServer', 'Failed to get recent bills', err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+        return;
+      }
+
       // POST /api/audit-log (Anti-theft void / cancellation / discount tracking)
       if (req.method === 'POST' && url.pathname === '/api/audit-log') {
         let body = '';
@@ -467,6 +505,202 @@ class LocalSyncServer {
       if (req.method === 'GET' && url.pathname === '/api/bills') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, bills: db.data.settledBills.slice(0, 50) }));
+        return;
+      }
+
+      // -------------------------------------------------------------
+      // Hotel Operations REST API (Dishes, Rooms & Tables Config)
+      // -------------------------------------------------------------
+
+      // GET /api/menu
+      if (req.method === 'GET' && url.pathname === '/api/menu') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, menu: db.getMenu() }));
+        return;
+      }
+
+      // POST /api/menu/toggle-availability
+      if (req.method === 'POST' && url.pathname === '/api/menu/toggle-availability') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = db.toggleDishAvailability(data.dishId, data.isAvailable);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // POST /api/menu/dish (Add or Edit Dish)
+      if (req.method === 'POST' && url.pathname === '/api/menu/dish') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = db.saveDish(data.dish || data);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // DELETE or POST /api/menu/dish/delete
+      if ((req.method === 'DELETE' || req.method === 'POST') && (url.pathname === '/api/menu/dish/delete' || url.pathname === '/api/menu/dish')) {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const dishId = data.dishId || data.id || url.searchParams.get('id');
+            const result = db.deleteDish(dishId);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // GET /api/rooms
+      if (req.method === 'GET' && url.pathname === '/api/rooms') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, rooms: db.getRooms() }));
+        return;
+      }
+
+      // POST /api/rooms/status
+      if (req.method === 'POST' && url.pathname === '/api/rooms/status') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = db.updateRoomStatus(data.roomId, data.status, data.guestDetails);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // POST /api/rooms (Save or update room)
+      if (req.method === 'POST' && url.pathname === '/api/rooms') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = db.saveRoom(data.room || data);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // DELETE or POST /api/rooms/delete
+      if ((req.method === 'DELETE' || req.method === 'POST') && (url.pathname === '/api/rooms/delete')) {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const roomId = data.roomId || data.id || url.searchParams.get('id');
+            const result = db.deleteRoom(roomId);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // GET /api/tables-config
+      if (req.method === 'GET' && url.pathname === '/api/tables-config') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, tablesConfig: db.getTablesConfig() }));
+        return;
+      }
+
+      // POST /api/tables-config
+      if (req.method === 'POST' && url.pathname === '/api/tables-config') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = db.saveTableConfig(data.table || data);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // DELETE /api/tables-config/delete
+      if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/tables-config/delete') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const tableId = data.tableId || data.id || url.searchParams.get('id');
+            const result = db.deleteTableConfig(tableId);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
         return;
       }
 

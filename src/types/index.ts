@@ -69,6 +69,7 @@ export type DietaryType = 'veg' | 'non-veg' | 'egg';
 export interface MenuItem {
   id: string;
   name: string;
+  hindiName?: string;
   price: number | string;
   dietary: DietaryType;
   category: string;
@@ -76,6 +77,34 @@ export interface MenuItem {
   image?: string;
   description?: string;
   isCustom?: boolean;
+  isAvailable?: boolean; // Kitchen "86" Sold Out tracking
+  spicyLevel?: 'mild' | 'medium' | 'spicy';
+  preparationTime?: string;
+}
+
+export interface HotelRoomRecord {
+  id: string;
+  name: string;
+  tier: 'deluxe' | 'executive' | 'family';
+  pricePerNight: number;
+  status: 'available' | 'occupied' | 'dirty' | 'maintenance';
+  maxGuests: number;
+  bedType: string;
+  guestName?: string;
+  checkInDate?: string;
+  checkOutDate?: string;
+  folioAmount?: number;
+  notes?: string;
+  updatedAt?: number;
+}
+
+export interface TableConfigItem {
+  id: string;
+  name: string;
+  section: 'dining' | 'parcel' | 'lawn' | 'banquet';
+  capacity: number;
+  isActive: boolean;
+  sortOrder: number;
 }
 
 export interface MenuCategory {

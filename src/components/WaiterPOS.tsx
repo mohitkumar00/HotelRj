@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { MENU_CATEGORIES } from '../data/menuData';
-import { MenuItem, DietaryType } from '../types';
+import { MenuItem, DietaryType, MenuCategory, TableConfigItem } from '../types';
 import {
   BluetoothPrinter,
   KOTPrintData,
@@ -42,10 +42,24 @@ import {
   CreditCard,
   Building2,
   CheckCircle,
+  Receipt,
+  Ban,
+  KeyRound,
+  AlertOctagon,
+  Sliders,
+  AlertTriangle,
 } from 'lucide-react';
 import { parseItemPrice } from '../utils/priceUtils';
 import { OwnerInsights } from './OwnerInsights';
-import { settleBill, recordAuditLog, SettleBillPayload } from '../utils/analyticsApi';
+import { HotelOperationsModal } from './HotelOperationsModal';
+import { fetchMenuApi, fetchTablesConfigApi } from '../utils/hotelDataApi';
+import {
+  settleBill,
+  recordAuditLog,
+  cancelBillApi,
+  fetchRecentBills,
+  SettleBillPayload,
+} from '../utils/analyticsApi';
 
 interface WaiterItemRecord {
   item: MenuItem;
@@ -648,6 +662,160 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [voidReason, setVoidReason] = useState('Customer cancelled after delay');
   const [customVoidReason, setCustomVoidReason] = useState('');
 
+  // Bills History & Cancellation Modal State
+  const [isBillsHistoryOpen, setIsBillsHistoryOpen] = useState(false);
+  const [recentBillsList, setRecentBillsList] = useState<any[]>([]);
+  const [loadingBills, setLoadingBills] = useState(false);
+  const [billsSearchTerm, setBillsSearchTerm] = useState('');
+  const [billsFilterStatus, setBillsFilterStatus] = useState<'all' | 'settled' | 'cancelled'>('all');
+
+  // Cancel Bill Modal State
+  const [billToCancel, setBillToCancel] = useState<any | null>(null);
+  const [cancelPin, setCancelPin] = useState('');
+  const [cancelPinError, setCancelPinError] = useState(false);
+  const [cancelReasonPreset, setCancelReasonPreset] = useState('Entered Wrong Table / Duplicate');
+  const [customCancelReason, setCustomCancelReason] = useState('');
+  const [isCancellingBill, setIsCancellingBill] = useState(false);
+
+  // Hotel Operations Modal State (Dishes, Kitchen 86 Sold-Out, Rooms & Tables)
+  const [isHotelOpsOpen, setIsHotelOpsOpen] = useState(false);
+  const [liveMenuCategories, setLiveMenuCategories] = useState<MenuCategory[]>(() => {
+    try {
+      const cached = localStorage.getItem('hotel_rj_menu_cache');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return MENU_CATEGORIES;
+  });
+  const [tablesConfigList, setTablesConfigList] = useState<TableConfigItem[]>([]);
+
+  const loadHotelOpsData = useCallback(async () => {
+    try {
+      const [menu, tbls] = await Promise.all([
+        fetchMenuApi(),
+        fetchTablesConfigApi(),
+      ]);
+      if (menu && menu.length > 0) setLiveMenuCategories(menu);
+      if (tbls && tbls.length > 0) setTablesConfigList(tbls);
+    } catch (err) {
+      console.warn('Could not load hotel ops data:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHotelOpsData();
+  }, [loadHotelOpsData]);
+
+  const loadRecentBills = async () => {
+    setLoadingBills(true);
+    try {
+      const data = await fetchRecentBills(60);
+      setRecentBillsList(data || []);
+    } catch (e) {
+      console.warn('Failed to load recent bills:', e);
+    } finally {
+      setLoadingBills(false);
+    }
+  };
+
+  const filteredRecentBills = useMemo(() => {
+    let list = recentBillsList;
+    if (billsFilterStatus === 'settled') {
+      list = list.filter((b) => b.status !== 'cancelled');
+    } else if (billsFilterStatus === 'cancelled') {
+      list = list.filter((b) => b.status === 'cancelled');
+    }
+
+    if (billsSearchTerm.trim()) {
+      const q = billsSearchTerm.toLowerCase();
+      list = list.filter((b) => {
+        const bNum = String(b.billNumber || '').toLowerCase();
+        const tId = String(b.tableId || '').toLowerCase();
+        const dept = String(b.department || '').toLowerCase();
+        const phone = String(b.customerPhone || '').toLowerCase();
+        const dishes = (b.items || []).map((i: any) => i.name).join(' ').toLowerCase();
+        return bNum.includes(q) || tId.includes(q) || dept.includes(q) || phone.includes(q) || dishes.includes(q);
+      });
+    }
+
+    return list;
+  }, [recentBillsList, billsFilterStatus, billsSearchTerm]);
+
+  const handleReprintSettledBill = async (bill: any) => {
+    try {
+      const items = (bill.items || []).map((i: any) => ({
+        name: i.name,
+        quantity: Number(i.quantity) || 1,
+        price: Number(i.price) || 0,
+      }));
+
+      const printData: BillPrintData = {
+        billNumber: String(bill.billNumber || ''),
+        tableNumber: `${bill.tableId} [DUPLICATE]`,
+        serverName: bill.serverName || serverName,
+        timestamp: bill.timestamp
+          ? new Date(bill.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+          : new Date().toLocaleString(),
+        items,
+        subtotal: Number(bill.subtotal) || Number(bill.total) || 0,
+        gstRate: bill.tax ? 5 : 0,
+        grandTotal: Number(bill.total) || 0,
+        paymentMode: (bill.paymentMethod || 'cash').toUpperCase(),
+      };
+
+      const res = await BluetoothPrinter.printBill(printData);
+      if (res.success) {
+        setPrintSuccessMsg(`🖨️ Bill #${bill.billNumber} reprinted successfully!`);
+      } else {
+        setPrintSuccessMsg(`⚠️ Print note: ${res.error || 'Check printer connection'}`);
+      }
+      setTimeout(() => setPrintSuccessMsg(null), 3500);
+    } catch (err: any) {
+      alert(`Reprint error: ${err?.message || err}`);
+    }
+  };
+
+  const handleConfirmCancelBill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!billToCancel) return;
+
+    if (cancelPin !== '1234' && cancelPin !== '8888') {
+      setCancelPinError(true);
+      return;
+    }
+
+    const finalReason = (customCancelReason.trim() || cancelReasonPreset).trim();
+    if (!finalReason) {
+      alert('Please enter or select a cancellation reason.');
+      return;
+    }
+
+    setIsCancellingBill(true);
+    try {
+      const res = await cancelBillApi({
+        billId: billToCancel.id,
+        reason: finalReason,
+        cancelledBy: `${serverName} (PIN Authorized)`,
+      });
+
+      if (res.success) {
+        triggerHaptic(60);
+        setPrintSuccessMsg(`❌ Bill #${billToCancel.billNumber} (₹${billToCancel.total}) was CANCELLED and deducted from today's sales.`);
+        setTimeout(() => setPrintSuccessMsg(null), 4500);
+        setBillToCancel(null);
+        setCancelPin('');
+        setCancelPinError(false);
+        setCustomCancelReason('');
+        loadRecentBills();
+      } else {
+        alert(`Failed to cancel bill: ${res.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Error cancelling bill: ${err?.message || err}`);
+    } finally {
+      setIsCancellingBill(false);
+    }
+  };
+
   // Haptic feedback helper
   const triggerHaptic = (ms = 35) => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -721,6 +889,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   // Add / Increment Item on Active Table
   const handleAddItem = (item: MenuItem) => {
+    if (item.isAvailable === false) {
+      triggerHaptic(80);
+      alert(`⚠️ "${item.name}" is marked SOLD OUT (Kitchen 86) and cannot be ordered.`);
+      return;
+    }
     triggerHaptic(30);
     setTables((prev) => {
       const existingTable = prev[activeTable] || {
@@ -1168,23 +1341,24 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const filteredCategories = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return MENU_CATEGORIES.map((cat) => {
+    return liveMenuCategories.map((cat) => {
       if (selectedCategory !== 'all' && cat.id !== selectedCategory) {
         return null;
       }
 
-      const items = cat.items.filter((item) => {
+      const items = (cat.items || []).filter((item) => {
         if (selectedDietary !== 'all') {
           if (item.dietary !== selectedDietary) return false;
         }
 
         if (query) {
           const matchName = item.name.toLowerCase().includes(query);
+          const matchHindi = item.hindiName ? item.hindiName.toLowerCase().includes(query) : false;
           const matchPrice = String(item.price).includes(query);
           const acronym = item.name.split(/\s+/).map((w) => w[0]).join('').toLowerCase();
           const matchAcronym = acronym.includes(query);
 
-          if (!matchName && !matchPrice && !matchAcronym) return false;
+          if (!matchName && !matchHindi && !matchPrice && !matchAcronym) return false;
         }
 
         return true;
@@ -1196,28 +1370,36 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         ...cat,
         items,
       };
-    }).filter(Boolean) as typeof MENU_CATEGORIES;
-  }, [selectedCategory, selectedDietary, searchQuery]);
+    }).filter(Boolean) as MenuCategory[];
+  }, [liveMenuCategories, selectedCategory, selectedDietary, searchQuery]);
+
+  // Dynamic Table IDs list
+  const currentTableIds = useMemo(() => {
+    if (tablesConfigList.length > 0) {
+      return tablesConfigList.filter((t) => t.isActive).map((t) => t.id);
+    }
+    return ALL_TABLE_IDS;
+  }, [tablesConfigList]);
 
   // Filtered Table IDs list
   const filteredTables = useMemo(() => {
     if (tableFilter === 'dinein') {
-      return ALL_TABLE_IDS.filter((t) => t.startsWith('T-'));
+      return currentTableIds.filter((t) => t.startsWith('T-'));
     }
     if (tableFilter === 'takeaway') {
-      return ALL_TABLE_IDS.filter((t) => t.toLowerCase().includes('parcel') || t.toLowerCase().includes('takeaway'));
+      return currentTableIds.filter((t) => t.toLowerCase().includes('parcel') || t.toLowerCase().includes('takeaway'));
     }
     if (tableFilter === 'rooms') {
-      return ALL_TABLE_IDS.filter((t) => t.startsWith('Room'));
+      return currentTableIds.filter((t) => t.toLowerCase().startsWith('room'));
     }
     if (tableFilter === 'active') {
-      return ALL_TABLE_IDS.filter((t) => {
+      return currentTableIds.filter((t) => {
         const order = tables[t];
         return order && Object.keys(order.items || {}).length > 0;
       });
     }
-    return ALL_TABLE_IDS;
-  }, [tableFilter, tables]);
+    return currentTableIds;
+  }, [tableFilter, currentTableIds, tables]);
 
   if (showOwnerInsights) {
     return <OwnerInsights onBack={() => setShowOwnerInsights(false)} serverUrl={syncInfo?.localUrl} />;
@@ -1377,6 +1559,31 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   {logs.length}
                 </span>
               )}
+            </button>
+
+            {/* Bills History & Void Management Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsBillsHistoryOpen(true);
+                loadRecentBills();
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 active:scale-95 transition-all shadow-sm"
+              title="Recent Bills, Reprints & Anti-Theft Cancellations"
+            >
+              <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[10px] hidden xs:inline">Bills History</span>
+            </button>
+
+            {/* Hotel Operations & Inventory Modal Button */}
+            <button
+              type="button"
+              onClick={() => setIsHotelOpsOpen(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 text-xs font-semibold flex items-center gap-1.5 border border-purple-500/30 active:scale-95 transition-all shadow-sm"
+              title="Manage Dishes, Kitchen 86 Sold-Out, Rooms & Tables"
+            >
+              <Sliders className="w-3.5 h-3.5 text-purple-400" />
+              <span className="text-[10px] hidden xs:inline">Menu & Rooms</span>
             </button>
 
             {/* Owner Insights & Anti-Theft Analytics Button */}
@@ -1592,7 +1799,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             >
               All Items
             </button>
-            {MENU_CATEGORIES.map((cat) => (
+            {liveMenuCategories.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
@@ -1650,12 +1857,15 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   const record = currentOrder.items[dish.id];
                   const inCartQty = record?.quantity || 0;
                   const priceNum = parseItemPrice(dish.price);
+                  const isSoldOut = dish.isAvailable === false;
 
                   return (
                     <div
                       key={dish.id}
                       className={`relative p-2 rounded-2xl border transition-all flex flex-col justify-between select-none overflow-hidden ${
-                        inCartQty > 0
+                        isSoldOut
+                          ? 'bg-rose-950/20 border-rose-900/60 opacity-80'
+                          : inCartQty > 0
                           ? 'bg-[#181a24] border-amber-400 shadow-lg ring-1 ring-amber-400/40'
                           : 'bg-zinc-900/80 border-white/10 hover:border-white/20'
                       }`}
@@ -1665,27 +1875,33 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                         <img
                           src={dish.image || './images/food/hero-veg-starters.jpg'}
                           alt={dish.name}
-                          className="w-full h-full object-cover"
+                          className={`w-full h-full object-cover ${isSoldOut ? 'grayscale contrast-125' : ''}`}
                           loading="lazy"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src = './images/food/hero-veg-starters.jpg';
                           }}
                         />
 
-                        {/* Overlay Dietary Dot */}
-                        <span
-                          className={`absolute top-1.5 left-1.5 w-4 h-4 rounded border flex items-center justify-center p-0.5 shadow-md ${
-                            dish.dietary === 'veg'
-                              ? 'border-emerald-600 bg-white'
-                              : 'border-rose-600 bg-white'
-                          }`}
-                        >
+                        {/* Sold Out Red Banner or Dietary Dot */}
+                        {isSoldOut ? (
+                          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider shadow z-10 animate-pulse">
+                            [SOLD OUT]
+                          </span>
+                        ) : (
                           <span
-                            className={`w-2 h-2 rounded-full ${
-                              dish.dietary === 'veg' ? 'bg-emerald-600' : 'bg-rose-600'
+                            className={`absolute top-1.5 left-1.5 w-4 h-4 rounded border flex items-center justify-center p-0.5 shadow-md ${
+                              dish.dietary === 'veg'
+                                ? 'border-emerald-600 bg-white'
+                                : 'border-rose-600 bg-white'
                             }`}
-                          />
-                        </span>
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                dish.dietary === 'veg' ? 'bg-emerald-600' : 'bg-rose-600'
+                              }`}
+                            />
+                          </span>
+                        )}
 
                         {/* Custom Service Tag */}
                         {dish.isCustom && (
@@ -1729,7 +1945,19 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
                       {/* Stepper Buttons */}
                       <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between gap-1">
-                        {inCartQty > 0 ? (
+                        {isSoldOut ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerHaptic(80);
+                              alert(`⚠️ "${dish.name}" is marked SOLD OUT (Kitchen 86).`);
+                            }}
+                            className="w-full py-1.5 px-2 rounded-xl bg-rose-950/60 text-rose-300 text-xs font-bold flex items-center justify-center gap-1 border border-rose-800/80 cursor-not-allowed"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                            <span>[SOLD OUT]</span>
+                          </button>
+                        ) : inCartQty > 0 ? (
                           <>
                             <button
                               type="button"
@@ -3321,6 +3549,402 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           </div>
         </div>
       )}
+
+      {/* 9E. RECENT BILLS HISTORY & VOID MANAGER MODAL */}
+      {isBillsHistoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-3xl bg-stone-900 border border-gold-500/30 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[92vh] text-white">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <span>Recent Bills &amp; Sales History</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 font-mono">
+                      {recentBillsList.length} Total
+                    </span>
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    Reprint duplicate bills or cancel voided orders with manager authorization
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={loadRecentBills}
+                  disabled={loadingBills}
+                  className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 transition-all active:scale-95 disabled:opacity-50"
+                  title="Refresh bills list"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingBills ? 'animate-spin text-gold-400' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBillsHistoryOpen(false)}
+                  className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="py-3 flex flex-col sm:flex-row gap-2 shrink-0 border-b border-stone-800/80">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
+                <input
+                  type="text"
+                  placeholder="Search by Bill #, table, phone, or dish..."
+                  value={billsSearchTerm}
+                  onChange={(e) => setBillsSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-xs text-white placeholder-stone-500 focus:outline-none focus:border-gold-400"
+                />
+              </div>
+
+              {/* Status Filter Tabs */}
+              <div className="flex items-center gap-1 bg-stone-950 p-1 rounded-xl border border-stone-800 text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setBillsFilterStatus('all')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                    billsFilterStatus === 'all'
+                      ? 'bg-gold-500 text-black shadow-sm font-bold'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  All ({recentBillsList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillsFilterStatus('settled')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                    billsFilterStatus === 'settled'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  🟢 Settled ({recentBillsList.filter((b) => b.status !== 'cancelled').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillsFilterStatus('cancelled')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                    billsFilterStatus === 'cancelled'
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold'
+                      : 'text-stone-400 hover:text-white'
+                  }`}
+                >
+                  🔴 Cancelled ({recentBillsList.filter((b) => b.status === 'cancelled').length})
+                </button>
+              </div>
+            </div>
+
+            {/* Bills List Body */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-2.5 pr-1">
+              {loadingBills ? (
+                <div className="p-8 text-center text-stone-400 text-xs">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-gold-400" />
+                  Loading bills from database...
+                </div>
+              ) : filteredRecentBills.length === 0 ? (
+                <div className="p-10 text-center text-stone-400 border border-dashed border-stone-800 rounded-2xl">
+                  <Receipt className="w-8 h-8 mx-auto mb-2 text-stone-600" />
+                  <p className="text-sm font-bold text-stone-300">No matching bills found</p>
+                  <p className="text-xs text-stone-500 mt-1">
+                    When you settle a table or parcel, the bill will appear here permanently.
+                  </p>
+                </div>
+              ) : (
+                filteredRecentBills.map((b) => {
+                  const isCancelled = b.status === 'cancelled';
+                  return (
+                    <div
+                      key={b.id || b.billNumber}
+                      className={`p-3.5 rounded-2xl border transition-all ${
+                        isCancelled
+                          ? 'bg-stone-950/80 border-rose-500/30 opacity-80'
+                          : 'bg-stone-950 border-stone-800 hover:border-gold-500/40 shadow-sm'
+                      }`}
+                    >
+                      {/* Top Header of Card */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-800/80 pb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-sm text-gold-300">
+                            #{b.billNumber}
+                          </span>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-stone-800 text-stone-200">
+                            {b.tableId}
+                          </span>
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-stone-800/80 text-stone-400 border border-stone-700">
+                            {b.department || 'restaurant'}
+                          </span>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-stone-400">
+                            {b.timestamp
+                              ? new Date(b.timestamp).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
+                          </span>
+                          {isCancelled ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1">
+                              <Ban className="w-3 h-3" />
+                              <span>CANCELLED</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              {(b.paymentMethod || 'cash').toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Dishes summary */}
+                      <div className="py-2 text-xs text-stone-300 leading-relaxed">
+                        <div className="text-[11px] text-stone-400 line-clamp-2">
+                          {(b.items || [])
+                            .map((i: any) => `${i.quantity}x ${i.name}`)
+                            .join(', ') || 'No item details recorded'}
+                        </div>
+
+                        {/* Cancellation note banner */}
+                        {isCancelled && (
+                          <div className="mt-2 p-2 rounded-xl bg-rose-950/40 border border-rose-900/50 text-[11px] text-rose-300 flex items-start gap-1.5">
+                            <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold">Reason: </span>
+                              <span>{b.cancelReason || 'Not specified'}</span>
+                              <span className="text-stone-400 block text-[10px] mt-0.5">
+                                Cancelled by {b.cancelledBy || 'Cashier'} at{' '}
+                                {b.cancelledAt
+                                  ? new Date(b.cancelledAt).toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card Footer: Amount and Actions */}
+                      <div className="flex items-center justify-between pt-1 border-t border-stone-900">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[11px] text-stone-400">Total:</span>
+                          <span
+                            className={`font-mono font-bold text-base ${
+                              isCancelled
+                                ? 'line-through text-stone-500'
+                                : 'text-gold-200'
+                            }`}
+                          >
+                            ₹{b.total}
+                          </span>
+                          {isCancelled && (
+                            <span className="text-[10px] font-bold text-rose-400">
+                              (Deducted from sales)
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {/* Reprint Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleReprintSettledBill(b)}
+                            className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1 transition-all active:scale-95"
+                            title="Reprint customer bill"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-gold-400" />
+                            <span>Reprint</span>
+                          </button>
+
+                          {/* Cancel / Void Bill Button (only if active) */}
+                          {!isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBillToCancel(b);
+                                setCancelPin('');
+                                setCancelPinError(false);
+                                setCustomCancelReason('');
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-1 transition-all active:scale-95"
+                              title="Cancel / Void this bill (Manager PIN required)"
+                            >
+                              <Ban className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Cancel Bill</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Bottom Close */}
+            <div className="pt-3 border-t border-stone-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsBillsHistoryOpen(false)}
+                className="px-5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9F. CANCEL BILL AUTHORIZATION MODAL */}
+      {billToCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-stone-900 border border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-white">
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-stone-800 pb-3 text-rose-400">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
+                <AlertOctagon className="w-6 h-6 text-rose-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Cancel &amp; Void Bill #{billToCancel.billNumber}</h3>
+                <p className="text-xs text-rose-300">Manager Authorization Required</p>
+              </div>
+            </div>
+
+            {/* Bill Info Card */}
+            <div className="p-3 bg-stone-950 border border-rose-500/25 rounded-2xl space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-stone-400">Table / Room:</span>
+                <span className="font-bold text-white">{billToCancel.tableId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-400">Department:</span>
+                <span className="text-gold-300 font-bold uppercase">{billToCancel.department || 'restaurant'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-400">Payment Method:</span>
+                <span className="font-mono text-emerald-400 font-bold uppercase">{billToCancel.paymentMethod}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-stone-800/80">
+                <span className="text-stone-300 font-semibold">Amount to Deduct:</span>
+                <span className="font-mono text-rose-400 font-black text-base">₹{billToCancel.total}</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-stone-400 leading-relaxed">
+              ⚠️ <strong>Warning:</strong> Cancelling this bill will deduct <strong className="text-white">₹{billToCancel.total}</strong> from Gross Revenue and today&apos;s Cash Drawer. An anti-theft entry will be permanently logged.
+            </p>
+
+            <form onSubmit={handleConfirmCancelBill} className="space-y-3.5 text-xs">
+              {/* Manager PIN */}
+              <div>
+                <label className="block text-stone-300 font-semibold mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-gold-400" />
+                  <span>Enter Manager PIN (1234 or 8888):</span>
+                </label>
+                <input
+                  type="password"
+                  maxLength={6}
+                  placeholder="Enter 4-digit PIN"
+                  value={cancelPin}
+                  onChange={(e) => {
+                    setCancelPin(e.target.value);
+                    setCancelPinError(false);
+                  }}
+                  autoFocus
+                  className={`w-full py-2.5 px-3 bg-stone-950 border rounded-xl text-center font-mono tracking-widest text-lg text-white focus:outline-none ${
+                    cancelPinError ? 'border-rose-500 bg-rose-950/20' : 'border-stone-700 focus:border-gold-400'
+                  }`}
+                />
+                {cancelPinError && (
+                  <span className="text-[11px] text-rose-400 mt-1 block">
+                    ❌ Incorrect PIN. Only authorized managers can void bills.
+                  </span>
+                )}
+              </div>
+
+              {/* Cancellation Reason Presets */}
+              <div>
+                <label className="block text-stone-300 font-semibold mb-1.5">
+                  Mandatory Cancellation Reason:
+                </label>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {[
+                    'Entered Wrong Table / Duplicate',
+                    'Customer Dispute / Returned Food',
+                    'Customer Left Without Paying',
+                    'Wrong Dish Punched / Prepared',
+                    'Guest Changed Payment Method',
+                  ].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        setCancelReasonPreset(r);
+                        setCustomCancelReason('');
+                      }}
+                      className={`py-2 px-3 rounded-xl text-left border transition-all text-xs ${
+                        cancelReasonPreset === r && !customCancelReason
+                          ? 'bg-rose-500/20 text-rose-200 border-rose-500/50 font-bold'
+                          : 'bg-stone-950 text-stone-400 border-stone-800 hover:text-white'
+                      }`}
+                    >
+                      • {r}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-2">
+                  <input
+                    type="text"
+                    placeholder="Or type custom reason..."
+                    value={customCancelReason}
+                    onChange={(e) => setCustomCancelReason(e.target.value)}
+                    className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white text-xs focus:outline-none focus:border-rose-400"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setBillToCancel(null)}
+                  className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
+                >
+                  Keep Bill
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCancellingBill || !cancelPin.trim()}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>{isCancellingBill ? 'Voiding...' : 'Confirm Void'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Hotel Operations & Inventory Management Modal */}
+      <HotelOperationsModal
+        isOpen={isHotelOpsOpen}
+        onClose={() => setIsHotelOpsOpen(false)}
+        onDataChanged={() => loadHotelOpsData()}
+      />
     </div>
   );
 };

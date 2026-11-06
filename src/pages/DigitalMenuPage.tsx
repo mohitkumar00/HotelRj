@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MENU_CATEGORIES, TOTAL_MENU_ITEMS_COUNT } from '../data/menuData';
-import { DietaryType, MenuItem, CartItem } from '../types';
+import { DietaryType, MenuItem, CartItem, MenuCategory } from '../types';
 import { parseItemPrice } from '../utils/priceUtils';
 import { HOTEL_INFO } from '../data/hotelData';
 import { generateOrderPdf } from '../utils/orderPdfGenerator';
 import { InstagramIcon, FacebookIcon } from '../components/SocialIcons';
+import { fetchMenuApi } from '../utils/hotelDataApi';
 import {
   Search,
   X,
@@ -46,6 +47,23 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [viewMode, setViewMode] = useState<'cards' | 'compact'>('cards');
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Live Menu Categories from Database (Dishes + Kitchen 86 Sold-Out Status)
+  const [liveMenuCategories, setLiveMenuCategories] = useState<MenuCategory[]>(() => {
+    try {
+      const cached = localStorage.getItem('hotel_rj_menu_cache');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return MENU_CATEGORIES;
+  });
+
+  useEffect(() => {
+    fetchMenuApi()
+      .then((fresh) => {
+        if (fresh && fresh.length > 0) setLiveMenuCategories(fresh);
+      })
+      .catch(() => {});
+  }, []);
 
   // Cart / Order Selection State
   const [cart, setCart] = useState<{ [itemId: string]: CartItem }>(() => {
@@ -90,6 +108,13 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
 
   // Cart mutation helpers
   const addToCart = (item: MenuItem) => {
+    if (item.isAvailable === false) {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(80);
+      }
+      alert(`⚠️ Sorry! "${item.name}" is currently Sold Out (Kitchen 86). Please select another dish.`);
+      return;
+    }
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(35);
     }
@@ -148,12 +173,12 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
   const filteredCategories = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return MENU_CATEGORIES.map((cat) => {
+    return liveMenuCategories.map((cat) => {
       if (selectedCategory !== 'all' && cat.id !== selectedCategory) {
         return null;
       }
 
-      const items = cat.items.filter((item) => {
+      const items = (cat.items || []).filter((item) => {
         if (selectedDietary === 'popular') {
           if (!item.popular) return false;
         } else if (selectedDietary !== 'all') {
@@ -162,10 +187,11 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
 
         if (query) {
           const matchName = item.name.toLowerCase().includes(query);
+          const matchHindi = item.hindiName ? item.hindiName.toLowerCase().includes(query) : false;
           const matchPrice = String(item.price).includes(query);
           const acronym = item.name.split(/\s+/).map((w: string) => w[0]).join('').toLowerCase();
           const matchAcronym = acronym.includes(query);
-          if (!matchName && !matchPrice && !matchAcronym) return false;
+          if (!matchName && !matchHindi && !matchPrice && !matchAcronym) return false;
         }
 
         return true;
@@ -177,8 +203,8 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
         ...cat,
         items,
       };
-    }).filter(Boolean) as typeof MENU_CATEGORIES;
-  }, [selectedCategory, selectedDietary, searchQuery]);
+    }).filter(Boolean) as MenuCategory[];
+  }, [liveMenuCategories, selectedCategory, selectedDietary, searchQuery]);
 
   const totalFilteredCount = useMemo(() => {
     return filteredCategories.reduce((acc, cat) => acc + cat.items.length, 0);
@@ -543,7 +569,7 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
               All ({TOTAL_MENU_ITEMS_COUNT})
             </button>
 
-            {MENU_CATEGORIES.map((cat) => {
+            {liveMenuCategories.map((cat) => {
               const isSelected = selectedCategory === cat.id;
               return (
                 <button
@@ -640,11 +666,16 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                     {category.items.map((item) => {
                       const cartItem = cart[item.id];
                       const qty = cartItem ? cartItem.quantity : 0;
+                      const isSoldOut = item.isAvailable === false;
 
                       return (
                         <div
                           key={item.id}
-                          className="group rounded-xl sm:rounded-2xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-white/5 hover:border-gold-400/40 transition-all duration-200 overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md p-1.5 sm:p-2.5"
+                          className={`group rounded-xl sm:rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between shadow-xs hover:shadow-md p-1.5 sm:p-2.5 ${
+                            isSoldOut
+                              ? 'bg-rose-950/20 border-rose-900/40 opacity-80'
+                              : 'bg-zinc-900/60 hover:bg-zinc-800/80 border-white/5 hover:border-gold-400/40'
+                          }`}
                         >
                           {/* Square Thumbnail with overlays */}
                           <div className="relative aspect-square w-full rounded-lg sm:rounded-xl overflow-hidden bg-zinc-950">
@@ -653,7 +684,9 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                                 src={item.image}
                                 alt={item.name}
                                 loading="lazy"
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${
+                                  isSoldOut ? 'grayscale contrast-125' : ''
+                                }`}
                                 onError={(e) => {
                                   (e.currentTarget as HTMLImageElement).src =
                                     category.heroImage || './images/food/hero-veg-starters.jpg';
@@ -662,13 +695,19 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                             )}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
 
-                            {/* Dietary Badge */}
-                            <div className="absolute top-1 left-1 sm:top-1.5 sm:left-1.5">
-                              {renderDietaryBadge(item.dietary)}
+                            {/* Dietary or Sold-Out Badge */}
+                            <div className="absolute top-1 left-1 sm:top-1.5 sm:left-1.5 z-10">
+                              {isSoldOut ? (
+                                <span className="px-1.5 py-0.5 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-wider bg-rose-600 text-white shadow-md animate-pulse">
+                                  [SOLD OUT]
+                                </span>
+                              ) : (
+                                renderDietaryBadge(item.dietary)
+                              )}
                             </div>
 
                             {/* Popular / Chef Special Badge */}
-                            {item.popular && (
+                            {!isSoldOut && item.popular && (
                               <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 px-1 py-0.5 rounded-md text-[7px] sm:text-[8px] font-bold bg-gold-400 text-black flex items-center gap-0.5 shadow-sm">
                                 <Star className="w-2 h-2 fill-black" />
                                 <span className="hidden sm:inline">Special</span>
@@ -694,7 +733,15 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
 
                             {/* Add to Order / Stepper Button */}
                             <div className="mt-1.5">
-                              {qty === 0 ? (
+                              {isSoldOut ? (
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="w-full py-1 sm:py-1.5 px-2 rounded-lg sm:rounded-xl bg-rose-950/50 text-rose-300 text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 border border-rose-800/60 cursor-not-allowed opacity-80"
+                                >
+                                  <span>[SOLD OUT]</span>
+                                </button>
+                              ) : qty === 0 ? (
                                 <button
                                   type="button"
                                   onClick={() => addToCart(item)}
@@ -736,11 +783,16 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                     {category.items.map((item) => {
                       const cartItem = cart[item.id];
                       const qty = cartItem ? cartItem.quantity : 0;
+                      const isSoldOut = item.isAvailable === false;
 
                       return (
                         <div
                           key={item.id}
-                          className="p-2 sm:p-2.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-800/70 border border-white/5 flex items-center justify-between gap-3 transition-colors"
+                          className={`p-2 sm:p-2.5 rounded-xl border flex items-center justify-between gap-3 transition-colors ${
+                            isSoldOut
+                              ? 'bg-rose-950/20 border-rose-900/40 opacity-80'
+                              : 'bg-zinc-900/50 hover:bg-zinc-800/70 border-white/5'
+                          }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             {item.image && (
@@ -748,7 +800,9 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                                 src={item.image}
                                 alt={item.name}
                                 loading="lazy"
-                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover shrink-0 bg-zinc-950"
+                                className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover shrink-0 bg-zinc-950 ${
+                                  isSoldOut ? 'grayscale contrast-125' : ''
+                                }`}
                                 onError={(e) => {
                                   (e.currentTarget as HTMLImageElement).src =
                                     category.heroImage || './images/food/hero-veg-starters.jpg';
@@ -761,11 +815,15 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                                 <span className="text-xs sm:text-sm font-medium text-white truncate">
                                   {item.name}
                                 </span>
-                                {item.popular && (
+                                {isSoldOut ? (
+                                  <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-rose-600 text-white shrink-0 animate-pulse">
+                                    [SOLD OUT]
+                                  </span>
+                                ) : item.popular ? (
                                   <span className="px-1 py-0.2 rounded text-[8px] uppercase font-bold bg-gold-400/20 text-gold-300 shrink-0">
                                     ★
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                               <span className="font-mono text-xs sm:text-sm font-bold text-gold-300 block mt-0.5">
                                 ₹{item.price}
@@ -774,7 +832,15 @@ export const DigitalMenuPage: React.FC<DigitalMenuPageProps> = ({
                           </div>
 
                           <div className="shrink-0 w-20">
-                            {qty === 0 ? (
+                            {isSoldOut ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="w-full py-1 px-1 rounded-lg bg-rose-950/50 text-rose-300 text-[10px] font-bold flex items-center justify-center border border-rose-800/60 cursor-not-allowed opacity-80"
+                              >
+                                <span>[SOLD OUT]</span>
+                              </button>
+                            ) : qty === 0 ? (
                               <button
                                 type="button"
                                 onClick={() => addToCart(item)}

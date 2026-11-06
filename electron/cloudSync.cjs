@@ -19,11 +19,14 @@ if (!userDataDir) {
 const configDir = path.join(userDataDir, 'database');
 const configFilePath = path.join(configDir, 'hotel-rj-cloud-config.json');
 
+const DEFAULT_SUPABASE_URL = 'https://kupbuusakxvsfprwdpbr.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_lZf74V3b-jAG3sIYxSDeVA_cFIdt74o';
+
 class SupabaseCloudSync {
   constructor() {
     this.config = {
-      supabaseUrl: '',
-      supabaseAnonKey: '',
+      supabaseUrl: DEFAULT_SUPABASE_URL,
+      supabaseAnonKey: DEFAULT_SUPABASE_ANON_KEY,
       lastSyncTime: null,
       autoSyncEnabled: true,
       lastSyncStatus: 'idle', // 'idle' | 'syncing' | 'success' | 'error'
@@ -49,6 +52,17 @@ class SupabaseCloudSync {
             ...parsed,
           };
         }
+      }
+      // Ensure defaults if empty
+      if (!this.config.supabaseUrl) {
+        this.config.supabaseUrl = DEFAULT_SUPABASE_URL;
+      }
+      if (!this.config.supabaseAnonKey) {
+        this.config.supabaseAnonKey = DEFAULT_SUPABASE_ANON_KEY;
+      }
+      // Persist defaults if not present
+      if (!fs.existsSync(configFilePath)) {
+        fs.writeFileSync(configFilePath, JSON.stringify(this.config, null, 2), 'utf8');
       }
     } catch (err) {
       console.error('[CloudSync] Failed to load cloud config:', err);
@@ -191,6 +205,10 @@ class SupabaseCloudSync {
           const batch = bills.slice(i, i + batchSize).map((b) => ({
             id: b.id,
             bill_number: b.billNumber || 0,
+            status: b.status || 'settled',
+            cancel_reason: b.cancelReason || null,
+            cancelled_by: b.cancelledBy || null,
+            cancelled_at: b.cancelledAt || null,
             department: b.department || 'restaurant',
             table_id: b.tableId || 'Table',
             order_type: b.orderType || 'dine-in',
@@ -278,6 +296,96 @@ class SupabaseCloudSync {
           if (!res.ok) {
             console.warn('[CloudSync] Expense sync warning:', res.statusText);
           }
+        }
+      }
+
+      // 4. Sync Menu Items & Availability (Dishes + Kitchen 86 Sold-Out Status)
+      const categories = db.data.menuCategories || [];
+      const allMenuItems = [];
+      for (const cat of categories) {
+        if (Array.isArray(cat.items)) {
+          for (const item of cat.items) {
+            allMenuItems.push({
+              id: item.id,
+              category_id: cat.id,
+              category_title: cat.title,
+              name: item.name,
+              hindi_name: item.hindiName || null,
+              price: Number(item.price) || 0,
+              dietary: item.dietary || 'veg',
+              is_available: item.isAvailable !== false,
+              popular: !!item.popular,
+              description: item.description || null,
+              updated_at: new Date().toISOString(),
+            });
+          }
+        }
+      }
+
+      if (allMenuItems.length > 0) {
+        const batchSize = 100;
+        for (let i = 0; i < allMenuItems.length; i += batchSize) {
+          const batch = allMenuItems.slice(i, i + batchSize);
+          const res = await fetch(`${url}/rest/v1/menu_items`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(batch),
+          });
+          if (!res.ok) {
+            console.warn('[CloudSync] Menu items sync warning:', res.statusText);
+          }
+        }
+      }
+
+      // 5. Sync Rooms & Housekeeping Status
+      const rooms = db.data.rooms || [];
+      if (rooms.length > 0) {
+        const batch = rooms.map((r) => ({
+          id: r.id,
+          name: r.name,
+          tier: r.tier || 'deluxe',
+          price_per_night: Number(r.pricePerNight) || 1600,
+          status: r.status || 'available',
+          max_guests: Number(r.maxGuests) || 2,
+          bed_type: r.bedType || '1 King Bed',
+          guest_name: r.guestName || null,
+          check_in_date: r.checkInDate || null,
+          check_out_date: r.checkOutDate || null,
+          folio_amount: Number(r.folioAmount) || 0,
+          notes: r.notes || null,
+          updated_at: new Date().toISOString(),
+        }));
+
+        const res = await fetch(`${url}/rest/v1/rooms`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(batch),
+        });
+        if (!res.ok) {
+          console.warn('[CloudSync] Rooms sync warning:', res.statusText);
+        }
+      }
+
+      // 6. Sync Tables & Outlets Configuration
+      const tablesConfig = db.data.tablesConfig || [];
+      if (tablesConfig.length > 0) {
+        const batch = tablesConfig.map((t) => ({
+          id: t.id,
+          name: t.name,
+          section: t.section || 'dining',
+          capacity: Number(t.capacity) || 4,
+          is_active: t.isActive !== false,
+          sort_order: Number(t.sortOrder) || 1,
+          updated_at: new Date().toISOString(),
+        }));
+
+        const res = await fetch(`${url}/rest/v1/tables_config`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(batch),
+        });
+        if (!res.ok) {
+          console.warn('[CloudSync] Tables config sync warning:', res.statusText);
         }
       }
 

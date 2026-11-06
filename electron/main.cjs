@@ -287,8 +287,99 @@ ipcMain.handle('delete-expense', async (event, id) => {
   return { success: true };
 });
 
+ipcMain.handle('cancel-bill', async (event, { billId, reason, cancelledBy }) => {
+  const result = db.cancelBill(billId, reason, cancelledBy);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.syncAll().catch((err) => console.warn('[CloudSync] Background sync error on bill cancel:', err));
+  }
+  return result;
+});
+
+ipcMain.handle('get-recent-bills', async (event, { limit } = {}) => {
+  return db.getRecentBills(limit || 60);
+});
+
 ipcMain.handle('get-bills', async () => {
   return db.data.settledBills.slice(0, 50);
+});
+
+// -------------------------------------------------------------
+// Hotel Operations IPC Handlers (Dishes, Rooms, Tables Config)
+// -------------------------------------------------------------
+ipcMain.handle('get-menu', async () => {
+  return db.getMenu();
+});
+
+ipcMain.handle('toggle-dish-availability', async (event, { dishId, isAvailable }) => {
+  const result = db.toggleDishAvailability(dishId, isAvailable);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('save-dish', async (event, dishData) => {
+  const result = db.saveDish(dishData);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('delete-dish', async (event, dishId) => {
+  const result = db.deleteDish(dishId);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('get-rooms', async () => {
+  return db.getRooms();
+});
+
+ipcMain.handle('update-room-status', async (event, { roomId, status, guestDetails }) => {
+  const result = db.updateRoomStatus(roomId, status, guestDetails);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('save-room', async (event, roomData) => {
+  const result = db.saveRoom(roomData);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('delete-room', async (event, roomId) => {
+  const result = db.deleteRoom(roomId);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('get-tables-config', async () => {
+  return db.getTablesConfig();
+});
+
+ipcMain.handle('save-table-config', async (event, tableData) => {
+  const result = db.saveTableConfig(tableData);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('delete-table-config', async (event, tableId) => {
+  const result = db.deleteTableConfig(tableId);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
 });
 
 // -------------------------------------------------------------

@@ -1,10 +1,20 @@
 const fs = require('fs');
 const path = require('path');
-const { app } = require('electron');
+
+let userDataDir;
+try {
+  const { app } = require('electron');
+  userDataDir = app && app.getPath ? app.getPath('userData') : null;
+} catch (e) {
+  userDataDir = null;
+}
+if (!userDataDir) {
+  userDataDir = path.join(process.env.APPDATA || process.env.HOME || '.', 'hotel-rj');
+}
 
 class WindowsLogger {
   constructor() {
-    this.logsDir = path.join(app.getPath('userData'), 'logs');
+    this.logsDir = path.join(userDataDir, 'logs');
     this.ensureDir();
   }
 
