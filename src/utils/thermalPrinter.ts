@@ -38,7 +38,9 @@ export interface BillPrintData {
 }
 
 // Global cached bluetooth device connection (if Web Bluetooth is available)
+// eslint-disable-next-line prefer-const
 let cachedDevice: any = null;
+// eslint-disable-next-line prefer-const
 let cachedCharacteristic: any = null;
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {

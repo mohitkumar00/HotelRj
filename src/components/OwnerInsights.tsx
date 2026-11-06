@@ -38,7 +38,10 @@ import {
   CloudSyncPublicConfig,
 } from '../utils/analyticsApi';
 import { HOTEL_INFO } from '../data/hotelData';
-import { DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY } from '../utils/hotelDataApi';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, STORAGE_KEYS } from '../config';
+import { verifyManagerPin, formatLock } from '../utils/pin';
+import { PairDeviceModal } from './PairDeviceModal';
+import { PairedDevicesPanel } from './PairedDevicesPanel';
 
 interface OwnerInsightsProps {
   onBack: () => void;
@@ -50,7 +53,8 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
     return sessionStorage.getItem('hotel_rj_owner_auth') === 'true';
   });
   const [enteredPin, setEnteredPin] = useState<string>('');
-  const [pinError, setPinError] = useState<boolean>(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isPairOpen, setIsPairOpen] = useState<boolean>(false);
 
   // Filter States
   const [period, setPeriod] = useState<AnalyticsQueryOptions['period']>('today');
@@ -73,8 +77,8 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   // Cloud Sync state
   const [cloudConfig, setCloudConfig] = useState<CloudSyncPublicConfig | null>(null);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
-  const [inputSupabaseUrl, setInputSupabaseUrl] = useState<string>(() => DEFAULT_SUPABASE_URL);
-  const [inputSupabaseKey, setInputSupabaseKey] = useState<string>(() => DEFAULT_SUPABASE_ANON_KEY);
+  const [inputSupabaseUrl, setInputSupabaseUrl] = useState<string>(() => SUPABASE_URL);
+  const [inputSupabaseKey, setInputSupabaseKey] = useState<string>(() => SUPABASE_ANON_KEY);
   const [testingCloud, setTestingCloud] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success?: boolean; message?: string; error?: string } | null>(null);
   const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
@@ -82,7 +86,7 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   // WhatsApp share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [targetPhone, setTargetPhone] = useState<string>(() => {
-    return localStorage.getItem('hotel_rj_owner_phone') || '';
+    return localStorage.getItem(STORAGE_KEYS.ownerPhone) || '';
   });
 
   const loadCloudConfig = async () => {
@@ -171,14 +175,19 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
     }
   };
 
-  const handlePinSubmit = (e: React.FormEvent) => {
+  const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (enteredPin === '1234' || enteredPin === '8888') {
+    const result = await verifyManagerPin(enteredPin);
+    if (result.ok) {
       setIsAuthenticated(true);
       sessionStorage.setItem('hotel_rj_owner_auth', 'true');
-      setPinError(false);
+      setPinError(null);
     } else {
-      setPinError(true);
+      setPinError(
+        result.reason === 'locked'
+          ? `Too many attempts. Try again in ${formatLock(result.remainingMs || 0)}.`
+          : 'Incorrect PIN.'
+      );
       setEnteredPin('');
     }
   };
@@ -296,7 +305,7 @@ _Saved permanently in Hotel RJ Database_`;
   const handleShareWhatsApp = (e: React.FormEvent) => {
     e.preventDefault();
     if (targetPhone.trim()) {
-      localStorage.setItem('hotel_rj_owner_phone', targetPhone.trim());
+      localStorage.setItem(STORAGE_KEYS.ownerPhone, targetPhone.trim());
     }
     const cleanPhone = targetPhone.replace(/\D/g, '');
     const encoded = encodeURIComponent(whatsappSummaryText);
@@ -333,16 +342,24 @@ _Saved permanently in Hotel RJ Database_`;
                 maxLength={6}
                 value={enteredPin}
                 onChange={(e) => setEnteredPin(e.target.value)}
-                placeholder="Enter 4-digit PIN (default: 1234)"
+                placeholder="Enter PIN"
                 className="w-full text-center text-2xl tracking-[0.4em] py-3.5 bg-stone-950 border border-stone-700 rounded-xl focus:border-gold-400 focus:outline-none text-gold-300 font-mono"
                 autoFocus
               />
               {pinError && (
                 <p className="text-xs text-rose-400 mt-2 flex items-center justify-center gap-1">
-                  <AlertTriangle className="w-3.5 h-3.5" /> Incorrect PIN. Try default: 1234
+                  <AlertTriangle className="w-3.5 h-3.5" /> {pinError}
                 </p>
               )}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsPairOpen(true)}
+              className="text-[11px] text-gold-400 hover:text-gold-300 underline underline-offset-2"
+            >
+              Owner: pair this device / set PIN
+            </button>
 
             <div className="flex gap-3">
               <button
@@ -365,6 +382,7 @@ _Saved permanently in Hotel RJ Database_`;
             Note: Counter waiters cannot view business margins or void summaries without the PIN.
           </p>
         </div>
+        <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
       </div>
     );
   }
@@ -1488,6 +1506,8 @@ _Saved permanently in Hotel RJ Database_`;
                 )}
               </div>
 
+              <PairedDevicesPanel onPair={() => setIsPairOpen(true)} />
+
               {/* Free Setup Instructions Box */}
               <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-3 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-gold-400 font-bold text-xs">
@@ -1523,6 +1543,7 @@ _Saved permanently in Hotel RJ Database_`;
           </div>
         </div>
       )}
+      <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
     </div>
   );
 };

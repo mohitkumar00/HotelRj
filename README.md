@@ -1,38 +1,50 @@
-# Hotel RJ — Modern Sanctuary & Hospitality Website
+# Hotel RJ
 
-A luxury boutique hotel website engineered following modern frontend design standards, biophilic luxury aesthetics, and interactive booking flows.
+Public hotel website, digital QR menu and a Counter/Waiter POS, shipped as:
 
-## Tech Stack & Architecture
-- **Framework**: React 18 + TypeScript + Vite
-- **Styling**: Tailwind CSS with custom luxury tokens (warm sand, champagne gold, deep obsidian/slate)
-- **Icons**: Lucide Icons
-- **Typography**: Playfair Display (Serif) & Plus Jakarta Sans (Sans-serif)
+| Target | How |
+|---|---|
+| Website + QR menu | Vite build, hosted on Vercel / GitHub Pages |
+| Counter POS (Windows) | Electron (`electron/`), local DB + Wi-Fi sync server on port 5050 |
+| Waiter app (Android) | Capacitor (`android/`) |
+| Cloud | Supabase (bills, audit logs, expenses, menu, rooms, tables) |
 
-## Key Features & Sections
-1. **Glassmorphic Navigation (`Navbar`)**: Translucent header with logo, section anchors, concierge phone, and mobile navigation drawer.
-2. **Editorial Hero (`Hero`)**: Full-bleed cinematic photography, Michelin Guide accolade, coordinates badge, and dual CTAs.
-3. **Floating Booking Engine (`BookingBar`)**: Check-in & Check-out date pickers, guest count counter, room tier selector, and rate search.
-4. **The Sanctuary Concept (`StoryPhilosophy`)**: Architecture narrative, geothermal sustainability badge, and key statistics.
-5. **Suites & Residences Showcase (`RoomsCatalog`)**:
-   - Filterable by tier: All, Penthouse, Cliffside Villas, Horizon Suites, Deluxe Rooms.
-   - Sorter by price (low/high) and square footage.
-   - Per-night pricing, guest capacity, bed configurations, view tags, and key amenities.
-6. **Residency Modal (`RoomModal`)**: Multi-photo gallery carousel, comprehensive dimensions, and detailed perk list.
-7. **Amenities Bento Grid (`AmenitiesBento`)**: Asymmetrical modern layout for the Edge Infinity Pool, Sōma Spa, Aura Dining, Helipad Concierge, and Technogym Studio.
-8. **Michelin-Inspired Gastronomy (`DiningSection`)**: Interactive tabs for Aura Fine Dining and Luna Rooftop Lounge with seasonal tasting menus and table reservations.
-9. **Curated Destination (`NeighborhoodGuide`)**: Distance indicators to marine sanctuaries, airport, and old port with interactive navigation card.
-10. **Guest Accolades (`GuestReviews`)**: Verified guest reviews and press mentions.
-11. **Direct Reservation Drawer (`ReservationDrawer`)**: Live dynamic calculation (nights × room rate, add-ons, 14% occupancy tax) and instant confirmation state with reference code.
-12. **Footer & FAQs (`Footer`)**: Accordion FAQs, contact details, and private invitation newsletter.
+## Stack
+React 18, TypeScript, Vite, Tailwind, Electron 45, Capacitor 8, Supabase REST (no SDK).
 
-## Development & Build Commands
+## Getting started
 ```bash
-# Start development server
-npm run dev
-
-# Compile TypeScript and build production bundle
-npm run build
-
-# Preview production build
-npm run preview
+npm install
+cp .env.example .env     # optional: falls back to the bundled project if missing
+npm run dev              # website; add ?mode=pos for the POS, ?view=menu for the digital menu
 ```
+
+## Scripts
+| Command | Purpose |
+|---|---|
+| `npm run typecheck` | TypeScript check |
+| `npm run lint` | ESLint (`any` is a warning, hooks rules are errors) |
+| `npm test` | Vitest unit tests (PIN, dates, table merge, pricing) |
+| `npm run build` | Typecheck + production build |
+| `npm run electron:build` | Windows installer + portable build in `dist-electron/` |
+
+Android: `npm run build && npx cap sync android`, then build in Android Studio (CI: `.github/workflows/build-apk.yml`).
+
+## Project layout
+```
+src/components    UI sections, POS (WaiterPOS), Owner Insights, pairing modals
+src/pages         Digital menu
+src/utils         API clients, deviceAuth (pairing), pin, storage, dates, tableMerge
+src/config.ts     Supabase URL/key (VITE_* env) + storage keys
+electron/         Main process, local DB, sync server (pairing code), cloud sync
+supabase/         SQL migrations + optional MSG91 SMS hook
+docs/             SECURITY_SETUP.md, proposal and invoice
+```
+
+## Security model (summary)
+- Staff do not log in. The owner pairs each device once with an owner-defined pairing code (Supabase Auth; emailed OTP optional).
+- Manager PIN is hashed (PBKDF2), shared across paired devices, with lockout.
+- After the lockdown migration the public key can only read `menu_items`.
+- Waiter phones need the Counter PC's pairing code for the local Wi-Fi API.
+
+Full rollout steps: [docs/SECURITY_SETUP.md](docs/SECURITY_SETUP.md).

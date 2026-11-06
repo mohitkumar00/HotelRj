@@ -134,27 +134,10 @@ ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tables_config ENABLE ROW LEVEL SECURITY;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read-write access to bills') THEN
-    CREATE POLICY "Allow public read-write access to bills" ON bills FOR ALL TO anon USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read-write access to audit_logs') THEN
-    CREATE POLICY "Allow public read-write access to audit_logs" ON audit_logs FOR ALL TO anon USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read-write access to expenses') THEN
-    CREATE POLICY "Allow public read-write access to expenses" ON expenses FOR ALL TO anon USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read-write access to menu_items') THEN
-    CREATE POLICY "Allow public read-write access to menu_items" ON menu_items FOR ALL TO anon USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read-write access to rooms') THEN
-    CREATE POLICY "Allow public read-write access to rooms" ON rooms FOR ALL TO anon USING (true) WITH CHECK (true);
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read-write access to tables_config') THEN
-    CREATE POLICY "Allow public read-write access to tables_config" ON tables_config FOR ALL TO anon USING (true) WITH CHECK (true);
-  END IF;
-END $$;
+-- NOTE: The previous wide-open anon policies were removed on purpose.
+-- Apply supabase/migrations/20261106b_lockdown_rls.sql (after 20261106a_device_pairing_tables.sql) to enable secure access
+-- (public read of menu_items only; everything else for paired devices).
+-- Until that migration runs on a fresh project, the tables above are inaccessible to anon.
 
 -- ==============================================================================
 -- 8. INITIAL SEED DATA: ROOMS (10 Rooms)

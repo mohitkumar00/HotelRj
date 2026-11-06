@@ -25,3 +25,9 @@ dist-electron
 *.sw?
 *.tsbuildinfo
 menu_source/
+
+# Secrets & local tooling
+.env
+.env.*
+!.env.example
+.tmp_chrome/

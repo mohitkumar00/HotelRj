@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { verifyManagerPin, formatLock } from '../utils/pin';
+import { PairDeviceModal } from './PairDeviceModal';
 import {
   X,
   Search,
@@ -48,7 +50,8 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   // Manager PIN Authorization State
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isPairOpen, setIsPairOpen] = useState(false);
 
   // Data states
   const [loading, setLoading] = useState(false);
@@ -114,14 +117,20 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   };
 
   // PIN Unlock Verification
-  const handlePinSubmit = (e?: React.FormEvent) => {
+  const handlePinSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (pinInput === '1234' || pinInput === '8888') {
+    const result = await verifyManagerPin(pinInput);
+    if (result.ok) {
       setIsUnlocked(true);
-      setPinError(false);
+      setPinError(null);
       setPinInput('');
     } else {
-      setPinError(true);
+      setPinError(
+        result.reason === 'locked'
+          ? `Too many attempts. Try again in ${formatLock(result.remainingMs || 0)}.`
+          : 'Incorrect Manager PIN.'
+      );
+      setPinInput('');
     }
   };
 
@@ -361,25 +370,25 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
             </div>
             <h3 className="text-xl font-bold text-white mb-1">Manager Authorization Required</h3>
             <p className="text-sm text-slate-400 max-w-sm mb-6">
-              Enter Manager or Cashier PIN (Default: <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">1234</code> or <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">8888</code>) to manage dishes, sold-out items, rooms and tables.
+              Enter the Manager PIN to manage dishes, sold-out items, rooms and tables.
             </p>
 
             <form onSubmit={handlePinSubmit} className="w-full max-w-xs space-y-3">
               <input
                 type="password"
-                maxLength={4}
+                maxLength={6}
                 autoFocus
-                placeholder="Enter 4-digit PIN"
+                placeholder="Enter PIN"
                 value={pinInput}
                 onChange={(e) => {
                   setPinInput(e.target.value);
-                  setPinError(false);
+                  setPinError(null);
                 }}
                 className={`w-full text-center tracking-[0.5em] text-2xl font-mono py-3 px-4 rounded-xl bg-slate-800 border ${
                   pinError ? 'border-rose-500 text-rose-300' : 'border-slate-700 text-white'
                 } focus:outline-none focus:border-amber-400`}
               />
-              {pinError && <p className="text-xs text-rose-400 font-medium">Incorrect Manager PIN. Try 1234.</p>}
+              {pinError && <p className="text-xs text-rose-400 font-medium">{pinError}</p>}
               <button
                 type="submit"
                 className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
@@ -387,7 +396,11 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                 <Unlock className="w-4 h-4" />
                 Unlock Operations
               </button>
+              <button type="button" onClick={() => setIsPairOpen(true)} className="text-[11px] text-amber-400 hover:text-amber-300 underline underline-offset-2">
+                Owner: pair this device / set PIN
+              </button>
             </form>
+            <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
           </div>
         ) : (
           <>

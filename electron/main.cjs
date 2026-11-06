@@ -35,13 +35,22 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
   // Load the built Vite production app
   const indexPath = path.join(__dirname, '../dist/index.html');
   mainWindow.loadFile(indexPath);
+
+  // Never let the POS window navigate away or open arbitrary windows.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://')) event.preventDefault();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -206,6 +215,10 @@ ipcMain.on('log-error', (event, { category, message, details }) => {
 // Sync server info
 ipcMain.handle('get-sync-info', () => {
   return syncServer.getServerInfo();
+});
+
+ipcMain.handle('get-sync-token', () => {
+  return syncServer.syncToken;
 });
 
 // Sync tables broadcast from counter window
@@ -399,4 +412,16 @@ ipcMain.handle('test-cloud-connection', async (event, { url, key }) => {
 
 ipcMain.handle('sync-cloud-now', async () => {
   return cloudSync.syncAll();
+});
+
+ipcMain.handle('set-cloud-session', async (event, session) => {
+  return cloudSync.setSession(session);
+});
+
+ipcMain.handle('get-cloud-access-token', async () => {
+  return cloudSync.getAccessToken();
+});
+
+ipcMain.handle('clear-cloud-session', async () => {
+  return cloudSync.clearSession();
 });

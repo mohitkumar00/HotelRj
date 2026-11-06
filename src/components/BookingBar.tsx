@@ -1,3 +1,4 @@
+import { localDateString } from '../utils/dates';
 import React, { useState } from 'react';
 import { Calendar, Users, Search, ChevronDown } from 'lucide-react';
 import { RoomTier } from '../types';
@@ -7,9 +8,8 @@ interface BookingBarProps {
 }
 
 export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
-  const today = new Date();
-  const defaultCheckIn = new Date(today.setDate(today.getDate() + 1)).toISOString().split('T')[0];
-  const defaultCheckOut = new Date(today.setDate(today.getDate() + 2)).toISOString().split('T')[0];
+  const defaultCheckIn = localDateString(1);
+  const defaultCheckOut = localDateString(3); // 2-night default stay (matches previous behaviour)
 
   const [checkIn, setCheckIn] = useState(defaultCheckIn);
   const [checkOut, setCheckOut] = useState(defaultCheckOut);
@@ -35,7 +35,7 @@ export const BookingBar: React.FC<BookingBarProps> = ({ onSearch }) => {
                 id="check-in-date"
                 type="date"
                 value={checkIn}
-                min={new Date().toISOString().split('T')[0]}
+                min={localDateString()}
                 onChange={(e) => setCheckIn(e.target.value)}
                 className="bg-transparent text-xs sm:text-sm font-medium text-white focus:outline-none cursor-pointer [color-scheme:dark]"
               />

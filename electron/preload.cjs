@@ -71,4 +71,8 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
   saveCloudConfig: (config) => ipcRenderer.invoke('save-cloud-config', config),
   testCloudConnection: (url, key) => ipcRenderer.invoke('test-cloud-connection', { url, key }),
   syncCloudNow: () => ipcRenderer.invoke('sync-cloud-now'),
+  setCloudSession: (session) => ipcRenderer.invoke('set-cloud-session', session),
+  getCloudAccessToken: () => ipcRenderer.invoke('get-cloud-access-token'),
+  clearCloudSession: () => ipcRenderer.invoke('clear-cloud-session'),
+  getSyncToken: () => ipcRenderer.invoke('get-sync-token'),
 });

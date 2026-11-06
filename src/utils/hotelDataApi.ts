@@ -1,5 +1,7 @@
 import { MenuCategory, MenuItem, HotelRoomRecord, TableConfigItem } from '../types';
 import { MENU_CATEGORIES } from '../data/menuData';
+import { SUPABASE_URL, STORAGE_KEYS, SYNC_SERVER_PORT } from '../config';
+import { getSupabaseHeaders } from './deviceAuth';
 
 declare global {
   interface Window {
@@ -42,20 +44,12 @@ const DEFAULT_TABLES: TableConfigItem[] = [
   { id: 'Banquet Hall', name: 'Banquet Hall 1', section: 'banquet', capacity: 50, isActive: true, sortOrder: 19 },
 ];
 
-export const DEFAULT_SUPABASE_URL = 'https://kupbuusakxvsfprwdpbr.supabase.co';
-export const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_lZf74V3b-jAG3sIYxSDeVA_cFIdt74o';
-
-export function getSupabaseHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    apikey: DEFAULT_SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${DEFAULT_SUPABASE_ANON_KEY}`,
-  };
-}
+export const DEFAULT_SUPABASE_URL = SUPABASE_URL;
+export { getSupabaseHeaders };
 
 function getApiBaseUrl(): string {
   try {
-    const saved = localStorage.getItem('hotel_rj_counter_sync_url');
+    const saved = localStorage.getItem(STORAGE_KEYS.syncUrl);
     if (saved && saved.trim()) {
       let clean = saved.trim();
       if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
@@ -66,11 +60,11 @@ function getApiBaseUrl(): string {
   } catch {}
 
   if (typeof window !== 'undefined' && window.location && window.location.origin) {
-    if (window.location.origin.includes(':5050')) {
+    if (window.location.origin.includes(`:${SYNC_SERVER_PORT}`)) {
       return window.location.origin;
     }
   }
-  return 'http://127.0.0.1:5050';
+  return `http://127.0.0.1:${SYNC_SERVER_PORT}`;
 }
 
 // -------------------------------------------------------------
@@ -108,10 +102,7 @@ export async function fetchMenuApi(): Promise<MenuCategory[]> {
   // 3. Supabase Cloud API (For Guest QR Menu Scans on 4G/5G)
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/menu_items?select=*&order=category_id,name`, {
-      headers: {
-        apikey: DEFAULT_SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${DEFAULT_SUPABASE_ANON_KEY}`,
-      },
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) {
@@ -242,7 +233,7 @@ export async function toggleDishAvailabilityApi(
     let newStatus = isAvailable;
     if (newStatus === undefined) {
       const getRes = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/menu_items?id=eq.${encodeURIComponent(dishId)}&select=is_available`, {
-        headers: getSupabaseHeaders(),
+        headers: await getSupabaseHeaders(),
         signal: AbortSignal.timeout(3000),
       });
       if (getRes.ok) {
@@ -256,7 +247,7 @@ export async function toggleDishAvailabilityApi(
 
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/menu_items?id=eq.${encodeURIComponent(dishId)}`, {
       method: 'PATCH',
-      headers: { ...getSupabaseHeaders(), Prefer: 'return=minimal' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'return=minimal' },
       body: JSON.stringify({ is_available: newStatus, updated_at: new Date().toISOString() }),
       signal: AbortSignal.timeout(4000),
     });
@@ -314,7 +305,7 @@ export async function saveDishApi(dishData: Partial<MenuItem> & { categoryId?: s
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/menu_items`, {
       method: 'POST',
       headers: {
-        ...getSupabaseHeaders(),
+        ...(await getSupabaseHeaders()),
         Prefer: 'resolution=merge-duplicates,return=representation',
       },
       body: JSON.stringify(row),
@@ -374,7 +365,7 @@ export async function deleteDishApi(dishId: string): Promise<{ success: boolean 
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/menu_items?id=eq.${encodeURIComponent(dishId)}`, {
       method: 'DELETE',
-      headers: getSupabaseHeaders(),
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) return { success: true };
@@ -418,7 +409,7 @@ export async function fetchRoomsApi(): Promise<HotelRoomRecord[]> {
   // 3. Supabase Cloud API Fallback
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/rooms?select=*&order=id`, {
-      headers: getSupabaseHeaders(),
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) {
@@ -507,7 +498,7 @@ export async function updateRoomStatusApi(
     };
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomId)}`, {
       method: 'PATCH',
-      headers: { ...getSupabaseHeaders(), Prefer: 'return=representation' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'return=representation' },
       body: JSON.stringify(patchBody),
       signal: AbortSignal.timeout(4000),
     });
@@ -588,7 +579,7 @@ export async function saveRoomApi(roomData: Partial<HotelRoomRecord>): Promise<{
     };
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/rooms`, {
       method: 'POST',
-      headers: { ...getSupabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=representation' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(row),
       signal: AbortSignal.timeout(4000),
     });
@@ -650,7 +641,7 @@ export async function deleteRoomApi(roomId: string): Promise<{ success: boolean 
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomId)}`, {
       method: 'DELETE',
-      headers: getSupabaseHeaders(),
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) return { success: true };
@@ -694,7 +685,7 @@ export async function fetchTablesConfigApi(): Promise<TableConfigItem[]> {
   // 3. Supabase Cloud API Fallback
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/tables_config?select=*&order=sort_order`, {
-      headers: getSupabaseHeaders(),
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) {
@@ -768,7 +759,7 @@ export async function saveTableConfigApi(tableData: Partial<TableConfigItem>): P
     };
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/tables_config`, {
       method: 'POST',
-      headers: { ...getSupabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=representation' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'resolution=merge-duplicates,return=representation' },
       body: JSON.stringify(row),
       signal: AbortSignal.timeout(4000),
     });
@@ -824,7 +815,7 @@ export async function deleteTableConfigApi(tableId: string): Promise<{ success: 
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/tables_config?id=eq.${encodeURIComponent(tableId)}`, {
       method: 'DELETE',
-      headers: getSupabaseHeaders(),
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) return { success: true };

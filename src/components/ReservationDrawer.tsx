@@ -1,3 +1,4 @@
+import { localDateString, addDaysToDateString } from '../utils/dates';
 import React, { useState, useMemo } from 'react';
 import { Room, BookingDetails } from '../types';
 import { X, Users, ShieldCheck, CheckCircle2, ArrowRight, Phone, MessageSquare, Mail, AlertCircle } from 'lucide-react';
@@ -10,18 +11,20 @@ interface ReservationDrawerProps {
   initialBookingDetails?: BookingDetails;
 }
 
-export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
-  isOpen,
+/** Mounts the drawer only while open so its hooks never run conditionally (state resets on close, as before). */
+export const ReservationDrawer: React.FC<ReservationDrawerProps> = (props) =>
+  props.isOpen ? <ReservationDrawerContent {...props} /> : null;
+
+const ReservationDrawerContent: React.FC<ReservationDrawerProps> = ({
   onClose,
   rooms,
   initialBookingDetails,
 }) => {
-  if (!isOpen) return null;
 
-  const defaultCheckIn = initialBookingDetails?.checkIn || new Date().toISOString().split('T')[0];
+  const defaultCheckIn = initialBookingDetails?.checkIn || localDateString();
   const [checkIn, setCheckIn] = useState(defaultCheckIn);
   
-  const nextDate = new Date(new Date(defaultCheckIn).getTime() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const nextDate = addDaysToDateString(defaultCheckIn, 1);
   const [checkOut, setCheckOut] = useState(initialBookingDetails?.checkOut || nextDate);
   const [guests, setGuests] = useState(initialBookingDetails?.guests || 2);
 

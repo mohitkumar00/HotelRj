@@ -18,6 +18,28 @@ if (!userDataDir) {
 
 const configDir = path.join(userDataDir, 'database');
 const configFilePath = path.join(configDir, 'hotel-rj-cloud-config.json');
+const sessionFilePath = path.join(configDir, 'hotel-rj-cloud-session.bin');
+
+// Prefer the OS keystore (Windows DPAPI) to protect the pairing session at rest.
+function encode(text) {
+  try {
+    const { safeStorage } = require('electron');
+    if (safeStorage && safeStorage.isEncryptionAvailable()) {
+      return Buffer.concat([Buffer.from('E1:'), safeStorage.encryptString(text)]);
+    }
+  } catch (e) { /* fall through */ }
+  return Buffer.concat([Buffer.from('P1:'), Buffer.from(text, 'utf8')]);
+}
+
+function decode(buf) {
+  const tag = buf.slice(0, 3).toString();
+  const body = buf.slice(3);
+  if (tag === 'E1:') {
+    const { safeStorage } = require('electron');
+    return safeStorage.decryptString(body);
+  }
+  return body.toString('utf8');
+}
 
 const DEFAULT_SUPABASE_URL = 'https://kupbuusakxvsfprwdpbr.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_lZf74V3b-jAG3sIYxSDeVA_cFIdt74o';
@@ -34,8 +56,90 @@ class SupabaseCloudSync {
     };
     this.timer = null;
     this.isSyncing = false;
+    this.session = null; // { accessToken, refreshToken, expiresAt, email }
+    this.refreshPromise = null;
+    this.loadSession();
     this.loadConfig();
     this.startBackgroundTimer();
+  }
+
+  // -------------------------------------------------------------
+  // Device pairing session (owner OTP). Main process is the single owner of refresh rotation.
+  // -------------------------------------------------------------
+  loadSession() {
+    try {
+      if (fs.existsSync(sessionFilePath)) {
+        this.session = JSON.parse(decode(fs.readFileSync(sessionFilePath)));
+      }
+    } catch (err) {
+      logger.error('CloudSync', 'Could not read cloud session', err);
+      this.session = null;
+    }
+  }
+
+  setSession(session) {
+    try {
+      if (!session || !session.accessToken || !session.refreshToken) {
+        return { success: false, error: 'Invalid session' };
+      }
+      if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+      this.session = session;
+      fs.writeFileSync(sessionFilePath, encode(JSON.stringify(session)));
+      logger.warn('CloudSync', 'Device paired with owner session');
+      return { success: true };
+    } catch (err) {
+      logger.error('CloudSync', 'Could not store cloud session', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  clearSession() {
+    this.session = null;
+    try { if (fs.existsSync(sessionFilePath)) fs.unlinkSync(sessionFilePath); } catch (e) { /* ignore */ }
+    return { success: true };
+  }
+
+  async getAccessToken() {
+    const s = this.session;
+    if (!s) return null;
+    if (s.expiresAt - 60 > Math.floor(Date.now() / 1000)) return s.accessToken;
+    if (this.refreshPromise) return this.refreshPromise;
+    this.refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${this.config.supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: this.config.supabaseAnonKey },
+          body: JSON.stringify({ refresh_token: s.refreshToken }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.access_token) {
+          this.setSession({
+            accessToken: json.access_token,
+            refreshToken: json.refresh_token,
+            expiresAt: json.expires_at || Math.floor(Date.now() / 1000) + (json.expires_in || 3600),
+            email: s.email,
+          });
+          return this.session.accessToken;
+        }
+        if ([400, 401, 403].includes(res.status)) {
+          logger.warn('CloudSync', 'Pairing session rejected (device revoked?). Pair the device again.');
+          this.clearSession();
+          return null;
+        }
+      } catch (e) {
+        // offline: reuse the old token; requests will fail and retry later
+      } finally {
+        this.refreshPromise = null;
+      }
+      return s.accessToken;
+    })();
+    return this.refreshPromise;
+  }
+
+  async authHeaders() {
+    const key = this.config.supabaseAnonKey;
+    const token = await this.getAccessToken();
+    return { apikey: key, Authorization: `Bearer ${token || key}` };
   }
 
   loadConfig() {
@@ -105,6 +209,7 @@ class SupabaseCloudSync {
       isConfigured: this.isConfigured(),
       supabaseUrl: this.config.supabaseUrl,
       hasAnonKey: !!this.config.supabaseAnonKey,
+      isPaired: !!this.session,
       anonKeyMasked: this.config.supabaseAnonKey ? `${this.config.supabaseAnonKey.slice(0, 10)}...${this.config.supabaseAnonKey.slice(-6)}` : '',
       lastSyncTime: this.config.lastSyncTime,
       lastSyncStatus: this.config.lastSyncStatus,
@@ -186,10 +291,8 @@ class SupabaseCloudSync {
 
     try {
       const url = this.config.supabaseUrl;
-      const key = this.config.supabaseAnonKey;
       const headers = {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
+        ...(await this.authHeaders()),
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates', // Upsert logic
       };

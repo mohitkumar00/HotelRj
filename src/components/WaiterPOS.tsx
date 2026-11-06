@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { verifyManagerPin, formatLock } from '../utils/pin';
 import { MENU_CATEGORIES } from '../data/menuData';
 import { MenuItem, DietaryType, MenuCategory, TableConfigItem } from '../types';
 import {
@@ -60,13 +61,7 @@ import {
   fetchRecentBills,
   SettleBillPayload,
 } from '../utils/analyticsApi';
-
-interface WaiterItemRecord {
-  item: MenuItem;
-  quantity: number;
-  notes?: string;
-  firedCount: number;
-}
+import { mergeTables, type TableOrder, type WaiterItemRecord } from '../utils/tableMerge';
 
 interface ConnectedWaiter {
   id: string;
@@ -79,83 +74,12 @@ interface ConnectedWaiter {
   status: 'online' | 'idle';
 }
 
-interface TableOrder {
-  tableId: string;
-  serverName: string;
-  openedAt: string;
-  status: 'vacant' | 'active' | 'kot_sent' | 'billed';
-  kotNumber: number;
-  items: { [itemId: string]: WaiterItemRecord };
-  generalNote?: string;
-  updatedAt?: number;
-}
-
 interface SyncServerInfo {
   running: boolean;
   port: number;
   ip: string;
   localUrl: string;
-}
-
-function mergeTables(
-  local: { [key: string]: TableOrder },
-  remote: { [key: string]: TableOrder }
-): { [key: string]: TableOrder } {
-  if (!remote || typeof remote !== 'object') return local;
-  const merged: { [key: string]: TableOrder } = { ...local };
-
-  for (const tableId of Object.keys(remote)) {
-    const remoteTable = remote[tableId];
-    const localTable = merged[tableId];
-
-    if (!localTable) {
-      merged[tableId] = remoteTable;
-      continue;
-    }
-
-    const rTime = remoteTable.updatedAt || 0;
-    const lTime = localTable.updatedAt || 0;
-
-    if (rTime > lTime) {
-      const items = { ...remoteTable.items };
-      for (const itemId of Object.keys(localTable.items || {})) {
-        const localItem = localTable.items[itemId];
-        if (!items[itemId] && localItem.quantity > (localItem.firedCount || 0)) {
-          items[itemId] = localItem;
-        }
-      }
-      merged[tableId] = {
-        ...remoteTable,
-        items,
-      };
-    } else if (lTime > rTime) {
-      continue;
-    } else {
-      const mergedItems = { ...localTable.items };
-      for (const itemId of Object.keys(remoteTable.items || {})) {
-        const rItem = remoteTable.items[itemId];
-        const lItem = mergedItems[itemId];
-        if (!lItem) {
-          mergedItems[itemId] = rItem;
-        } else {
-          mergedItems[itemId] = {
-            ...lItem,
-            quantity: Math.max(lItem.quantity, rItem.quantity),
-            firedCount: Math.max(lItem.firedCount, rItem.firedCount),
-            notes: rItem.notes || lItem.notes,
-          };
-        }
-      }
-      merged[tableId] = {
-        ...localTable,
-        status: remoteTable.status !== 'vacant' ? remoteTable.status : localTable.status,
-        kotNumber: Math.max(localTable.kotNumber || 1, remoteTable.kotNumber || 1),
-        openedAt: localTable.openedAt || remoteTable.openedAt,
-        items: mergedItems,
-      };
-    }
-  }
-  return merged;
+  token?: string;
 }
 
 const ALL_TABLE_IDS = [
@@ -278,6 +202,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }
     return '';
   });
+  const [counterInputToken, setCounterInputToken] = useState<string>(() => localStorage.getItem('hotel_rj_sync_token') || '');
   const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
 
   // Windows Installed Printers List (Bluetooth & USB)
@@ -388,7 +313,12 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         return true;
       } else {
         setIsSyncConnected(false);
-        const errMsg = `Counter PC returned HTTP ${postRes.status} (${postRes.statusText})`;
+        const errMsg =
+          postRes.status === 401
+            ? 'Pairing code missing or wrong. Enter the code shown on the Counter POS screen.'
+            : postRes.status === 429
+              ? 'Too many wrong codes. Wait 5 minutes and try again.'
+              : `Counter PC returned HTTP ${postRes.status} (${postRes.statusText})`;
         Logger.error('Sync', errMsg);
         setSyncErrorDetail(errMsg);
         setPrintSuccessMsg(`❌ ${errMsg}`);
@@ -684,6 +614,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [billToCancel, setBillToCancel] = useState<any | null>(null);
   const [cancelPin, setCancelPin] = useState('');
   const [cancelPinError, setCancelPinError] = useState(false);
+  const [cancelPinMessage, setCancelPinMessage] = useState('');
   const [cancelReasonPreset, setCancelReasonPreset] = useState('Entered Wrong Table / Duplicate');
   const [customCancelReason, setCustomCancelReason] = useState('');
   const [isCancellingBill, setIsCancellingBill] = useState(false);
@@ -789,8 +720,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     e.preventDefault();
     if (!billToCancel) return;
 
-    if (cancelPin !== '1234' && cancelPin !== '8888') {
+    const pinResult = await verifyManagerPin(cancelPin);
+    if (!pinResult.ok) {
       setCancelPinError(true);
+      setCancelPinMessage(
+        pinResult.reason === 'locked'
+          ? `Too many attempts. Try again in ${formatLock(pinResult.remainingMs || 0)}.`
+          : 'Incorrect PIN. Only authorized managers can void bills.'
+      );
       return;
     }
 
@@ -3141,6 +3078,15 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   <p className="text-[11px] text-sand-400">
                     Waiters connect to this Counter IP over the local restaurant Wi-Fi to sync orders live.
                   </p>
+                  {syncInfo?.token && (
+                    <div className="pt-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">Waiter Pairing Code</span>
+                      <div className="font-mono text-xl font-black tracking-[0.3em] text-white bg-black/40 py-1.5 px-3 rounded-xl border border-amber-500/30 inline-block select-all">
+                        {syncInfo.token}
+                      </div>
+                      <p className="text-[10px] text-sand-400 mt-1">Enter this code once on each waiter phone.</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* QR Code */}
@@ -3220,6 +3166,18 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   <p className="text-[10px] text-sand-400">
                     Look at the Counter POS screen on Windows to see the exact IP address.
                   </p>
+                  <label className="text-[11px] uppercase font-bold text-sand-400 tracking-wider block pt-1">
+                    Pairing Code:
+                  </label>
+                  <input
+                    type="text"
+                    value={counterInputToken}
+                    onChange={(e) => setCounterInputToken(e.target.value.toUpperCase())}
+                    placeholder="8-character code from Counter POS"
+                    autoCapitalize="characters"
+                    maxLength={16}
+                    className="w-full text-xs font-mono tracking-widest bg-zinc-900 text-white p-2.5 rounded-xl border border-white/15 focus:border-emerald-400 focus:outline-none"
+                  />
                 </div>
 
                 {syncErrorDetail && (
@@ -3249,6 +3207,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                         return;
                       }
                       localStorage.setItem('hotel_rj_counter_sync_url', target);
+                      localStorage.setItem('hotel_rj_sync_token', counterInputToken.trim());
                       setCounterSyncUrl(target);
                       const ok = await performManualSync(target);
                       if (ok) {
@@ -3865,12 +3824,12 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               <div>
                 <label className="block text-stone-300 font-semibold mb-1 flex items-center gap-1.5">
                   <KeyRound className="w-3.5 h-3.5 text-gold-400" />
-                  <span>Enter Manager PIN (1234 or 8888):</span>
+                  <span>Enter Manager PIN:</span>
                 </label>
                 <input
                   type="password"
                   maxLength={6}
-                  placeholder="Enter 4-digit PIN"
+                  placeholder="Enter PIN"
                   value={cancelPin}
                   onChange={(e) => {
                     setCancelPin(e.target.value);
@@ -3883,7 +3842,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 />
                 {cancelPinError && (
                   <span className="text-[11px] text-rose-400 mt-1 block">
-                    ❌ Incorrect PIN. Only authorized managers can void bills.
+                    ❌ {cancelPinMessage || 'Incorrect PIN. Only authorized managers can void bills.'}
                   </span>
                 )}
               </div>

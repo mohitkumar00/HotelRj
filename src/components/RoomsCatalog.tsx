@@ -27,7 +27,7 @@ export const RoomsCatalog: React.FC<RoomsCatalogProps> = ({
   ];
 
   const filteredRooms = useMemo(() => {
-    let result = rooms.filter((r) => (selectedTier === 'all' ? true : r.tier === selectedTier));
+    const result = rooms.filter((r) => (selectedTier === 'all' ? true : r.tier === selectedTier));
 
     if (sortBy === 'price-asc') {
       result.sort((a, b) => a.pricePerNight - b.pricePerNight);

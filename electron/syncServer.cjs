@@ -5,6 +5,46 @@ const path = require('path');
 const logger = require('./logger.cjs');
 const db = require('./database.cjs');
 const cloudSync = require('./cloudSync.cjs');
+const crypto = require('crypto');
+
+// -------------------------------------------------------------
+// Pairing code (X-Sync-Token): protects the Wi-Fi sync API from other devices on the LAN.
+// -------------------------------------------------------------
+function resolveTokenPath() {
+  let dir;
+  try {
+    const { app } = require('electron');
+    dir = app && app.getPath ? app.getPath('userData') : null;
+  } catch (e) {
+    dir = null;
+  }
+  if (!dir) dir = path.join(process.env.APPDATA || process.env.HOME || '.', 'hotel-rj');
+  return path.join(dir, 'database', 'hotel-rj-sync-token.txt');
+}
+
+function loadOrCreateToken() {
+  const file = resolveTokenPath();
+  try {
+    if (fs.existsSync(file)) {
+      const existing = fs.readFileSync(file, 'utf8').trim();
+      if (existing.length >= 8) return existing;
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no look-alike characters
+    const bytes = crypto.randomBytes(8);
+    const token = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+    fs.writeFileSync(file, token, 'utf8');
+    return token;
+  } catch (e) {
+    return crypto.randomBytes(6).toString('hex').toUpperCase();
+  }
+}
+
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a || ''));
+  const y = Buffer.from(String(b || ''));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
 
 function mergeTables(local, remote) {
   if (!remote || typeof remote !== 'object') return local;
@@ -73,6 +113,39 @@ class LocalSyncServer {
     this.onUpdateCallback = null;
     this.onWaitersUpdateCallback = null;
     this.activeWaiters = new Map();
+    this.syncToken = loadOrCreateToken();
+    this.failedAuth = new Map(); // ip -> { count, until }
+  }
+
+  /** Returns true if the request may proceed. Writes the error response itself when it may not. */
+  authorize(req, res, clientIp, pathname) {
+    // Connection test endpoint stays open (leaks only app name + LAN IP).
+    if (pathname === '/api/status') return true;
+
+    // Same-machine requests from the Counter app itself (no web Origin) are trusted.
+    const origin = req.headers.origin;
+    const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(clientIp) || clientIp === '1';
+    if (isLoopback && (!origin || origin === 'null' || origin.startsWith('file:'))) return true;
+
+    const now = Date.now();
+    const f = this.failedAuth.get(clientIp);
+    if (f && f.until > now) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Too many attempts. Try again later.' }));
+      return false;
+    }
+
+    if (safeEqual(req.headers['x-sync-token'], this.syncToken)) {
+      this.failedAuth.delete(clientIp);
+      return true;
+    }
+
+    const count = (f ? f.count : 0) + 1;
+    this.failedAuth.set(clientIp, { count, until: count >= 10 ? now + 5 * 60_000 : 0 });
+    logger.warn('SyncServer', `Rejected request without valid pairing code from ${clientIp}: ${pathname}`);
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Pairing code required', code: 'SYNC_TOKEN_REQUIRED' }));
+    return false;
   }
 
   recordWaiter(clientIp, serverName, activeTable = '', deviceInfo = '') {
@@ -153,7 +226,7 @@ class LocalSyncServer {
       // Enable CORS for Android waiter app and web requests
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Sync-Token');
 
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
@@ -163,6 +236,8 @@ class LocalSyncServer {
 
       const clientIp = req.socket.remoteAddress ? req.socket.remoteAddress.replace(/^.*:/, '') : '127.0.0.1';
       const url = new URL(req.url, `http://${req.headers.host}`);
+
+      if (!this.authorize(req, res, clientIp, url.pathname)) return;
 
       if (req.method === 'GET' && url.pathname === '/api/status') {
         logger.warn('SyncServer', `Ping /api/status from ${clientIp}`);
@@ -756,6 +831,7 @@ class LocalSyncServer {
       ip: this.localIp,
       port: this.port,
       url: `http://${this.localIp}:${this.port}`,
+      token: this.syncToken,
     };
   }
 

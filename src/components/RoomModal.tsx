@@ -8,8 +8,11 @@ interface RoomModalProps {
   onBookNow: (room: Room) => void;
 }
 
-export const RoomModal: React.FC<RoomModalProps> = ({ room, onClose, onBookNow }) => {
-  if (!room) return null;
+/** Mounts the modal only when a room is selected so its hooks never run conditionally. */
+export const RoomModal: React.FC<RoomModalProps> = (props) =>
+  props.room ? <RoomModalContent {...props} room={props.room} /> : null;
+
+const RoomModalContent: React.FC<RoomModalProps & { room: Room }> = ({ room, onClose, onBookNow }) => {
 
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const images = room.galleryImages.length > 0 ? room.galleryImages : [room.heroImage];

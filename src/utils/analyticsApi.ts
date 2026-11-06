@@ -1,5 +1,7 @@
 // Client-side Analytics & Database API bridge
-import { DEFAULT_SUPABASE_URL, getSupabaseHeaders } from './hotelDataApi';
+import { DEFAULT_SUPABASE_URL } from './hotelDataApi';
+import { getSupabaseHeaders } from './deviceAuth';
+import { SUPABASE_ANON_KEY } from '../config';
 
 export interface SettleBillPayload {
   id?: string;
@@ -224,15 +226,15 @@ export async function fetchAnalytics(
   try {
     const [billsRes, expRes, auditsRes] = await Promise.all([
       fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/bills?select=*&order=timestamp.desc&limit=1000`, {
-        headers: getSupabaseHeaders(),
+        headers: await getSupabaseHeaders(),
         signal: AbortSignal.timeout(5000),
       }),
       fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/expenses?select=*&order=timestamp.desc&limit=500`, {
-        headers: getSupabaseHeaders(),
+        headers: await getSupabaseHeaders(),
         signal: AbortSignal.timeout(5000),
       }),
       fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/audit_logs?select=*&order=timestamp.desc&limit=500`, {
-        headers: getSupabaseHeaders(),
+        headers: await getSupabaseHeaders(),
         signal: AbortSignal.timeout(5000),
       }),
     ]);
@@ -497,7 +499,7 @@ export async function settleBill(payload: SettleBillPayload): Promise<boolean> {
     };
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/bills`, {
       method: 'POST',
-      headers: { ...getSupabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(row),
       signal: AbortSignal.timeout(4000),
     });
@@ -554,7 +556,7 @@ export async function recordAuditLog(payload: AuditLogPayload): Promise<boolean>
     };
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/audit_logs`, {
       method: 'POST',
-      headers: { ...getSupabaseHeaders(), Prefer: 'return=minimal' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'return=minimal' },
       body: JSON.stringify(row),
       signal: AbortSignal.timeout(4000),
     });
@@ -603,7 +605,7 @@ export async function cancelBillApi(payload: {
     };
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/bills?id=eq.${encodeURIComponent(payload.billId)}`, {
       method: 'PATCH',
-      headers: { ...getSupabaseHeaders(), Prefer: 'return=representation' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'return=representation' },
       body: JSON.stringify(patchBody),
       signal: AbortSignal.timeout(4000),
     });
@@ -644,7 +646,7 @@ export async function fetchRecentBills(limit: number = 60): Promise<Array<any>> 
   // 3. Supabase Cloud API Fallback
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/bills?select=*&order=timestamp.desc&limit=${limit}`, {
-      headers: getSupabaseHeaders(),
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) {
@@ -726,7 +728,7 @@ export async function addExpense(payload: ExpensePayload): Promise<boolean> {
     };
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/expenses`, {
       method: 'POST',
-      headers: { ...getSupabaseHeaders(), Prefer: 'return=minimal' },
+      headers: { ...(await getSupabaseHeaders()), Prefer: 'return=minimal' },
       body: JSON.stringify(row),
       signal: AbortSignal.timeout(4000),
     });
@@ -769,7 +771,7 @@ export async function removeExpense(id: string): Promise<boolean> {
   try {
     const res = await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/expenses?id=eq.${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: getSupabaseHeaders(),
+      headers: await getSupabaseHeaders(),
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) return true;
@@ -850,7 +852,7 @@ export async function getCloudSyncConfig(): Promise<CloudSyncPublicConfig | null
     isConfigured: true,
     supabaseUrl: DEFAULT_SUPABASE_URL,
     hasAnonKey: true,
-    anonKeyMasked: 'sb_publishable_lZf74V3b...cFIdt74o',
+    anonKeyMasked: `${SUPABASE_ANON_KEY.slice(0, 10)}...${SUPABASE_ANON_KEY.slice(-6)}`,
     lastSyncTime: new Date().toISOString(),
     lastSyncStatus: 'success',
     lastSyncError: null,

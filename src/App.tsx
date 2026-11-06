@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { BookingBar } from './components/BookingBar';
@@ -11,31 +11,47 @@ import { NeighborhoodGuide } from './components/NeighborhoodGuide';
 import { GuestReviews } from './components/GuestReviews';
 import { ReservationDrawer } from './components/ReservationDrawer';
 import { Footer } from './components/Footer';
-import { DigitalMenuPage } from './pages/DigitalMenuPage';
-import { WaiterPOS } from './components/WaiterPOS';
 import { ROOMS } from './data/hotelData';
 import { Capacitor } from '@capacitor/core';
 import { Room, RoomTier, BookingDetails } from './types';
+import { readString, writeString } from './utils/storage';
+import { localDateString } from './utils/dates';
+
+// Staff tools and the digital menu are only needed on demand; keep them out of the public landing bundle.
+const WaiterPOS = lazy(() => import('./components/WaiterPOS').then((m) => ({ default: m.WaiterPOS })));
+const DigitalMenuPage = lazy(() => import('./pages/DigitalMenuPage').then((m) => ({ default: m.DigitalMenuPage })));
+
+const RouteFallback: React.FC = () => (
+  <div className="min-h-screen bg-[#090a0c] flex items-center justify-center text-sand-300 text-sm">Loading…</div>
+);
+
+/** Exact route match for ?view=menu / ?mode=pos or #menu / #/menu / #pos (no accidental substring hits). */
+function matchesRoute(param: 'view' | 'mode', value: 'menu' | 'pos'): boolean {
+  if (typeof window === 'undefined') return false;
+  if (new URLSearchParams(window.location.search).get(param) === value) return true;
+  return window.location.hash
+    .replace(/^#/, '')
+    .split(/[/?&=]/)
+    .filter(Boolean)
+    .includes(value);
+}
 
 export const App: React.FC = () => {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    return (localStorage.getItem('hotel_theme') as 'dark' | 'light') || 'dark';
+    return readString('hotel_theme') === 'light' ? 'light' : 'dark';
   });
 
-  // Track if current route is the standalone food menu page (?view=menu or #/menu)
-    // Track if Waiter POS Mode is active (defaults to true in native Android APK)
+  // Track if Waiter POS Mode is active (defaults to true in native Android APK)
   const [isPosMode, setIsPosMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     if (Capacitor.isNativePlatform()) return true;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('mode') === 'pos' || window.location.hash.includes('pos');
+    return matchesRoute('mode', 'pos') || matchesRoute('view', 'pos');
   });
   const [isMenuView, setIsMenuView] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     // On native Android app, launch straight into Waiter POS / Digital Menu
     if (Capacitor.isNativePlatform()) return true;
-    const params = new URLSearchParams(window.location.search);
-    return params.get('view') === 'menu' || window.location.hash.includes('menu');
+    return matchesRoute('view', 'menu');
   });
 
   useEffect(() => {
@@ -44,14 +60,13 @@ export const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('light');
     }
-    localStorage.setItem('hotel_theme', theme);
+    writeString('hotel_theme', theme);
   }, [theme]);
 
   // Synchronize route changes for standalone menu
   useEffect(() => {
     const handleRouteChange = () => {
-      const params = new URLSearchParams(window.location.search);
-      setIsMenuView(params.get('view') === 'menu' || window.location.hash.includes('menu'));
+      setIsMenuView(matchesRoute('view', 'menu'));
     };
 
     window.addEventListener('popstate', handleRouteChange);
@@ -82,8 +97,8 @@ export const App: React.FC = () => {
   const [selectedTier, setSelectedTier] = useState<RoomTier | 'all'>('all');
 
   const [bookingDetails, setBookingDetails] = useState<BookingDetails>({
-    checkIn: new Date(new Date().setDate(new Date().getDate() + 7)).toISOString().split('T')[0],
-    checkOut: new Date(new Date().setDate(new Date().getDate() + 10)).toISOString().split('T')[0],
+    checkIn: localDateString(7),
+    checkOut: localDateString(10),
     guests: 2,
     roomTier: 'all',
   });
@@ -125,22 +140,32 @@ export const App: React.FC = () => {
   // In Native Android App OR Windows Desktop Counter POS: dedicated 100% for POS (no website, no back buttons)
   const isElectron = typeof window !== 'undefined' && Boolean((window as any).ElectronAPI?.isElectron);
   if (Capacitor.isNativePlatform() || isElectron) {
-    return <WaiterPOS />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <WaiterPOS />
+      </Suspense>
+    );
   }
 
   // Web Browser: Staff POS mode
   if (isPosMode) {
-    return <WaiterPOS onSwitchToGuestMenu={() => setIsPosMode(false)} />;
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <WaiterPOS onSwitchToGuestMenu={() => setIsPosMode(false)} />
+      </Suspense>
+    );
   }
 
   // Web Browser: Digital menu (?view=menu)
   if (isMenuView) {
     return (
-      <DigitalMenuPage
-        onBackToHotel={handleBackToHotel}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-      />
+      <Suspense fallback={<RouteFallback />}>
+        <DigitalMenuPage
+          onBackToHotel={handleBackToHotel}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
+      </Suspense>
     );
   }
 

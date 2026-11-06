@@ -1,0 +1,2 @@
+-- SUPERSEDED. Do not run.
+-- Use 20261106a_device_pairing_tables.sql first, then 20261106b_lockdown_rls.sql (see docs/SECURITY_SETUP.md).
