@@ -401,13 +401,24 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         err?.name === 'AbortError' ||
         err?.name === 'TimeoutError' ||
         String(err?.message || '').toLowerCase().includes('timeout');
-      const errReason = isTimeout
-        ? 'Connection timed out after 8s. Windows Firewall is likely blocking port 5050, or phone is on a different Wi-Fi router.'
-        : `Network error: ${err?.message || 'Could not connect'}`;
+
+      const isMixedContent =
+        typeof window !== 'undefined' &&
+        window.location.protocol === 'https:' &&
+        cleanUrl.startsWith('http://');
+
+      let errReason = `Network error: ${err?.message || 'Could not connect'}`;
+      if (isMixedContent) {
+        errReason = `Mixed Content Block: Web browsers block local http:// when opened from an https:// website. Please open ${cleanUrl} directly in your phone browser, or use the native Waiter Android APK.`;
+      } else if (isTimeout) {
+        errReason = 'Connection timed out (8s). Counter PC and phone must be on the exact same Wi-Fi router (not 5G vs 2.4G) with Mobile Data turned OFF.';
+      } else if (String(err?.message || '').toLowerCase().includes('failed to fetch')) {
+        errReason = `Failed to reach ${cleanUrl}. Check: 1) Turn off Mobile Data (Jio/Airtel 4G/5G). 2) Connect phone to same Wi-Fi as Counter PC. 3) Verify Counter PC IP.`;
+      }
 
       Logger.error('Sync', errReason);
       setSyncErrorDetail(errReason);
-      setPrintSuccessMsg(`❌ ${isTimeout ? 'Connection timed out (8s)' : 'Connection failed'}`);
+      setPrintSuccessMsg(`❌ ${isMixedContent ? 'Mixed Content Block' : isTimeout ? 'Connection timed out (8s)' : 'Connection failed'}`);
       setTimeout(() => setPrintSuccessMsg(null), 4000);
       return false;
     }
@@ -3147,11 +3158,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 text-[11px] text-sand-300 space-y-1.5">
                   <div className="font-bold text-white">📲 Instructions for Waiters:</div>
                   <ol className="list-decimal pl-4 space-y-1 text-sand-400">
-                    <li>Connect phone to same hotel Wi-Fi.</li>
-                    <li>Open Hotel RJ Waiter App.</li>
+                    <li>Connect phone to same hotel Wi-Fi (turn off Mobile Data 4G/5G).</li>
+                    <li>Open Hotel RJ Waiter APK, or visit <strong className="text-white font-mono">http://{syncInfo?.ip || '127.0.0.1'}:5050</strong> directly in Chrome.</li>
                     <li>Tap <strong>Sync Counter</strong> in top header.</li>
-                    <li>Type Counter IP: <strong className="text-white font-mono">{syncInfo?.ip || '127.0.0.1'}</strong>.</li>
+                    <li>Counter IP is <strong className="text-white font-mono">{syncInfo?.ip || '127.0.0.1'}</strong>.</li>
                   </ol>
+                  <p className="text-[10px] text-amber-400/90 pt-0.5">
+                    💡 Tip: If using Chrome, open the local http link directly. Visiting from https:// will be blocked by Chrome as mixed content.
+                  </p>
                 </div>
 
                 <div className="pt-2 border-t border-white/10 space-y-2">
