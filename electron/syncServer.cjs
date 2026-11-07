@@ -63,41 +63,60 @@ function mergeTables(local, remote) {
     const lTime = localTable.updatedAt || 0;
 
     if (rTime > lTime) {
-      const items = { ...remoteTable.items };
+      // Remote is strictly newer. Use remote's items as the base.
+      const items = { ...(remoteTable.items || {}) };
+
+      // Preserve only items already fired to kitchen on local (unfired items removed remotely stay removed)
       for (const itemId of Object.keys(localTable.items || {})) {
         const localItem = localTable.items[itemId];
-        if (!items[itemId] && localItem.quantity > (localItem.firedCount || 0)) {
-          items[itemId] = localItem;
+        if (localItem && (localItem.firedCount || 0) > 0) {
+          if (!items[itemId]) {
+            items[itemId] = localItem;
+          } else {
+            const rItem = items[itemId];
+            const maxFired = Math.max(rItem.firedCount || 0, localItem.firedCount || 0);
+            items[itemId] = {
+              ...rItem,
+              firedCount: maxFired,
+              quantity: Math.max(rItem.quantity || 0, maxFired),
+            };
+          }
         }
       }
+
       merged[tableId] = {
         ...remoteTable,
         items,
       };
     } else if (lTime > rTime) {
+      // Local is strictly newer. Keep local table.
       continue;
     } else {
-      const mergedItems = { ...localTable.items };
-      for (const itemId of Object.keys(remoteTable.items || {})) {
-        const rItem = remoteTable.items[itemId];
-        const lItem = mergedItems[itemId];
-        if (!lItem) {
-          mergedItems[itemId] = rItem;
-        } else {
-          mergedItems[itemId] = {
-            ...lItem,
-            quantity: Math.max(lItem.quantity, rItem.quantity),
-            firedCount: Math.max(lItem.firedCount, rItem.firedCount),
-            notes: rItem.notes || lItem.notes,
-          };
+      // Equal timestamps: adopt remote while protecting any already-fired items
+      const items = { ...(remoteTable.items || {}) };
+      for (const itemId of Object.keys(localTable.items || {})) {
+        const localItem = localTable.items[itemId];
+        if (localItem && (localItem.firedCount || 0) > 0) {
+          if (!items[itemId]) {
+            items[itemId] = localItem;
+          } else {
+            const rItem = items[itemId];
+            const maxFired = Math.max(rItem.firedCount || 0, localItem.firedCount || 0);
+            items[itemId] = {
+              ...rItem,
+              firedCount: maxFired,
+              quantity: Math.max(rItem.quantity || 0, maxFired),
+            };
+          }
         }
       }
+
       merged[tableId] = {
-        ...localTable,
+        ...remoteTable,
         status: remoteTable.status !== 'vacant' ? remoteTable.status : localTable.status,
         kotNumber: Math.max(localTable.kotNumber || 1, remoteTable.kotNumber || 1),
-        openedAt: localTable.openedAt || remoteTable.openedAt,
-        items: mergedItems,
+        openedAt: remoteTable.openedAt || localTable.openedAt,
+        items,
       };
     }
   }
@@ -301,6 +320,12 @@ class LocalSyncServer {
             if (data && data.tables) {
               if (data.serverName) {
                 this.recordWaiter(clientIp, data.serverName, data.activeTable, data.deviceInfo);
+              }
+              if (data.activeTable && data.tables[data.activeTable]) {
+                data.tables[data.activeTable].updatedAt = Math.max(
+                  data.tables[data.activeTable].updatedAt || 0,
+                  Date.now()
+                );
               }
               this.tablesState = mergeTables(this.tablesState, data.tables);
               if (this.onUpdateCallback) {

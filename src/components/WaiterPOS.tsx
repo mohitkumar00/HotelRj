@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { verifyManagerPin, formatLock } from '../utils/pin';
 import { MENU_CATEGORIES } from '../data/menuData';
 import { MenuItem, DietaryType, MenuCategory, TableConfigItem } from '../types';
@@ -47,6 +47,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Active selected table / parcel
   const [activeTable, setActiveTable] = useState<string>('T-1');
   const [tableFilter, setTableFilter] = useState<'all' | 'dinein' | 'takeaway' | 'rooms' | 'banquet' | 'active'>('all');
+  const isIncomingSyncRef = useRef<boolean>(false);
 
   // Staff / Server Name
   const [serverName, setServerName] = useState<string>(() => {
@@ -187,7 +188,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         setIsSyncConnected(true);
         const data = await res.json();
         if (data?.tables) {
-          setTables((prev) => mergeTables(prev, data.tables));
+          isIncomingSyncRef.current = true;
+          setTables((prev) => {
+            const merged = mergeTables(prev, data.tables);
+            if (activeTable && prev[activeTable]) {
+              merged[activeTable] = prev[activeTable];
+            }
+            return merged;
+          });
         }
       }
     } catch (err: any) {
@@ -229,6 +237,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         const data = await postRes.json();
         setIsSyncConnected(true);
         if (data?.tables) {
+          isIncomingSyncRef.current = true;
           setTables((prev) => mergeTables(prev, data.tables));
         }
         Logger.success('Sync', `✅ Connected & Synced with Counter PC at ${cleanUrl}!`);
@@ -283,6 +292,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     try {
       localStorage.setItem('hotel_rj_pos_tables_v3', JSON.stringify(tables));
     } catch {}
+
+    if (isIncomingSyncRef.current) {
+      isIncomingSyncRef.current = false;
+      return;
+    }
 
     if (isElectron && (window as any).ElectronAPI?.syncTables) {
       (window as any).ElectronAPI.syncTables(tables);
@@ -373,6 +387,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
         if (remoteTables && typeof remoteTables === 'object') {
           Logger.info('Sync', 'Received real-time table sync from waiter device');
+          isIncomingSyncRef.current = true;
           setTables((prev) => mergeTables(prev, remoteTables));
 
           // If incoming update has active items, notify the counter manager
@@ -425,7 +440,16 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           if (isMounted) {
             setIsSyncConnected(true);
             if (data?.tables) {
-              setTables((prev) => mergeTables(prev, data.tables));
+              isIncomingSyncRef.current = true;
+              setTables((prev) => {
+                const merged = mergeTables(prev, data.tables);
+                const cur = prev[activeTable];
+                const hasUnfired = cur && Object.values(cur.items || {}).some(it => (it.quantity || 0) > (it.firedCount || 0));
+                if (hasUnfired && cur) {
+                  merged[activeTable] = cur;
+                }
+                return merged;
+              });
             }
           }
         } else {
