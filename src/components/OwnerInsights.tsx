@@ -276,7 +276,7 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
 💰 *TOTAL GROSS REVENUE: ₹${analytics.grossRevenue.toLocaleString('en-IN')}* (${analytics.billsCount} Bills)
 
 🏢 *DEPARTMENT BREAKDOWN:*
-• 🍽️ Restaurant & Dhaba: *₹${restRev.toLocaleString('en-IN')}* (${analytics.departments.restaurant.count} orders)
+• 🍽️ Restaurant: *₹${restRev.toLocaleString('en-IN')}* (${analytics.departments.restaurant.count} orders)
   └─ Custom Meat Making: ₹${analytics.departments.restaurant.customCookingRevenue.toLocaleString('en-IN')} (${analytics.departments.restaurant.customKgEstimate} Kg)
 • 🛏️ Rooms & Lodging: *₹${roomRev.toLocaleString('en-IN')}* (${analytics.departments.rooms.count} stays)
 • 🎉 Banquet & Events: *₹${banqRev.toLocaleString('en-IN')}* (${analytics.departments.banquet.count} functions)
@@ -501,7 +501,7 @@ _Saved permanently in Hotel RJ Database_`;
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>Restaurant & Dhaba</span>
+              <span>Restaurant</span>
             </button>
             <button
               onClick={() => setDepartment('rooms')}
@@ -636,7 +636,7 @@ _Saved permanently in Hotel RJ Database_`;
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                <UtensilsCrossed className="w-4 h-4" /> Restaurant & Dhaba
+                <UtensilsCrossed className="w-4 h-4" /> Restaurant
               </span>
               <span className="text-xs font-mono text-stone-400">
                 {analytics?.departments.restaurant.count || 0} Orders

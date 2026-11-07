@@ -127,6 +127,33 @@ CREATE TABLE IF NOT EXISTS tables_config (
 
 CREATE INDEX IF NOT EXISTS idx_tables_config_section ON tables_config(section);
 
+-- 6b. BANQUET & EVENT BOOKINGS (Advance Bookings & Calendar with Conflict Prevention)
+CREATE TABLE IF NOT EXISTS banquet_bookings (
+  id TEXT PRIMARY KEY,
+  event_date DATE NOT NULL,
+  slot TEXT NOT NULL, -- 'lunch' | 'dinner' | 'fullday' | 'custom'
+  custom_start_time TEXT, -- '10:00'
+  custom_end_time TEXT, -- '15:00'
+  venue TEXT NOT NULL, -- 'Banquet Hall 1 (AC)' | 'Garden Lawn' | 'Combined / Full Property'
+  event_type TEXT NOT NULL, -- 'Birthday Party' | 'Wedding / Reception' | 'Anniversary' | 'Corporate / Conference' | 'Kitty Party' | 'Other Function'
+  no_of_guests INTEGER NOT NULL DEFAULT 50,
+  customer_name TEXT NOT NULL,
+  customer_phone TEXT NOT NULL,
+  total_amount NUMERIC(10,2) DEFAULT 0,
+  advance_paid NUMERIC(10,2) DEFAULT 0,
+  balance_due NUMERIC(10,2) DEFAULT 0,
+  advance_payment_mode TEXT DEFAULT 'Cash', -- 'Cash' | 'UPI' | 'Card' | 'Bank Transfer'
+  special_notes TEXT,
+  status TEXT DEFAULT 'confirmed', -- 'confirmed' | 'tentative' | 'completed' | 'cancelled'
+  created_by TEXT DEFAULT 'Counter Manager',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_banquet_event_date ON banquet_bookings(event_date);
+CREATE INDEX IF NOT EXISTS idx_banquet_venue ON banquet_bookings(venue);
+CREATE INDEX IF NOT EXISTS idx_banquet_status ON banquet_bookings(status);
+
 -- 7. ROW LEVEL SECURITY (RLS) POLICIES
 ALTER TABLE bills ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
@@ -134,6 +161,7 @@ ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tables_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE banquet_bookings ENABLE ROW LEVEL SECURITY;
 
 -- NOTE: The previous wide-open anon policies were removed on purpose.
 -- Apply supabase/migrations/20261106b_lockdown_rls.sql (after 20261106a_device_pairing_tables.sql) to enable secure access

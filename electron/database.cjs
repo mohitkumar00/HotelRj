@@ -26,6 +26,7 @@ class HotelDatabase {
       settledBills: [],
       auditLogs: [],
       expenses: [],
+      banquetBookings: [],
       menuCategories: JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES)),
       rooms: JSON.parse(JSON.stringify(DEFAULT_ROOMS)),
       tablesConfig: JSON.parse(JSON.stringify(DEFAULT_TABLES_CONFIG)),
@@ -55,6 +56,7 @@ class HotelDatabase {
             settledBills: Array.isArray(parsed.settledBills) ? parsed.settledBills : [],
             auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
             expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+            banquetBookings: Array.isArray(parsed.banquetBookings) ? parsed.banquetBookings : [],
             menuCategories: Array.isArray(parsed.menuCategories) && parsed.menuCategories.length > 0 
               ? parsed.menuCategories 
               : JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES)),
@@ -818,6 +820,34 @@ class HotelDatabase {
       return { success: true };
     }
     return { success: false, error: 'Table config not found' };
+  }
+
+  // -------------------------------------------------------------
+  // Banquet & Event Bookings
+  // -------------------------------------------------------------
+  getBanquetBookings() {
+    return this.data.banquetBookings || [];
+  }
+
+  saveBanquetBooking(booking) {
+    if (!booking || !booking.id) return { success: false, error: 'Invalid booking data' };
+    const list = this.data.banquetBookings || [];
+    const idx = list.findIndex((b) => b.id === booking.id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...booking, updatedAt: new Date().toISOString() };
+    } else {
+      list.push({ ...booking, createdAt: booking.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() });
+    }
+    this.data.banquetBookings = list;
+    this.persist();
+    return { success: true, booking };
+  }
+
+  deleteBanquetBooking(id) {
+    if (!id) return { success: false, error: 'Booking ID required' };
+    this.data.banquetBookings = (this.data.banquetBookings || []).filter((b) => b.id !== id);
+    this.persist();
+    return { success: true };
   }
 
   // -------------------------------------------------------------

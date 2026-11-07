@@ -66,6 +66,11 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
   saveTableConfig: (tableData) => ipcRenderer.invoke('save-table-config', tableData),
   deleteTableConfig: (tableId) => ipcRenderer.invoke('delete-table-config', tableId),
 
+  // Banquet & Event Bookings
+  getBanquetBookings: () => ipcRenderer.invoke('get-banquet-bookings'),
+  saveBanquetBooking: (booking) => ipcRenderer.invoke('save-banquet-booking', booking),
+  deleteBanquetBooking: (id) => ipcRenderer.invoke('delete-banquet-booking', id),
+
   // Supabase Cloud Sync
   getCloudConfig: () => ipcRenderer.invoke('get-cloud-config'),
   saveCloudConfig: (config) => ipcRenderer.invoke('save-cloud-config', config),

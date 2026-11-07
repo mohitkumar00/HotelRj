@@ -395,6 +395,27 @@ ipcMain.handle('delete-table-config', async (event, tableId) => {
   return result;
 });
 
+// Banquet & Event Bookings IPC Handlers
+ipcMain.handle('get-banquet-bookings', async () => {
+  return db.getBanquetBookings();
+});
+
+ipcMain.handle('save-banquet-booking', async (event, booking) => {
+  const result = db.saveBanquetBooking(booking);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
+ipcMain.handle('delete-banquet-booking', async (event, id) => {
+  const result = db.deleteBanquetBooking(id);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    setTimeout(() => cloudSync.syncAll(), 100);
+  }
+  return result;
+});
+
 // -------------------------------------------------------------
 // Supabase Cloud Sync IPC Handlers
 // -------------------------------------------------------------

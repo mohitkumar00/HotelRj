@@ -493,6 +493,40 @@ class SupabaseCloudSync {
         }
       }
 
+            // 7. Sync Banquet & Event Bookings
+      const banquetBookings = db.data.banquetBookings || [];
+      if (banquetBookings.length > 0) {
+        const batch = banquetBookings.map((b) => ({
+          id: b.id,
+          event_date: b.eventDate,
+          slot: b.slot,
+          custom_start_time: b.customStartTime || null,
+          custom_end_time: b.customEndTime || null,
+          venue: b.venue,
+          event_type: b.eventType,
+          no_of_guests: Number(b.noOfGuests) || 0,
+          customer_name: b.customerName || 'Guest',
+          customer_phone: b.customerPhone || '',
+          total_amount: Number(b.totalAmount) || 0,
+          advance_paid: Number(b.advancePaid) || 0,
+          balance_due: Number(b.balanceDue) || 0,
+          advance_payment_mode: b.advancePaymentMode || 'Cash',
+          special_notes: b.specialNotes || null,
+          status: b.status || 'confirmed',
+          created_by: b.createdBy || 'Staff',
+          updated_at: b.updatedAt || new Date().toISOString(),
+        }));
+
+        const res = await fetch(`${url}/rest/v1/banquet_bookings`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(batch),
+        });
+        if (!res.ok) {
+          console.warn('[CloudSync] Banquet bookings sync warning:', res.statusText);
+        }
+      }
+
       this.config.lastSyncTime = new Date().toISOString();
       this.config.lastSyncStatus = 'success';
       this.config.lastSyncError = null;

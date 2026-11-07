@@ -779,6 +779,57 @@ class LocalSyncServer {
         return;
       }
 
+      // GET /api/banquet-bookings
+      if (req.method === 'GET' && url.pathname === '/api/banquet-bookings') {
+        const bookings = db.getBanquetBookings();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(bookings));
+        return;
+      }
+
+      // POST /api/banquet-bookings
+      if (req.method === 'POST' && url.pathname === '/api/banquet-bookings') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const result = db.saveBanquetBooking(data.booking || data);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
+      // DELETE /api/banquet-bookings/delete
+      if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/banquet-bookings/delete') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            const bookingId = data.bookingId || data.id || url.searchParams.get('id');
+            const result = db.deleteBanquetBooking(bookingId);
+            if (result.success && cloudSync.isConfigured()) {
+              setTimeout(() => cloudSync.syncAll(), 150);
+            }
+            res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+        return;
+      }
+
       // Serve static Waiter POS web app files for mobile phone browsers (Zero APK install)
       if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
         const mimeTypes = {

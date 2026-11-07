@@ -47,8 +47,10 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   // Tabs: 'dishes' | 'rooms' | 'tables'
   const [activeTab, setActiveTab] = useState<'dishes' | 'rooms' | 'tables'>('dishes');
 
-  // Manager PIN Authorization State
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  // Manager PIN Authorization State (Persists for the session)
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+    return sessionStorage.getItem('hotel_rj_owner_auth') === 'true';
+  });
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [isPairOpen, setIsPairOpen] = useState(false);
@@ -122,6 +124,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
     const result = await verifyManagerPin(pinInput);
     if (result.ok) {
       setIsUnlocked(true);
+      sessionStorage.setItem('hotel_rj_owner_auth', 'true');
       setPinError(null);
       setPinInput('');
     } else {

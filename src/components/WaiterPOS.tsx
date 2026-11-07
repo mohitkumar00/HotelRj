@@ -50,10 +50,13 @@ import {
   Sliders,
   AlertTriangle,
   Split,
+  Calendar,
+  Lock,
 } from 'lucide-react';
 import { parseItemPrice } from '../utils/priceUtils';
 import { OwnerInsights } from './OwnerInsights';
 import { HotelOperationsModal } from './HotelOperationsModal';
+import { BanquetCalendarModal } from './BanquetCalendarModal';
 import { fetchMenuApi, fetchTablesConfigApi } from '../utils/hotelDataApi';
 import {
   settleBill,
@@ -63,58 +66,12 @@ import {
   SettleBillPayload,
 } from '../utils/analyticsApi';
 import { mergeTables, type TableOrder, type WaiterItemRecord } from '../utils/tableMerge';
-
-interface ConnectedWaiter {
-  id: string;
-  name: string;
-  ip: string;
-  activeTable: string;
-  device: string;
-  lastSeen: number;
-  lastSeenTime: string;
-  status: 'online' | 'idle';
-}
-
-interface SyncServerInfo {
-  running: boolean;
-  port: number;
-  ip: string;
-  localUrl: string;
-  token?: string;
-}
-
-const ALL_TABLE_IDS = [
-  // 1. Dine-in tables
-  'T-1',
-  'T-2',
-  'T-3',
-  'T-4',
-  'T-5',
-  'T-6',
-  'T-7',
-  'T-8',
-  'T-9',
-  'T-10',
-  'T-11',
-  'T-12',
-  // 2. Takeaway / Parcel slots
-  'Parcel 1',
-  'Parcel 2',
-  'Parcel 3',
-  'Parcel 4',
-  'Takeaway Counter',
-  // 3. Hotel rooms
-  'Room 101',
-  'Room 102',
-  'Room 103',
-  'Room 201',
-  'Room 202',
-  'Room 203',
-  'Room 204',
-  'Room 301',
-  'Room 302',
-  'Room 305',
-];
+import type { ConnectedWaiter, SyncServerInfo } from './pos/types';
+import { ALL_TABLE_IDS } from './pos/constants';
+import { ManagerMenuModal } from './pos/ManagerMenuModal';
+import { ManagerPinPromptModal } from './pos/ManagerPinPromptModal';
+import { CancelBillModal } from './pos/CancelBillModal';
+import { BillsHistoryModal } from './pos/BillsHistoryModal';
 
 interface WaiterPOSProps {
   onSwitchToGuestMenu?: () => void;
@@ -123,7 +80,7 @@ interface WaiterPOSProps {
 export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => {
   // Active selected table / parcel
   const [activeTable, setActiveTable] = useState<string>('T-1');
-  const [tableFilter, setTableFilter] = useState<'all' | 'dinein' | 'takeaway' | 'rooms' | 'active'>('all');
+  const [tableFilter, setTableFilter] = useState<'all' | 'dinein' | 'takeaway' | 'rooms' | 'banquet' | 'active'>('all');
 
   // Staff / Server Name
   const [serverName, setServerName] = useState<string>(() => {
@@ -625,6 +582,87 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   // Hotel Operations Modal State (Dishes, Kitchen 86 Sold-Out, Rooms & Tables)
   const [isHotelOpsOpen, setIsHotelOpsOpen] = useState(false);
+
+  // Banquet Event Calendar State
+  const [isBanquetCalendarOpen, setIsBanquetCalendarOpen] = useState(false);
+
+  // Responsive Manager Hub & Mobile PIN Authorization State
+  const [isManagerMenuOpen, setIsManagerMenuOpen] = useState(false);
+  const [isManagerPinPromptOpen, setIsManagerPinPromptOpen] = useState(false);
+  const [targetManagerAction, setTargetManagerAction] = useState<
+    'insights' | 'menu' | 'banquet' | 'bills' | 'printer' | 'logs' | null
+  >(null);
+  const [managerPinInput, setManagerPinInput] = useState('');
+  const [managerPinError, setManagerPinError] = useState<string | null>(null);
+  const [isCheckingManagerPin, setIsCheckingManagerPin] = useState(false);
+
+  const handleOpenManagerAction = (
+    action: 'insights' | 'menu' | 'banquet' | 'bills' | 'printer' | 'logs'
+  ) => {
+    setIsManagerMenuOpen(false);
+    const isAuth = sessionStorage.getItem('hotel_rj_owner_auth') === 'true';
+
+    // Printer and debug logs don't strictly require owner PIN
+    if (action === 'printer') {
+      setIsPrinterModalOpen(true);
+      return;
+    }
+    if (action === 'logs') {
+      setIsLogsModalOpen(true);
+      return;
+    }
+
+    if (isAuth) {
+      if (action === 'insights') setShowOwnerInsights(true);
+      else if (action === 'menu') setIsHotelOpsOpen(true);
+      else if (action === 'banquet') setIsBanquetCalendarOpen(true);
+      else if (action === 'bills') {
+        setIsBillsHistoryOpen(true);
+        loadRecentBills();
+      }
+      return;
+    }
+
+    // Not authenticated: prompt for manager PIN
+    setTargetManagerAction(action);
+    setManagerPinInput('');
+    setManagerPinError(null);
+    setIsManagerPinPromptOpen(true);
+  };
+
+  const handleManagerPinSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!managerPinInput.trim()) return;
+    setIsCheckingManagerPin(true);
+    setManagerPinError(null);
+    try {
+      const res = await verifyManagerPin(managerPinInput.trim());
+      if (res.ok) {
+        sessionStorage.setItem('hotel_rj_owner_auth', 'true');
+        setIsManagerPinPromptOpen(false);
+        const action = targetManagerAction;
+        setTargetManagerAction(null);
+        setManagerPinInput('');
+        if (action === 'insights') setShowOwnerInsights(true);
+        else if (action === 'menu') setIsHotelOpsOpen(true);
+        else if (action === 'banquet') setIsBanquetCalendarOpen(true);
+        else if (action === 'bills') {
+          setIsBillsHistoryOpen(true);
+          loadRecentBills();
+        }
+      } else {
+        setManagerPinError(
+          res.reason === 'locked'
+            ? `Too many attempts. Try again in ${formatLock(res.remainingMs || 0)}.`
+            : 'Incorrect Manager PIN.'
+        );
+      }
+    } catch (err: any) {
+      setManagerPinError(err?.message || 'Error verifying PIN');
+    } finally {
+      setIsCheckingManagerPin(false);
+    }
+  };
   const [liveMenuCategories, setLiveMenuCategories] = useState<MenuCategory[]>(() => {
     try {
       const cached = localStorage.getItem('hotel_rj_menu_cache');
@@ -1406,6 +1444,12 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     if (tableFilter === 'rooms') {
       return currentTableIds.filter((t) => t.toLowerCase().startsWith('room'));
     }
+    if (tableFilter === 'banquet') {
+      return currentTableIds.filter((t) => {
+        const lower = t.toLowerCase();
+        return lower.includes('banquet') || lower.includes('lawn') || lower.includes('property') || lower.includes('hall');
+      });
+    }
     if (tableFilter === 'active') {
       return currentTableIds.filter((t) => {
         const order = tables[t];
@@ -1559,57 +1603,82 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               <span className="text-[10px] hidden xs:inline">Printer</span>
             </button>
 
-            {/* Live Debug Logs Button */}
+            {/* Mobile / Android: Dedicated Touch-Friendly Manager & Owner Portal Button */}
             <button
               type="button"
-              onClick={() => setIsLogsModalOpen(true)}
-              className="px-2 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center gap-1 border border-white/10 active:scale-95 transition-all"
-              title="Live Debug Console & System Logs"
+              onClick={() => setIsManagerMenuOpen(true)}
+              className="lg:hidden px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/25 via-gold-500/25 to-amber-500/25 hover:from-amber-500/40 hover:to-gold-500/40 text-gold-300 text-xs font-bold flex items-center gap-1.5 border border-gold-500/40 active:scale-95 transition-all shadow-md"
+              title="Open Manager & Owner Portal (Insights, Menu, Rooms, Banquet)"
             >
-              <Bug className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-[10px] hidden xs:inline">Logs</span>
-              {logs.length > 0 && (
-                <span className="px-1 py-0.2 rounded-full bg-amber-400/20 text-amber-300 text-[9px] font-mono">
-                  {logs.length}
-                </span>
-              )}
+              <Sliders className="w-3.5 h-3.5 text-gold-400" />
+              <span>Manager</span>
             </button>
 
-            {/* Bills History & Void Management Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsBillsHistoryOpen(true);
-                loadRecentBills();
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 active:scale-95 transition-all shadow-sm"
-              title="Recent Bills, Reprints & Anti-Theft Cancellations"
-            >
-              <Receipt className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[10px] hidden xs:inline">Bills History</span>
-            </button>
+            {/* DESKTOP CONTROLS (Hidden on mobile phones to prevent header overflow) */}
+            <div className="hidden lg:flex items-center gap-1.5">
+              {/* Live Debug Logs Button */}
+              <button
+                type="button"
+                onClick={() => setIsLogsModalOpen(true)}
+                className="px-2 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-semibold flex items-center gap-1 border border-white/10 active:scale-95 transition-all"
+                title="Live Debug Console & System Logs"
+              >
+                <Bug className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[10px]">Logs</span>
+                {logs.length > 0 && (
+                  <span className="px-1 py-0.2 rounded-full bg-amber-400/20 text-amber-300 text-[9px] font-mono">
+                    {logs.length}
+                  </span>
+                )}
+              </button>
 
-            {/* Hotel Operations & Inventory Modal Button */}
-            <button
-              type="button"
-              onClick={() => setIsHotelOpsOpen(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 text-xs font-semibold flex items-center gap-1.5 border border-purple-500/30 active:scale-95 transition-all shadow-sm"
-              title="Manage Dishes, Kitchen 86 Sold-Out, Rooms & Tables"
-            >
-              <Sliders className="w-3.5 h-3.5 text-purple-400" />
-              <span className="text-[10px] hidden xs:inline">Menu & Rooms</span>
-            </button>
+              {/* Bills History & Void Management Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBillsHistoryOpen(true);
+                  loadRecentBills();
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 border border-emerald-500/30 active:scale-95 transition-all shadow-sm"
+                title="Recent Bills, Reprints & Anti-Theft Cancellations"
+              >
+                <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[10px]">Bills History</span>
+              </button>
 
-            {/* Owner Insights & Anti-Theft Analytics Button */}
-            <button
-              type="button"
-              onClick={() => setShowOwnerInsights(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-gold-500/20 hover:from-amber-500/30 hover:to-gold-500/30 text-gold-300 text-xs font-bold flex items-center gap-1.5 border border-gold-500/30 active:scale-95 transition-all shadow-sm"
-              title="Open Owner Analytics, Anti-Theft Ledger & Daily Kharacha"
-            >
-              <TrendingUp className="w-3.5 h-3.5 text-gold-400" />
-              <span className="text-[10px] hidden sm:inline">Owner Insights</span>
-            </button>
+              {/* Banquet Event Calendar Button */}
+              <button
+                type="button"
+                onClick={() => setIsBanquetCalendarOpen(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-xs font-semibold flex items-center gap-1.5 border border-amber-500/30 active:scale-95 transition-all shadow-sm"
+                title="Banquet & Lawn Advance Bookings Calendar"
+              >
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[10px]">Banquet</span>
+              </button>
+
+              {/* Hotel Operations & Inventory Modal Button */}
+              <button
+                type="button"
+                onClick={() => handleOpenManagerAction('menu')}
+                className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 text-xs font-semibold flex items-center gap-1.5 border border-purple-500/30 active:scale-95 transition-all shadow-sm"
+                title="Manage Dishes, Kitchen 86 Sold-Out, Rooms & Tables"
+              >
+                <Sliders className="w-3.5 h-3.5 text-purple-400" />
+                <span className="text-[10px]">Menu & Rooms</span>
+              </button>
+
+              {/* Owner Insights & Anti-Theft Analytics Button */}
+              <button
+                type="button"
+                onClick={() => handleOpenManagerAction('insights')}
+                className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-gold-500/20 hover:from-amber-500/30 hover:to-gold-500/30 text-gold-300 text-xs font-bold flex items-center gap-1.5 border border-gold-500/30 active:scale-95 transition-all shadow-sm"
+                title="Open Owner Analytics, Anti-Theft Ledger & Daily Kharacha"
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-gold-400" />
+                <span className="text-[10px]">Owner Insights</span>
+              </button>
+            </div>
 
             {/* Browser preview exit (hidden on Android native APK and Windows Desktop App) */}
             {!Capacitor.isNativePlatform() && !isElectron && onSwitchToGuestMenu && (
@@ -1678,6 +1747,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                   { id: 'dinein', label: '🍽️ Dine-In' },
                   { id: 'takeaway', label: '🛍️ Takeaway' },
                   { id: 'rooms', label: '🏨 Rooms' },
+                  { id: 'banquet', label: '🎉 Banquet' },
                   { id: 'active', label: '🟢 Active' },
                 ] as const
               ).map((tab) => (
@@ -1696,6 +1766,36 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               ))}
             </div>
           </div>
+
+          {/* Banquet Calendar Quick Action Banner */}
+          {tableFilter === 'banquet' && (
+            <div className="bg-gradient-to-r from-amber-500/20 via-zinc-900 to-amber-500/15 border border-amber-500/40 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-md animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/25 border border-amber-500/40 text-amber-300 flex items-center justify-center font-bold text-base shadow">
+                  🎉
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-black text-white">Banquet & Lawn Advance Bookings</h4>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      Duplicate Protection Active
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 mt-0.5">
+                    Plan birthdays, weddings & corporate events months in advance with custom hours & conflict detection
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBanquetCalendarOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Open Event Calendar</span>
+              </button>
+            </div>
+          )}
 
           {/* Horizontal Scrollable Table Pills */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
@@ -2366,7 +2466,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </button>
             </div>
 
-            {/* Quick Presets for Highway Hotel & Dhaba Services */}
+            {/* Quick Presets for Highway Hotel & Restaurant Services */}
             <div>
               <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1.5">
                 ⚡ Quick Presets (Tap to Auto-Fill):
@@ -3771,395 +3871,41 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
       {/* 9E. RECENT BILLS HISTORY & VOID MANAGER MODAL */}
       {isBillsHistoryOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-3xl bg-stone-900 border border-gold-500/30 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col max-h-[92vh] text-white">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-stone-800 pb-3 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Receipt className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                    <span>Recent Bills &amp; Sales History</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 font-mono">
-                      {recentBillsList.length} Total
-                    </span>
-                  </h3>
-                  <p className="text-xs text-stone-400">
-                    Reprint duplicate bills or cancel voided orders with manager authorization
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={loadRecentBills}
-                  disabled={loadingBills}
-                  className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 transition-all active:scale-95 disabled:opacity-50"
-                  title="Refresh bills list"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loadingBills ? 'animate-spin text-gold-400' : ''}`} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsBillsHistoryOpen(false)}
-                  className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Filter and Search Bar */}
-            <div className="py-3 flex flex-col sm:flex-row gap-2 shrink-0 border-b border-stone-800/80">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
-                <input
-                  type="text"
-                  placeholder="Search by Bill #, table, phone, or dish..."
-                  value={billsSearchTerm}
-                  onChange={(e) => setBillsSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-xs text-white placeholder-stone-500 focus:outline-none focus:border-gold-400"
-                />
-              </div>
-
-              {/* Status Filter Tabs */}
-              <div className="flex items-center gap-1 bg-stone-950 p-1 rounded-xl border border-stone-800 text-xs shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setBillsFilterStatus('all')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
-                    billsFilterStatus === 'all'
-                      ? 'bg-gold-500 text-black shadow-sm font-bold'
-                      : 'text-stone-400 hover:text-white'
-                  }`}
-                >
-                  All ({recentBillsList.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillsFilterStatus('settled')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
-                    billsFilterStatus === 'settled'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
-                      : 'text-stone-400 hover:text-white'
-                  }`}
-                >
-                  🟢 Settled ({recentBillsList.filter((b) => b.status !== 'cancelled').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBillsFilterStatus('cancelled')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
-                    billsFilterStatus === 'cancelled'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold'
-                      : 'text-stone-400 hover:text-white'
-                  }`}
-                >
-                  🔴 Cancelled ({recentBillsList.filter((b) => b.status === 'cancelled').length})
-                </button>
-              </div>
-            </div>
-
-            {/* Bills List Body */}
-            <div className="flex-1 overflow-y-auto py-3 space-y-2.5 pr-1">
-              {loadingBills ? (
-                <div className="p-8 text-center text-stone-400 text-xs">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-gold-400" />
-                  Loading bills from database...
-                </div>
-              ) : filteredRecentBills.length === 0 ? (
-                <div className="p-10 text-center text-stone-400 border border-dashed border-stone-800 rounded-2xl">
-                  <Receipt className="w-8 h-8 mx-auto mb-2 text-stone-600" />
-                  <p className="text-sm font-bold text-stone-300">No matching bills found</p>
-                  <p className="text-xs text-stone-500 mt-1">
-                    When you settle a table or parcel, the bill will appear here permanently.
-                  </p>
-                </div>
-              ) : (
-                filteredRecentBills.map((b) => {
-                  const isCancelled = b.status === 'cancelled';
-                  return (
-                    <div
-                      key={b.id || b.billNumber}
-                      className={`p-3.5 rounded-2xl border transition-all ${
-                        isCancelled
-                          ? 'bg-stone-950/80 border-rose-500/30 opacity-80'
-                          : 'bg-stone-950 border-stone-800 hover:border-gold-500/40 shadow-sm'
-                      }`}
-                    >
-                      {/* Top Header of Card */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-800/80 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm text-gold-300">
-                            #{b.billNumber}
-                          </span>
-                          <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-stone-800 text-stone-200">
-                            {b.tableId}
-                          </span>
-                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-stone-800/80 text-stone-400 border border-stone-700">
-                            {b.department || 'restaurant'}
-                          </span>
-                        </div>
-
-                        {/* Status Badge */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-stone-400">
-                            {b.timestamp
-                              ? new Date(b.timestamp).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
-                              : ''}
-                          </span>
-                          {isCancelled ? (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center gap-1">
-                              <Ban className="w-3 h-3" />
-                              <span>CANCELLED</span>
-                            </span>
-                          ) : b.paymentMethod === 'split' ? (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                              SPLIT (Cash ₹{b.paymentDetails?.cashAmount || 0} + UPI ₹{b.paymentDetails?.upiAmount || 0})
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                              {(b.paymentMethod || 'cash').toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Dishes summary */}
-                      <div className="py-2 text-xs text-stone-300 leading-relaxed">
-                        <div className="text-[11px] text-stone-400 line-clamp-2">
-                          {(b.items || [])
-                            .map((i: any) => `${i.quantity}x ${i.name}`)
-                            .join(', ') || 'No item details recorded'}
-                        </div>
-
-                        {/* Cancellation note banner */}
-                        {isCancelled && (
-                          <div className="mt-2 p-2 rounded-xl bg-rose-950/40 border border-rose-900/50 text-[11px] text-rose-300 flex items-start gap-1.5">
-                            <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-bold">Reason: </span>
-                              <span>{b.cancelReason || 'Not specified'}</span>
-                              <span className="text-stone-400 block text-[10px] mt-0.5">
-                                Cancelled by {b.cancelledBy || 'Cashier'} at{' '}
-                                {b.cancelledAt
-                                  ? new Date(b.cancelledAt).toLocaleTimeString([], {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })
-                                  : 'N/A'}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Card Footer: Amount and Actions */}
-                      <div className="flex items-center justify-between pt-1 border-t border-stone-900">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-[11px] text-stone-400">Total:</span>
-                          <span
-                            className={`font-mono font-bold text-base ${
-                              isCancelled
-                                ? 'line-through text-stone-500'
-                                : 'text-gold-200'
-                            }`}
-                          >
-                            ₹{b.total}
-                          </span>
-                          {isCancelled && (
-                            <span className="text-[10px] font-bold text-rose-400">
-                              (Deducted from sales)
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          {/* Reprint Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleReprintSettledBill(b)}
-                            className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center gap-1 transition-all active:scale-95"
-                            title="Reprint customer bill"
-                          >
-                            <Printer className="w-3.5 h-3.5 text-gold-400" />
-                            <span>Reprint</span>
-                          </button>
-
-                          {/* Cancel / Void Bill Button (only if active) */}
-                          {!isCancelled && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setBillToCancel(b);
-                                setCancelPin('');
-                                setCancelPinError(false);
-                                setCustomCancelReason('');
-                              }}
-                              className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-1 transition-all active:scale-95"
-                              title="Cancel / Void this bill (Manager PIN required)"
-                            >
-                              <Ban className="w-3.5 h-3.5 text-rose-400" />
-                              <span>Cancel Bill</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Modal Bottom Close */}
-            <div className="pt-3 border-t border-stone-800 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsBillsHistoryOpen(false)}
-                className="px-5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <BillsHistoryModal
+          recentBillsList={recentBillsList}
+          loadRecentBills={loadRecentBills}
+          loadingBills={loadingBills}
+          setIsBillsHistoryOpen={setIsBillsHistoryOpen}
+          billsSearchTerm={billsSearchTerm}
+          setBillsSearchTerm={setBillsSearchTerm}
+          setBillsFilterStatus={setBillsFilterStatus}
+          billsFilterStatus={billsFilterStatus}
+          filteredRecentBills={filteredRecentBills}
+          handleReprintSettledBill={handleReprintSettledBill}
+          setBillToCancel={setBillToCancel}
+          setCancelPin={setCancelPin}
+          setCancelPinError={setCancelPinError}
+          setCustomCancelReason={setCustomCancelReason}
+        />
       )}
 
       {/* 9F. CANCEL BILL AUTHORIZATION MODAL */}
       {billToCancel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-stone-900 border border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-white">
-            {/* Header */}
-            <div className="flex items-center gap-3 border-b border-stone-800 pb-3 text-rose-400">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center">
-                <AlertOctagon className="w-6 h-6 text-rose-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Cancel &amp; Void Bill #{billToCancel.billNumber}</h3>
-                <p className="text-xs text-rose-300">Manager Authorization Required</p>
-              </div>
-            </div>
-
-            {/* Bill Info Card */}
-            <div className="p-3 bg-stone-950 border border-rose-500/25 rounded-2xl space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-stone-400">Table / Room:</span>
-                <span className="font-bold text-white">{billToCancel.tableId}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-stone-400">Department:</span>
-                <span className="text-gold-300 font-bold uppercase">{billToCancel.department || 'restaurant'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-stone-400">Payment Method:</span>
-                <span className="font-mono text-emerald-400 font-bold uppercase">{billToCancel.paymentMethod}</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-stone-800/80">
-                <span className="text-stone-300 font-semibold">Amount to Deduct:</span>
-                <span className="font-mono text-rose-400 font-black text-base">₹{billToCancel.total}</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-stone-400 leading-relaxed">
-              ⚠️ <strong>Warning:</strong> Cancelling this bill will deduct <strong className="text-white">₹{billToCancel.total}</strong> from Gross Revenue and today&apos;s Cash Drawer. An anti-theft entry will be permanently logged.
-            </p>
-
-            <form onSubmit={handleConfirmCancelBill} className="space-y-3.5 text-xs">
-              {/* Manager PIN */}
-              <div>
-                <label className="block text-stone-300 font-semibold mb-1 flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-gold-400" />
-                  <span>Enter Manager PIN:</span>
-                </label>
-                <input
-                  type="password"
-                  maxLength={6}
-                  placeholder="Enter PIN"
-                  value={cancelPin}
-                  onChange={(e) => {
-                    setCancelPin(e.target.value);
-                    setCancelPinError(false);
-                  }}
-                  autoFocus
-                  className={`w-full py-2.5 px-3 bg-stone-950 border rounded-xl text-center font-mono tracking-widest text-lg text-white focus:outline-none ${
-                    cancelPinError ? 'border-rose-500 bg-rose-950/20' : 'border-stone-700 focus:border-gold-400'
-                  }`}
-                />
-                {cancelPinError && (
-                  <span className="text-[11px] text-rose-400 mt-1 block">
-                    ❌ {cancelPinMessage || 'Incorrect PIN. Only authorized managers can void bills.'}
-                  </span>
-                )}
-              </div>
-
-              {/* Cancellation Reason Presets */}
-              <div>
-                <label className="block text-stone-300 font-semibold mb-1.5">
-                  Mandatory Cancellation Reason:
-                </label>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {[
-                    'Entered Wrong Table / Duplicate',
-                    'Customer Dispute / Returned Food',
-                    'Customer Left Without Paying',
-                    'Wrong Dish Punched / Prepared',
-                    'Guest Changed Payment Method',
-                  ].map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        setCancelReasonPreset(r);
-                        setCustomCancelReason('');
-                      }}
-                      className={`py-2 px-3 rounded-xl text-left border transition-all text-xs ${
-                        cancelReasonPreset === r && !customCancelReason
-                          ? 'bg-rose-500/20 text-rose-200 border-rose-500/50 font-bold'
-                          : 'bg-stone-950 text-stone-400 border-stone-800 hover:text-white'
-                      }`}
-                    >
-                      • {r}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="pt-2">
-                  <input
-                    type="text"
-                    placeholder="Or type custom reason..."
-                    value={customCancelReason}
-                    onChange={(e) => setCustomCancelReason(e.target.value)}
-                    className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white text-xs focus:outline-none focus:border-rose-400"
-                  />
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setBillToCancel(null)}
-                  className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
-                >
-                  Keep Bill
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCancellingBill || !cancelPin.trim()}
-                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  <Ban className="w-3.5 h-3.5" />
-                  <span>{isCancellingBill ? 'Voiding...' : 'Confirm Void'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CancelBillModal
+          billToCancel={billToCancel}
+          handleConfirmCancelBill={handleConfirmCancelBill}
+          cancelPin={cancelPin}
+          setCancelPin={setCancelPin}
+          setCancelPinError={setCancelPinError}
+          cancelPinError={cancelPinError}
+          cancelPinMessage={cancelPinMessage}
+          setCancelReasonPreset={setCancelReasonPreset}
+          setCustomCancelReason={setCustomCancelReason}
+          cancelReasonPreset={cancelReasonPreset}
+          customCancelReason={customCancelReason}
+          setBillToCancel={setBillToCancel}
+          isCancellingBill={isCancellingBill}
+        />
       )}
 
       {/* Hotel Operations & Inventory Management Modal */}
@@ -4168,6 +3914,35 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         onClose={() => setIsHotelOpsOpen(false)}
         onDataChanged={() => loadHotelOpsData()}
       />
+
+      {/* Banquet Event Calendar Modal */}
+      <BanquetCalendarModal
+        isOpen={isBanquetCalendarOpen}
+        onClose={() => setIsBanquetCalendarOpen(false)}
+        serverName={serverName}
+      />
+
+      {/* Manager Access PIN Prompt Modal */}
+      {isManagerPinPromptOpen && (
+        <ManagerPinPromptModal
+          handleManagerPinSubmit={handleManagerPinSubmit}
+          managerPinInput={managerPinInput}
+          setManagerPinInput={setManagerPinInput}
+          setManagerPinError={setManagerPinError}
+          managerPinError={managerPinError}
+          setIsManagerPinPromptOpen={setIsManagerPinPromptOpen}
+          setTargetManagerAction={setTargetManagerAction}
+          isCheckingManagerPin={isCheckingManagerPin}
+        />
+      )}
+
+      {/* Manager Action Hub Sheet (Mobile & Quick Access) */}
+      {isManagerMenuOpen && (
+        <ManagerMenuModal
+          setIsManagerMenuOpen={setIsManagerMenuOpen}
+          handleOpenManagerAction={handleOpenManagerAction}
+        />
+      )}
     </div>
   );
 };
