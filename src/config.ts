@@ -15,6 +15,8 @@ export const SYNC_SERVER_PORT = 5050;
 /** localStorage keys (single source of truth). */
 export const STORAGE_KEYS = {
   syncUrl: 'hotel_rj_counter_sync_url',
+  /** Older key still read as a fallback. */
+  legacySyncUrl: 'hotel_rj_sync_server_url',
   syncToken: 'hotel_rj_sync_token',
   session: 'hotel_rj_cloud_session',
   pinHash: 'hotel_rj_pin_v2',

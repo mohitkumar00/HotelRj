@@ -24,6 +24,15 @@ Run `npm install` first (new devDependencies: vitest, eslint, typescript-eslint)
 - Safe refactors: `tableMerge.ts`, `dates.ts`, `storage.ts`, lazy-loaded WaiterPOS/DigitalMenuPage, exact route matching, local-date fixes, hook-order fixes.
 - Tooling: ESLint (`any` = warning), Vitest (19 tests), `.github/workflows/ci.yml`, README rewrite, `docs/SECURITY_SETUP.md`.
 
+## Refactor pass (2026-11-07)
+- Inline modals extracted into typed components (props generated from the TypeScript checker, behaviour unchanged; state stays in the parent):
+  `src/components/pos/*` (12 POS modals + OrderDrawer + types/constants), `src/components/owner/*` (Cloud sync, Share, Expense),
+  `src/components/ops/*` (Edit dish/room/table), `src/pages/menu/*` (Order summary, Floating cart bar).
+- Line counts: WaiterPOS 4528 -> ~2390, OwnerInsights 1549 -> ~1220, DigitalMenuPage 1361 -> ~970, HotelOperationsModal 1218 -> ~940.
+- `src/utils/syncBase.ts`: single `getApiBaseUrl()` replacing three drifting copies (analytics/banquet/hotelData). Edge-case fixes: analytics no longer skips HTTP when served by the sync server; banquet honours the :5050 origin; hotelData honours the legacy key.
+- `src/data/defaultHotelConfig.ts`: default rooms/tables moved out of `hotelDataApi.ts`.
+- Remaining ideas: split the main render trees and the ~75 `useState`s in WaiterPOS into hooks (`useTables`, `usePrinter`, `useSettlement`); typed `ElectronAPI` accessor (73 `(window as any).ElectronAPI` call sites); burn down ~170 `any` warnings.
+
 ## NOT yet done: Supabase is still open
 No SQL has been run. The database still allows anon read/write. Until the steps below are finished the app behaves as before.
 

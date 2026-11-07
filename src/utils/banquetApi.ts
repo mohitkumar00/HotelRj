@@ -3,9 +3,10 @@
  * Layered persistence: LocalStorage (Offline) -> Electron IPC -> Local Sync HTTP -> Supabase Cloud
  */
 
-import { STORAGE_KEYS, SUPABASE_URL } from '../config';
+import { SUPABASE_URL } from '../config';
 import { getSupabaseHeaders } from './deviceAuth';
 import { BanquetBooking } from '../types/banquet';
+import { getApiBaseUrl } from './syncBase';
 
 const LOCAL_STORAGE_KEY = 'hotel_rj_banquet_bookings';
 
@@ -50,23 +51,6 @@ const INITIAL_DEMO_BOOKINGS: BanquetBooking[] = [
     updatedAt: new Date().toISOString(),
   },
 ];
-
-function getApiBaseUrl(): string {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEYS.syncUrl) || localStorage.getItem('hotel_rj_sync_server_url');
-    if (saved && saved.trim()) {
-      let clean = saved.trim();
-      if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
-        clean = `http://${clean}`;
-      }
-      return clean.replace(/\/+$/, '');
-    }
-  } catch {}
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    return '';
-  }
-  return 'http://127.0.0.1:5050';
-}
 
 async function fetchHttpServer(endpoint: string, init?: RequestInit): Promise<Response | null> {
   const base = getApiBaseUrl();

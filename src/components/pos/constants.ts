@@ -1,0 +1,36 @@
+export const ALL_TABLE_IDS = [
+  // 1. Dine-in tables
+  'T-1',
+  'T-2',
+  'T-3',
+  'T-4',
+  'T-5',
+  'T-6',
+  'T-7',
+  'T-8',
+  'T-9',
+  'T-10',
+  'T-11',
+  'T-12',
+  // 2. Takeaway / Parcel slots
+  'Parcel 1',
+  'Parcel 2',
+  'Parcel 3',
+  'Parcel 4',
+  'Takeaway Counter',
+  // 3. Hotel rooms
+  'Room 101',
+  'Room 102',
+  'Room 103',
+  'Room 201',
+  'Room 202',
+  'Room 203',
+  'Room 204',
+  'Room 301',
+  'Room 302',
+  'Room 305',
+  // 4. Banquet & Event Venues
+  'Banquet Hall 1 (AC)',
+  'Garden Lawn',
+  'Combined / Full Property',
+];

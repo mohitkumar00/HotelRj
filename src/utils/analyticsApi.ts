@@ -1,7 +1,8 @@
 // Client-side Analytics & Database API bridge
 import { DEFAULT_SUPABASE_URL } from './hotelDataApi';
 import { getSupabaseHeaders } from './deviceAuth';
-import { SUPABASE_ANON_KEY, STORAGE_KEYS } from '../config';
+import { SUPABASE_ANON_KEY } from '../config';
+import { getApiBaseUrl } from './syncBase';
 
 export interface SettleBillPayload {
   id?: string;
@@ -172,25 +173,6 @@ export interface AnalyticsSummary {
 }
 
 // Determine API Base URL
-function getApiBaseUrl(): string {
-  if (typeof window === 'undefined') return '';
-  const savedSyncUrl = localStorage.getItem(STORAGE_KEYS.syncUrl) || localStorage.getItem('hotel_rj_sync_server_url');
-  if (savedSyncUrl && savedSyncUrl.trim()) {
-    let clean = savedSyncUrl.trim();
-    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
-      clean = `http://${clean}`;
-    }
-    return clean.replace(/\/+$/, '');
-  }
-  if (window.location.port === '5050') {
-    return '';
-  }
-  // On public HTTPS web without a custom local sync URL, don't attempt http://127.0.0.1
-  if (window.location.protocol === 'https:') {
-    return '';
-  }
-  return 'http://127.0.0.1:5050';
-}
 
 async function fetchHttpServer(endpoint: string, init?: RequestInit): Promise<Response | null> {
   const base = getApiBaseUrl();

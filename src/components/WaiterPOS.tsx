@@ -9,50 +9,7 @@ import {
 } from '../utils/thermalPrinter';
 import { Logger, LogEntry } from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
-import { QRCodeSVG } from 'qrcode.react';
-import {
-  Search,
-  Plus,
-  Minus,
-  Printer,
-  FileText,
-  Check,
-  MessageCircle,
-  X,
-  Sparkles,
-  User,
-  Trash2,
-  ChevronUp,
-  ShoppingBag,
-  Edit3,
-  Bug,
-  Copy,
-  RefreshCw,
-  Wifi,
-  WifiOff,
-  Monitor,
-  FolderOpen,
-  Users,
-  ShieldCheck,
-  ShieldAlert,
-  ChefHat,
-  PlusCircle,
-  TrendingUp,
-  DollarSign,
-  Smartphone,
-  CreditCard,
-  Building2,
-  CheckCircle,
-  Receipt,
-  Ban,
-  KeyRound,
-  AlertOctagon,
-  Sliders,
-  AlertTriangle,
-  Split,
-  Calendar,
-  Lock,
-} from 'lucide-react';
+import { Search, Plus, Minus, Printer, Check, X, User, ChevronUp, ShoppingBag, Edit3, Bug, RefreshCw, Wifi, WifiOff, Monitor, Users, PlusCircle, TrendingUp, Receipt, Sliders, AlertTriangle, Calendar } from 'lucide-react';
 import { parseItemPrice } from '../utils/priceUtils';
 import { OwnerInsights } from './OwnerInsights';
 import { HotelOperationsModal } from './HotelOperationsModal';
@@ -72,6 +29,15 @@ import { ManagerMenuModal } from './pos/ManagerMenuModal';
 import { ManagerPinPromptModal } from './pos/ManagerPinPromptModal';
 import { CancelBillModal } from './pos/CancelBillModal';
 import { BillsHistoryModal } from './pos/BillsHistoryModal';
+import { LogsModal } from './pos/LogsModal';
+import { WaitersModal } from './pos/WaitersModal';
+import { SyncModal } from './pos/SyncModal';
+import { PrinterModal } from './pos/PrinterModal';
+import { ItemNoteModal } from './pos/ItemNoteModal';
+import { VoidItemModal } from './pos/VoidItemModal';
+import { SettleBillModal } from './pos/SettleBillModal';
+import { CustomDishModal } from './pos/CustomDishModal';
+import { OrderDrawer } from './pos/OrderDrawer';
 
 interface WaiterPOSProps {
   onSwitchToGuestMenu?: () => void;
@@ -2176,1697 +2142,171 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
       {/* 8. ORDER DRAWER & KOT / BILLING SLIP MODAL */}
       {isOrderDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-lg max-h-[92vh] bg-[#0e1017] text-white rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
-            {/* Modal Header */}
-            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-[#131622]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-amber-400 text-black flex items-center justify-center font-bold text-xs">
-                  {activeTable}
-                </div>
-                <div>
-                  <h3 className="font-serif text-sm font-bold text-white">
-                    {activeTable} Order Sheet
-                  </h3>
-                  <span className="text-[10px] text-sand-400">
-                    Server: {serverName} • KOT #{currentOrder.kotNumber}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsOrderDrawerOpen(false)}
-                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-sand-300 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-4 overflow-y-auto flex-1 space-y-4">
-              {currentItemsList.length === 0 ? (
-                <div className="py-10 text-center text-sand-400 space-y-3">
-                  <p className="text-sm font-medium">{activeTable} is empty.</p>
-                  <p className="text-xs">Tap dishes on the menu or add a custom service below.</p>
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 py-2 px-4 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-xs font-bold shadow-sm"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    <span>+ Add Custom Service / Chicken Prep</span>
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Wave 1: NEW ITEMS TO FIRE */}
-                  {newItemsToFire.length > 0 && (
-                    <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1">
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>New Items to Cook</span>
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-black font-bold">
-                          KOT #{currentOrder.kotNumber}
-                        </span>
-                      </div>
-
-                      <div className="divide-y divide-white/5">
-                        {currentItemsList
-                          .filter((ci) => ci.quantity > ci.firedCount)
-                          .map((ci) => {
-                            const unfiredQty = ci.quantity - ci.firedCount;
-                            const price = parseItemPrice(ci.item.price);
-
-                            return (
-                              <div key={ci.item.id} className="py-2.5 flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="text-xs font-semibold text-white">
-                                    {unfiredQty}x {ci.item.name}
-                                  </div>
-                                  {/* Note Button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => openNoteEditor(ci.item.id, ci.item.name, ci.notes)}
-                                    className="text-[10px] text-amber-300 italic hover:underline flex items-center gap-1 mt-0.5"
-                                  >
-                                    <Edit3 className="w-2.5 h-2.5" />
-                                    <span>{ci.notes ? ci.notes : '+ Add note (Spicy / Jain...)'}</span>
-                                  </button>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="text-xs font-mono text-sand-300">
-                                    ₹{price * unfiredQty}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveItem(ci.item.id)}
-                                    className="p-1 rounded bg-white/5 hover:bg-white/10 text-rose-400"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleFireKOT}
-                        className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
-                      >
-                        <Printer className="w-4 h-4" />
-                        <span>Print & Fire KOT #{currentOrder.kotNumber}</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Wave 2: ALREADY COOKING IN KITCHEN */}
-                  {alreadyFiredItems.length > 0 && (
-                    <div className="p-3 rounded-2xl bg-zinc-900 border border-white/5 space-y-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Already Cooking in Kitchen</span>
-                      </span>
-
-                      <div className="divide-y divide-white/5 text-xs text-sand-300">
-                        {alreadyFiredItems.map((it, idx) => (
-                          <div key={idx} className="py-1.5 flex items-center justify-between">
-                            <span>
-                              {it.quantity}x {it.name}
-                            </span>
-                            {it.notes && (
-                              <span className="text-[10px] text-amber-300 italic">
-                                [{it.notes}]
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Add Custom Item / Service Charge Button */}
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomModalOpen(true)}
-                    className="w-full py-2.5 px-3 rounded-2xl bg-amber-400/10 hover:bg-amber-400/20 border border-dashed border-amber-400/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    <span>+ Add Custom Dish / Chicken Making Charge</span>
-                  </button>
-
-                  {/* Tax / GST Selection Radio Option */}
-                  <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-sand-400">
-                        Tax Option (GST):
-                      </span>
-                      <span className="text-[9.5px] font-mono text-sand-500">
-                        GSTIN: 20BGPPJ2962J1ZA
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <label
-                        className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
-                          applyGst
-                            ? 'bg-amber-400/15 border-amber-400 text-white font-bold'
-                            : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="gstOptionRadio"
-                          checked={applyGst}
-                          onChange={() => setApplyGst(true)}
-                          className="accent-amber-400 w-3.5 h-3.5"
-                        />
-                        <span>With 5% GST</span>
-                      </label>
-
-                      <label
-                        className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
-                          !applyGst
-                            ? 'bg-amber-400/15 border-amber-400 text-white font-bold'
-                            : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="gstOptionRadio"
-                          checked={!applyGst}
-                          onChange={() => setApplyGst(false)}
-                          className="accent-amber-400 w-3.5 h-3.5"
-                        />
-                        <span>Without GST (0%)</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Bill Total Summary */}
-                  <div className="p-3.5 rounded-2xl bg-[#131622] border border-white/10 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between text-sand-300">
-                      <span>Subtotal ({totalItemsCount} items):</span>
-                      <span className="font-mono">₹{subtotalPrice.toFixed(2)}</span>
-                    </div>
-                    {applyGst ? (
-                      <div className="flex items-center justify-between text-sand-300">
-                        <span>GST (5%):</span>
-                        <span className="font-mono text-amber-300">₹{gstAmount.toFixed(2)}</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between text-sand-400 text-[11px]">
-                        <span>GST (0%):</span>
-                        <span className="font-mono text-emerald-400">Not Added (₹0.00)</span>
-                      </div>
-                    )}
-                    <div className="pt-2 border-t border-white/10 flex items-center justify-between font-bold text-sm">
-                      <span className="text-white">Grand Total:</span>
-                      <span className="font-mono text-amber-300 text-base">
-                        ₹{grandTotal.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Modal Footer Actions */}
-            {currentItemsList.length > 0 && (
-              <div className="p-4 border-t border-white/10 bg-[#131622] space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={handlePrintBill}
-                    className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-gold-400 to-gold-500 hover:from-gold-300 hover:to-gold-400 text-black text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
-                  >
-                    <FileText className="w-4 h-4" />
-                    <span>Print Bill</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSendWhatsApp}
-                    className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>WhatsApp Bill</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <button
-                    type="button"
-                    onClick={handleOpenSettleModal}
-                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 active:scale-95 transition-all"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    <span>Settle & Mark Vacant</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsOrderDrawerOpen(false)}
-                    className="text-[11px] text-sand-400 hover:text-white"
-                  >
-                    + Add More Dishes
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <OrderDrawer
+          activeTable={activeTable}
+          serverName={serverName}
+          currentOrder={currentOrder}
+          setIsOrderDrawerOpen={setIsOrderDrawerOpen}
+          currentItemsList={currentItemsList}
+          setIsCustomModalOpen={setIsCustomModalOpen}
+          newItemsToFire={newItemsToFire}
+          openNoteEditor={openNoteEditor}
+          handleRemoveItem={handleRemoveItem}
+          handleFireKOT={handleFireKOT}
+          alreadyFiredItems={alreadyFiredItems}
+          applyGst={applyGst}
+          setApplyGst={setApplyGst}
+          totalItemsCount={totalItemsCount}
+          subtotalPrice={subtotalPrice}
+          gstAmount={gstAmount}
+          grandTotal={grandTotal}
+          handlePrintBill={handlePrintBill}
+          handleSendWhatsApp={handleSendWhatsApp}
+          handleOpenSettleModal={handleOpenSettleModal}
+        />
       )}
 
       {/* 9B. CUSTOM DISH & HOTEL SERVICE MODAL */}
       {isCustomModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-[#131622] border border-amber-400/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-full bg-amber-400/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-400/30">
-                  <ChefHat className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-sm text-white">Add Custom Dish / Service</h4>
-                  <p className="text-[10px] text-amber-400 font-mono">Adding to Table: <strong>{activeTable}</strong></p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCustomModalOpen(false)}
-                className="p-1.5 rounded-full text-sand-400 hover:text-white bg-white/5 hover:bg-white/10"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Quick Presets for Highway Hotel & Restaurant Services */}
-            <div>
-              <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1.5">
-                ⚡ Quick Presets (Tap to Auto-Fill):
-              </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { name: 'Chicken Making Charge (1 Kg)', price: '200', diet: 'non-veg' as const },
-                  { name: 'Desi Chicken Making Charge', price: '250', diet: 'non-veg' as const },
-                  { name: 'Mutton Making Charge (1 Kg)', price: '300', diet: 'non-veg' as const },
-                  { name: 'Fish Making / Fry Charge', price: '180', diet: 'non-veg' as const },
-                  { name: 'Ice Bucket & Glass Service', price: '50', diet: 'veg' as const },
-                  { name: 'Packing & Container Charge', price: '30', diet: 'veg' as const },
-                ].map((preset) => (
-                  <button
-                    key={preset.name}
-                    type="button"
-                    onClick={() => {
-                      setCustomDishName(preset.name);
-                      setCustomDishPrice(preset.price);
-                      setCustomDietary(preset.diet);
-                    }}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-amber-400/15 border border-white/5 hover:border-amber-400/30 text-left text-[11px] text-sand-200 hover:text-white flex items-center justify-between transition-colors active:scale-98"
-                  >
-                    <span className="truncate">{preset.name}</span>
-                    <span className="font-mono text-amber-300 font-bold shrink-0 ml-1">₹{preset.price}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <form onSubmit={handleAddCustomDish} className="space-y-3.5 pt-1">
-              {/* Dish / Service Name */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
-                  Dish or Service Name *
-                </label>
-                <input
-                  type="text"
-                  value={customDishName}
-                  onChange={(e) => setCustomDishName(e.target.value)}
-                  placeholder="e.g. Chicken Making Charge, Desi Mutton Handi..."
-                  className="w-full bg-zinc-900 text-xs sm:text-sm text-white px-3 py-2 rounded-xl border border-white/10 focus:border-amber-400 focus:outline-none placeholder:text-sand-500 font-medium"
-                  required
-                  autoFocus
-                />
-              </div>
-
-              {/* Price & Quantity Grid */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
-                    Charge / Price (₹) *
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sand-400 font-bold text-xs">₹</span>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={customDishPrice}
-                      onChange={(e) => setCustomDishPrice(e.target.value)}
-                      placeholder="e.g. 200"
-                      className="w-full bg-zinc-900 text-xs sm:text-sm text-white pl-7 pr-3 py-2 rounded-xl border border-white/10 focus:border-amber-400 focus:outline-none placeholder:text-sand-500 font-mono font-bold"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
-                    Quantity
-                  </label>
-                  <div className="flex items-center bg-zinc-900 rounded-xl border border-white/10 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setCustomQuantity((q) => Math.max(1, q - 1))}
-                      className="p-2 hover:bg-white/10 text-white"
-                    >
-                      <Minus className="w-3.5 h-3.5" />
-                    </button>
-                    <span className="flex-1 text-center font-mono text-xs font-bold text-white">
-                      {customQuantity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCustomQuantity((q) => q + 1)}
-                      className="p-2 hover:bg-white/10 text-white"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dietary Toggle */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
-                  Item Category:
-                </label>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setCustomDietary('non-veg')}
-                    className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      customDietary === 'non-veg'
-                        ? 'bg-rose-500/20 border-rose-500 text-rose-300'
-                        : 'bg-zinc-900 border-white/10 text-sand-400 hover:text-white'
-                    }`}
-                  >
-                    <span>🔴 Non-Veg (Chicken/Meat)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCustomDietary('veg')}
-                    className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-1.5 transition-all ${
-                      customDietary === 'veg'
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                        : 'bg-zinc-900 border-white/10 text-sand-400 hover:text-white'
-                    }`}
-                  >
-                    <span>🟢 Veg / Hotel Service</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Special Instructions / Kitchen Note */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-1">
-                  Kitchen Cooking Note / Instructions (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={customNotes}
-                  onChange={(e) => setCustomNotes(e.target.value)}
-                  placeholder="e.g. Customer brought 1.5kg chicken, spicy handi style, less oil..."
-                  className="w-full bg-zinc-900 text-xs text-white px-3 py-2 rounded-xl border border-white/10 focus:border-amber-400 focus:outline-none placeholder:text-sand-500"
-                />
-              </div>
-
-              {/* Actions */}
-              <div className="pt-2 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCustomModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sand-300 hover:text-white text-xs font-semibold"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={!customDishName.trim()}
-                  className="flex-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all disabled:opacity-50"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  <span>Add to Table {activeTable}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CustomDishModal
+          activeTable={activeTable}
+          setIsCustomModalOpen={setIsCustomModalOpen}
+          setCustomDishName={setCustomDishName}
+          setCustomDishPrice={setCustomDishPrice}
+          setCustomDietary={setCustomDietary}
+          handleAddCustomDish={handleAddCustomDish}
+          customDishName={customDishName}
+          customDishPrice={customDishPrice}
+          setCustomQuantity={setCustomQuantity}
+          customQuantity={customQuantity}
+          customDietary={customDietary}
+          customNotes={customNotes}
+          setCustomNotes={setCustomNotes}
+        />
       )}
 
       {/* 9C. BILL SETTLEMENT & LOCAL DATABASE SAVE MODAL */}
       {isSettleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-stone-900 border border-gold-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-white">
-            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
-              <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-emerald-400" />
-                  <span>Settle Bill & Vacate {activeTable}</span>
-                </h3>
-                <p className="text-xs text-stone-400 mt-0.5">
-                  {currentItemsList.reduce((s, ci) => s + ci.quantity, 0)} items • Subtotal: ₹{subtotalPrice}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSettleModalOpen(false)}
-                className="p-1 rounded-full text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Grand Total Display */}
-            <div className="p-4 rounded-2xl bg-stone-950 border border-gold-500/30 text-center">
-              <span className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total Payable Amount</span>
-              <div className="text-3xl font-black text-gold-300 font-mono mt-1">₹{grandTotal}</div>
-              {applyGst && <span className="text-[10px] text-stone-400">Includes 5% GST (₹{gstAmount})</span>}
-            </div>
-
-            {/* Department Selection */}
-            <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1.5">Business Department:</label>
-              <div className="grid grid-cols-3 gap-1.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setSettleDepartment('restaurant')}
-                  className={`py-2 px-2 rounded-xl font-bold border transition-all text-center ${
-                    settleDepartment === 'restaurant'
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                      : 'bg-stone-950 text-stone-400 border-stone-800'
-                  }`}
-                >
-                  🍽️ Restaurant
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettleDepartment('rooms')}
-                  className={`py-2 px-2 rounded-xl font-bold border transition-all text-center ${
-                    settleDepartment === 'rooms'
-                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                      : 'bg-stone-950 text-stone-400 border-stone-800'
-                  }`}
-                >
-                  🛏️ Rooms
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettleDepartment('banquet')}
-                  className={`py-2 px-2 rounded-xl font-bold border transition-all text-center ${
-                    settleDepartment === 'banquet'
-                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/50'
-                      : 'bg-stone-950 text-stone-400 border-stone-800'
-                  }`}
-                >
-                  🎉 Banquet
-                </button>
-              </div>
-            </div>
-
-            {/* Payment Mode Selection */}
-            <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-2">Select Payment Mode:</label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setSettlePaymentMethod('cash')}
-                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
-                    settlePaymentMethod === 'cash'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-md'
-                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
-                  }`}
-                >
-                  <DollarSign className="w-4 h-4 text-emerald-400" />
-                  <span>Cash</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettlePaymentMethod('upi')}
-                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
-                    settlePaymentMethod === 'upi'
-                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 shadow-md'
-                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4 text-sky-400" />
-                  <span>UPI (QR)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettlePaymentMethod('card')}
-                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
-                    settlePaymentMethod === 'card'
-                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-md'
-                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4 text-purple-400" />
-                  <span>Card / POS</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSettlePaymentMethod('split');
-                    if (!splitCashAmount && !splitUpiAmount) {
-                      const half = Math.floor(grandTotal / 2);
-                      setSplitCashAmount(String(half));
-                      setSplitUpiAmount(String(Math.round((grandTotal - half) * 100) / 100));
-                    }
-                  }}
-                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all ${
-                    settlePaymentMethod === 'split'
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md ring-1 ring-amber-500/40'
-                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
-                  }`}
-                >
-                  <Split className="w-4 h-4 text-amber-400" />
-                  <span>Partial (Cash+UPI)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettlePaymentMethod('room-folio')}
-                  className={`py-2.5 px-3 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all col-span-2 sm:col-span-1 ${
-                    settlePaymentMethod === 'room-folio'
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-md'
-                      : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
-                  }`}
-                >
-                  <Building2 className="w-4 h-4 text-amber-400" />
-                  <span>Post to Room</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Split / Partial Payment Box */}
-            {settlePaymentMethod === 'split' && (
-              <div className="p-3 bg-gradient-to-br from-amber-500/10 via-stone-900/60 to-stone-950 border border-amber-500/30 rounded-2xl space-y-3 text-xs animate-in fade-in duration-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-amber-300 font-bold">
-                    <Split className="w-4 h-4 text-amber-400" />
-                    <span>Partial Payment (Split Amount)</span>
-                  </div>
-                  <div className="text-[11px] font-mono font-bold text-white bg-black/50 px-2 py-0.5 rounded-lg border border-white/10">
-                    Total: ₹{grandTotal.toFixed(2)}
-                  </div>
-                </div>
-
-                {/* Quick Presets */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-stone-400 font-medium">Quick Split:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const half = Math.floor(grandTotal / 2);
-                      setSplitCashAmount(String(half));
-                      setSplitUpiAmount(String(Math.round((grandTotal - half) * 100) / 100));
-                    }}
-                    className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] font-semibold border border-white/10 transition-all"
-                  >
-                    50% Cash / 50% UPI
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSplitCashAmount('');
-                      setSplitUpiAmount('');
-                      setSplitCardAmount('');
-                    }}
-                    className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] border border-white/10 ml-auto transition-all"
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                {/* Input Fields Grid */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {/* Cash Portion */}
-                  <div className="p-2.5 rounded-xl bg-black/40 border border-emerald-500/25 space-y-1">
-                    <div className="flex items-center justify-between text-emerald-400 font-semibold text-[11px]">
-                      <span className="flex items-center gap-1">
-                        <DollarSign className="w-3.5 h-3.5" /> Cash Amount
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const curU = parseFloat(splitUpiAmount) || 0;
-                          const rem = Math.max(0, grandTotal - curU);
-                          setSplitCashAmount(String(Math.round(rem * 100) / 100));
-                        }}
-                        className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded font-bold transition-all"
-                      >
-                        Auto
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 font-mono text-xs">₹</span>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="any"
-                        placeholder="0.00"
-                        value={splitCashAmount}
-                        onChange={(e) => handleSplitCashChange(e.target.value)}
-                        className="w-full pl-6 pr-2 py-1.5 bg-stone-950 border border-stone-700 rounded-lg text-white font-mono text-sm font-bold focus:outline-none focus:border-emerald-400"
-                      />
-                    </div>
-                  </div>
-
-                  {/* UPI Portion */}
-                  <div className="p-2.5 rounded-xl bg-black/40 border border-sky-500/25 space-y-1">
-                    <div className="flex items-center justify-between text-sky-400 font-semibold text-[11px]">
-                      <span className="flex items-center gap-1">
-                        <Smartphone className="w-3.5 h-3.5" /> UPI Amount
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const curC = parseFloat(splitCashAmount) || 0;
-                          const rem = Math.max(0, grandTotal - curC);
-                          setSplitUpiAmount(String(Math.round(rem * 100) / 100));
-                        }}
-                        className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 rounded font-bold transition-all"
-                      >
-                        Auto
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 font-mono text-xs">₹</span>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="any"
-                        placeholder="0.00"
-                        value={splitUpiAmount}
-                        onChange={(e) => handleSplitUpiChange(e.target.value)}
-                        className="w-full pl-6 pr-2 py-1.5 bg-stone-950 border border-stone-700 rounded-lg text-white font-mono text-sm font-bold focus:outline-none focus:border-sky-400"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Balance validation bar */}
-                <div className={`p-2.5 rounded-xl text-[11px] font-medium flex items-center justify-between border transition-all ${
-                  isSplitBalanced
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                    : splitDifference > 0
-                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                }`}>
-                  <div className="flex items-center gap-1.5">
-                    {isSplitBalanced ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>✅ Balanced: Cash ₹{Number(splitCashAmount) || 0} + UPI ₹{Number(splitUpiAmount) || 0} = ₹{grandTotal}</span>
-                      </>
-                    ) : splitDifference > 0 ? (
-                      <>
-                        <AlertOctagon className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>₹{splitDifference.toFixed(2)} remaining to balance bill</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertOctagon className="w-4 h-4 text-rose-400 shrink-0" />
-                        <span>Overpaid by ₹{Math.abs(splitDifference).toFixed(2)}</span>
-                      </>
-                    )}
-                  </div>
-                  {!isSplitBalanced && splitDifference > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const curU = parseFloat(splitUpiAmount) || 0;
-                        setSplitUpiAmount(String(Math.round((curU + splitDifference) * 100) / 100));
-                      }}
-                      className="text-[10px] px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold rounded transition-all"
-                    >
-                      Fill into UPI
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Room Selection Dropdown if room-folio */}
-            {settlePaymentMethod === 'room-folio' && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5 text-xs">
-                <label className="block text-amber-300 font-semibold">Select Guest Room:</label>
-                <select
-                  value={settleRoomNumber}
-                  onChange={(e) => setSettleRoomNumber(e.target.value)}
-                  className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-lg text-white font-medium focus:outline-none focus:border-amber-400"
-                >
-                  <option value="Room 101">Room 101 (Deluxe AC)</option>
-                  <option value="Room 102">Room 102 (Deluxe AC)</option>
-                  <option value="Room 103">Room 103 (Executive)</option>
-                  <option value="Room 201">Room 201 (Super Deluxe)</option>
-                  <option value="Room 202">Room 202 (Family Suite)</option>
-                  <option value="Room 203">Room 203 (Standard AC)</option>
-                  <option value="Room 204">Room 204 (Standard Non-AC)</option>
-                </select>
-                <p className="text-[11px] text-stone-400">
-                  Restaurant bill will be posted to this room's folio and billed upon checkout.
-                </p>
-              </div>
-            )}
-
-            {/* Customer Phone (Optional) */}
-            <div className="text-xs">
-              <label className="block text-stone-400 mb-1">Customer Mobile Number (Optional for WhatsApp CRM):</label>
-              <input
-                type="tel"
-                placeholder="e.g. 9876543210"
-                value={settleCustomerPhone}
-                onChange={(e) => setSettleCustomerPhone(e.target.value)}
-                className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white font-mono focus:outline-none focus:border-gold-400"
-              />
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsSettleModalOpen(false)}
-                className="flex-1 py-3 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isSubmittingSettlement || (settlePaymentMethod === 'split' && !isSplitBalanced)}
-                onClick={handleConfirmSettlement}
-                className={`flex-1 py-3 font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5 ${
-                  isSubmittingSettlement || (settlePaymentMethod === 'split' && !isSplitBalanced)
-                    ? 'bg-stone-800 text-stone-500 border border-stone-700 cursor-not-allowed opacity-60'
-                    : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white shadow-emerald-950/50'
-                }`}
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>
-                  {isSubmittingSettlement
-                    ? 'Saving to DB...'
-                    : settlePaymentMethod === 'split' && !isSplitBalanced
-                    ? 'Balance Split to Settle'
-                    : 'Confirm & Settle'}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <SettleBillModal
+          activeTable={activeTable}
+          currentItemsList={currentItemsList}
+          subtotalPrice={subtotalPrice}
+          setIsSettleModalOpen={setIsSettleModalOpen}
+          grandTotal={grandTotal}
+          applyGst={applyGst}
+          gstAmount={gstAmount}
+          setSettleDepartment={setSettleDepartment}
+          settleDepartment={settleDepartment}
+          setSettlePaymentMethod={setSettlePaymentMethod}
+          settlePaymentMethod={settlePaymentMethod}
+          splitCashAmount={splitCashAmount}
+          splitUpiAmount={splitUpiAmount}
+          setSplitCashAmount={setSplitCashAmount}
+          setSplitUpiAmount={setSplitUpiAmount}
+          setSplitCardAmount={setSplitCardAmount}
+          handleSplitCashChange={handleSplitCashChange}
+          handleSplitUpiChange={handleSplitUpiChange}
+          isSplitBalanced={isSplitBalanced}
+          splitDifference={splitDifference}
+          settleRoomNumber={settleRoomNumber}
+          setSettleRoomNumber={setSettleRoomNumber}
+          settleCustomerPhone={settleCustomerPhone}
+          setSettleCustomerPhone={setSettleCustomerPhone}
+          isSubmittingSettlement={isSubmittingSettlement}
+          handleConfirmSettlement={handleConfirmSettlement}
+        />
       )}
 
       {/* 9D. ANTI-THEFT KOT VOID INTERCEPTION MODAL */}
       {isVoidModalOpen && voidCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-stone-900 border border-rose-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-white">
-            <div className="flex items-center gap-3 border-b border-stone-800 pb-3 text-rose-400">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Anti-Theft Security Alert</h3>
-                <p className="text-xs text-rose-300">Item already dispatched to kitchen on KOT</p>
-              </div>
-            </div>
-
-            <div className="p-3 bg-stone-950 border border-rose-500/20 rounded-xl space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span className="text-stone-400">Dish to Cancel:</span>
-                <span className="font-bold text-white">{voidCandidate.item.name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-stone-400">Price:</span>
-                <span className="font-mono text-rose-400 font-bold">₹{parseItemPrice(voidCandidate.item.price)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-stone-400">Table:</span>
-                <span className="text-gold-300 font-bold">{activeTable}</span>
-              </div>
-            </div>
-
-            <div className="text-xs space-y-2">
-              <label className="block text-stone-300 font-semibold">Select Cancellation Reason (Recorded in Audit Log):</label>
-              <div className="grid grid-cols-1 gap-1.5">
-                {[
-                  'Customer cancelled after long delay',
-                  'Customer changed mind / Left table',
-                  'Wrong item punched by waiter',
-                  'Kitchen out of stock / Burnt in kitchen',
-                ].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => {
-                      setVoidReason(r);
-                      setCustomVoidReason('');
-                    }}
-                    className={`py-2 px-3 rounded-lg text-left transition-all border text-[11px] ${
-                      voidReason === r && !customVoidReason
-                        ? 'bg-rose-500/20 text-rose-200 border-rose-500/40 font-bold'
-                        : 'bg-stone-950 text-stone-400 border-stone-800 hover:text-white'
-                    }`}
-                  >
-                    • {r}
-                  </button>
-                ))}
-              </div>
-
-              <div className="pt-1">
-                <input
-                  type="text"
-                  placeholder="Or type custom reason..."
-                  value={customVoidReason}
-                  onChange={(e) => setCustomVoidReason(e.target.value)}
-                  className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-lg text-white text-xs focus:outline-none focus:border-rose-400"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setVoidCandidate(null);
-                  setIsVoidModalOpen(false);
-                }}
-                className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl text-xs transition-all"
-              >
-                Keep Item
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmVoid}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Confirm Void</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <VoidItemModal
+          voidCandidate={voidCandidate}
+          activeTable={activeTable}
+          setVoidReason={setVoidReason}
+          setCustomVoidReason={setCustomVoidReason}
+          voidReason={voidReason}
+          customVoidReason={customVoidReason}
+          setVoidCandidate={setVoidCandidate}
+          setIsVoidModalOpen={setIsVoidModalOpen}
+          handleConfirmVoid={handleConfirmVoid}
+        />
       )}
 
       {/* 9. COOKING NOTES & INSTRUCTIONS POPUP (LESS SPICY, JAIN, ETC.) */}
       {customizingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-[#131622] border border-amber-400/40 rounded-3xl p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                  Cooking Note / Request
-                </span>
-                <h4 className="font-bold text-sm text-white">
-                  {customizingItem.name}
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCustomizingItem(null)}
-                className="p-1 rounded-full text-sand-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Quick 1-Tap Cooking Chips */}
-            <div>
-              <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block mb-2">
-                Tap Quick Instructions:
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  '🌶️ Less Spicy',
-                  '🔥 Extra Spicy',
-                  '🥬 No Onion-Garlic (Jain)',
-                  '🧈 Extra Butter',
-                  '🥣 Extra Gravy',
-                  '🍟 Extra Crispy',
-                  '⏱️ Bring First (Starter)',
-                  '📦 Pack / Parcel',
-                  '🧂 Low Salt',
-                  '🚫 No Coriander',
-                ].map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => {
-                      setCustomNoteText((prev) => {
-                        const cleanChip = chip.replace(/^[^\w\s]+/, '').trim();
-                        if (prev.includes(cleanChip)) return prev;
-                        return prev ? `${prev}, ${cleanChip}` : cleanChip;
-                      });
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl text-xs bg-white/10 hover:bg-amber-400 hover:text-black text-sand-200 border border-white/10 active:scale-95 transition-all font-medium"
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom instruction textarea */}
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold text-sand-400 tracking-wider block">
-                Instruction Text:
-              </label>
-              <input
-                type="text"
-                value={customNoteText}
-                onChange={(e) => setCustomNoteText(e.target.value)}
-                placeholder="e.g. Less spicy, make gravy thick..."
-                className="w-full text-xs bg-zinc-900 text-white p-2.5 rounded-xl border border-white/15 focus:border-amber-400 focus:outline-none"
-              />
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => handleSaveItemNote(customNoteText.trim())}
-                className="flex-1 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs uppercase tracking-wider active:scale-95 transition-all"
-              >
-                Save Note
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCustomNoteText('');
-                  handleSaveItemNote('');
-                }}
-                className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-rose-400 text-xs font-semibold"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
+        <ItemNoteModal
+          customizingItem={customizingItem}
+          setCustomizingItem={setCustomizingItem}
+          setCustomNoteText={setCustomNoteText}
+          customNoteText={customNoteText}
+          handleSaveItemNote={handleSaveItemNote}
+        />
       )}
 
       {/* 10. THERMAL PRINTER INSTRUCTIONS & SETUP MODAL */}
       {isPrinterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-[#11131c] border border-white/15 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <Printer className="w-5 h-5 text-gold-400" />
-                <h3 className="font-bold text-sm text-white">
-                  {isElectron ? 'Windows Thermal Printer' : 'Thermal Printer Setup'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsPrinterModalOpen(false)}
-                className="p-1 rounded-full text-sand-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Print Engine Status */}
-            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-sand-400">Print Engine:</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    isElectron
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : BluetoothPrinter.isNativeAndroidAvailable()
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : 'bg-amber-500/20 text-amber-300'
-                  }`}
-                >
-                  {isElectron
-                    ? '● Windows Silent Background'
-                    : BluetoothPrinter.isNativeAndroidAvailable()
-                    ? '● Native Android Bridge'
-                    : '● Browser Mode'}
-                </span>
-              </div>
-
-              {/* Printers List */}
-              <div className="pt-2 border-t border-white/10">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold text-white flex items-center gap-1">
-                    <span>{isElectron ? 'Installed Windows Printers:' : 'Paired Bluetooth Printers:'}</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={isElectron ? refreshWindowsPrinters : refreshPairedDevices}
-                    className="p-1 rounded text-sand-400 hover:text-white flex items-center gap-1 text-[10px]"
-                    title="Refresh printers"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Scan</span>
-                  </button>
-                </div>
-
-                {isElectron ? (
-                  windowsPrinters.length > 0 ? (
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={() => handleSelectWindowsPrinter('')}
-                        className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${
-                          !selectedWindowsPrinter
-                            ? 'bg-amber-400/20 border-amber-400 text-white font-bold'
-                            : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
-                        }`}
-                      >
-                        <div>
-                          <div className="font-medium">System Default Printer</div>
-                          <div className="text-[9px] font-mono text-sand-400">Windows default device</div>
-                        </div>
-                        {!selectedWindowsPrinter && <Check className="w-4 h-4 text-amber-400" />}
-                      </button>
-
-                      {windowsPrinters.map((p) => {
-                        const isSelected = selectedWindowsPrinter === p.name;
-                        return (
-                          <button
-                            key={p.name}
-                            type="button"
-                            onClick={() => handleSelectWindowsPrinter(p.name)}
-                            className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-amber-400/20 border-amber-400 text-white font-bold'
-                                : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
-                            }`}
-                          >
-                            <div className="min-w-0 pr-2">
-                              <div className="font-medium truncate">{p.displayName || p.name}</div>
-                              <div className="text-[9px] font-mono text-sand-400">
-                                {p.isDefault ? 'Default Device' : 'Windows Thermal/USB/Bluetooth'}
-                              </div>
-                            </div>
-                            {isSelected && <Check className="w-4 h-4 text-amber-400 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-sand-400 bg-white/5 p-2 rounded-xl">
-                      Scanning Windows printers... Connect your USB or Bluetooth thermal printer.
-                    </div>
-                  )
-                ) : (
-                  pairedPrinters.length > 0 ? (
-                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                      {pairedPrinters.map((dev) => {
-                        const isSelected = selectedPrinterAddress === dev.address;
-                        return (
-                          <button
-                            key={dev.address}
-                            type="button"
-                            onClick={() => handleSelectPrinter(dev)}
-                            className={`w-full p-2 rounded-xl text-left text-xs border transition-all flex items-center justify-between ${
-                              isSelected
-                                ? 'bg-amber-400/20 border-amber-400 text-white font-bold'
-                                : 'bg-white/5 border-white/10 text-sand-300 hover:bg-white/10'
-                            }`}
-                          >
-                            <div>
-                              <div className="font-medium">{dev.name}</div>
-                              <div className="text-[9px] font-mono text-sand-400">{dev.address}</div>
-                            </div>
-                            {isSelected && <Check className="w-4 h-4 text-amber-400" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-sand-400 bg-white/5 p-2 rounded-xl">
-                      No Bluetooth printers paired in Android Settings yet. Pair your printer once in phone settings.
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-
-            {/* Quick Guide */}
-            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 text-[11px] text-sand-300 space-y-1.5">
-              <div className="font-bold text-white">
-                {isElectron ? '💻 Windows Counter Setup:' : '📱 Pairing Steps:'}
-              </div>
-              {isElectron ? (
-                <ol className="list-decimal pl-4 space-y-1 text-sand-400">
-                  <li>Pair Bluetooth thermal printer or plug via USB cable.</li>
-                  <li>Windows installs driver or Generic Text printer.</li>
-                  <li>Select printer above (or leave Default).</li>
-                  <li>Tap <strong>Print Test Slip</strong> to test silent print!</li>
-                </ol>
-              ) : (
-                <ol className="list-decimal pl-4 space-y-1 text-sand-400">
-                  <li>Turn ON your 58mm Bluetooth printer.</li>
-                  <li>Go to phone's <strong>Android Bluetooth Settings</strong>.</li>
-                  <li>Pair with printer (PIN is <code>0000</code> or <code>1234</code>).</li>
-                  <li>Return here & tap <strong>Print Test Slip</strong>.</li>
-                </ol>
-              )}
-            </div>
-
-            {/* Action buttons */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  triggerHaptic(40);
-                  setPrintSuccessMsg('Printing test slip...');
-                  try {
-                    const res = await BluetoothPrinter.printTestReceipt();
-                    setPrintSuccessMsg(`✅ Test slip sent (${res.method})!`);
-                    setTimeout(() => setPrintSuccessMsg(null), 4000);
-                  } catch (err: any) {
-                    setPrintSuccessMsg(`❌ Test failed: ${err?.message}`);
-                    setTimeout(() => setPrintSuccessMsg(null), 4000);
-                  }
-                }}
-                className="w-full py-2.5 rounded-xl bg-gold-400 hover:bg-gold-300 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print Test Slip (58mm)</span>
-              </button>
-
-              {isElectron && (
-                <button
-                  type="button"
-                  onClick={() => BluetoothPrinter.openWindowsLogsFolder()}
-                  className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sand-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 transition-colors"
-                >
-                  <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Open Windows Logs Folder</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPrinterModalOpen(false);
-                  setIsLogsModalOpen(true);
-                }}
-                className="w-full py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sand-200 text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 transition-colors"
-              >
-                <Bug className="w-4 h-4 text-amber-400" />
-                <span>View Live Debug Logs ({logs.length})</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <PrinterModal
+          isElectron={isElectron}
+          setIsPrinterModalOpen={setIsPrinterModalOpen}
+          refreshWindowsPrinters={refreshWindowsPrinters}
+          refreshPairedDevices={refreshPairedDevices}
+          windowsPrinters={windowsPrinters}
+          handleSelectWindowsPrinter={handleSelectWindowsPrinter}
+          selectedWindowsPrinter={selectedWindowsPrinter}
+          pairedPrinters={pairedPrinters}
+          selectedPrinterAddress={selectedPrinterAddress}
+          handleSelectPrinter={handleSelectPrinter}
+          triggerHaptic={triggerHaptic}
+          setPrintSuccessMsg={setPrintSuccessMsg}
+          setIsLogsModalOpen={setIsLogsModalOpen}
+          logs={logs}
+        />
       )}
 
       {/* 11. LOCAL WI-FI SYNC SERVER & CONNECTION MODAL */}
       {isSyncModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm bg-[#11131c] border border-emerald-500/30 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <Wifi className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-bold text-sm text-white">
-                  {isElectron ? 'Counter Wi-Fi Sync Server' : 'Connect to Counter POS'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSyncModalOpen(false)}
-                className="p-1 rounded-full text-sand-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {isElectron ? (
-              <>
-                <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2 text-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">
-                    ● Server Running on Port 5050
-                  </span>
-                  <div className="font-mono text-base font-bold text-white bg-black/40 py-1.5 px-3 rounded-xl border border-white/10 inline-block">
-                    {syncInfo?.ip || '127.0.0.1'}:5050
-                  </div>
-                  <p className="text-[11px] text-sand-400">
-                    Waiters connect to this Counter IP over the local restaurant Wi-Fi to sync orders live.
-                  </p>
-                  {syncInfo?.token && (
-                    <div className="pt-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">Waiter Pairing Code</span>
-                      <div className="font-mono text-xl font-black tracking-[0.3em] text-white bg-black/40 py-1.5 px-3 rounded-xl border border-amber-500/30 inline-block select-all">
-                        {syncInfo.token}
-                      </div>
-                      <p className="text-[10px] text-sand-400 mt-1">Enter this code once on each waiter phone.</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* QR Code */}
-                <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white space-y-2 shadow-inner">
-                  <QRCodeSVG
-                    value={`http://${syncInfo?.ip || '127.0.0.1'}:5050`}
-                    size={150}
-                    level="M"
-                  />
-                  <span className="text-[10px] font-bold text-zinc-800 font-mono">
-                    http://{syncInfo?.ip || '127.0.0.1'}:5050
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 text-[11px] text-sand-300 space-y-1.5">
-                  <div className="font-bold text-white">📲 Instructions for Waiters:</div>
-                  <ol className="list-decimal pl-4 space-y-1 text-sand-400">
-                    <li>Connect phone to same hotel Wi-Fi (turn off Mobile Data 4G/5G).</li>
-                    <li>Open Hotel RJ Waiter APK, or visit <strong className="text-white font-mono">http://{syncInfo?.ip || '127.0.0.1'}:5050</strong> directly in Chrome.</li>
-                    <li>Tap <strong>Sync Counter</strong> in top header.</li>
-                    <li>Counter IP is <strong className="text-white font-mono">{syncInfo?.ip || '127.0.0.1'}</strong>.</li>
-                  </ol>
-                  <p className="text-[10px] text-amber-400/90 pt-0.5">
-                    💡 Tip: If using Chrome, open the local http link directly. Visiting from https:// will be blocked by Chrome as mixed content.
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-white/10 space-y-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if ((window as any).ElectronAPI?.fixFirewall) {
-                        setFirewallStatusMsg('Applying firewall rule (check Windows prompt)...');
-                        const res = await (window as any).ElectronAPI.fixFirewall();
-                        setFirewallStatusMsg(res?.message || 'Rule applied');
-                        setTimeout(() => setFirewallStatusMsg(null), 4000);
-                      }
-                    }}
-                    className="w-full py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-semibold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all"
-                  >
-                    <ShieldAlert className="w-4 h-4 text-amber-400" />
-                    <span>Unblock Windows Firewall (Port 5050)</span>
-                  </button>
-                  {firewallStatusMsg && (
-                    <div className="text-[10px] text-center font-mono text-amber-300 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
-                      {firewallStatusMsg}
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-sand-400">Sync Status:</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        isSyncConnected ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-800 text-sand-400'
-                      }`}
-                    >
-                      {isSyncConnected ? '● Connected to Counter PC' : '○ Offline / Local Mode'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[11px] uppercase font-bold text-sand-400 tracking-wider block">
-                    Counter PC IP Address:
-                  </label>
-                  <input
-                    type="text"
-                    value={counterInputUrl}
-                    onChange={(e) => setCounterInputUrl(e.target.value)}
-                    placeholder="e.g. 192.168.1.15:5050"
-                    className="w-full text-xs font-mono bg-zinc-900 text-white p-2.5 rounded-xl border border-white/15 focus:border-emerald-400 focus:outline-none"
-                  />
-                  <p className="text-[10px] text-sand-400">
-                    Look at the Counter POS screen on Windows to see the exact IP address.
-                  </p>
-                  <label className="text-[11px] uppercase font-bold text-sand-400 tracking-wider block pt-1">
-                    Pairing Code:
-                  </label>
-                  <input
-                    type="text"
-                    value={counterInputToken}
-                    onChange={(e) => setCounterInputToken(e.target.value.toUpperCase())}
-                    placeholder="8-character code from Counter POS"
-                    autoCapitalize="characters"
-                    maxLength={16}
-                    className="w-full text-xs font-mono tracking-widest bg-zinc-900 text-white p-2.5 rounded-xl border border-white/15 focus:border-emerald-400 focus:outline-none"
-                  />
-                </div>
-
-                {syncErrorDetail && (
-                  <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-300 space-y-2">
-                    <div className="font-bold flex items-center gap-1.5 text-rose-400">
-                      <ShieldAlert className="w-4 h-4 shrink-0" />
-                      <span>Sync Troubleshooting</span>
-                    </div>
-                    <div className="text-[10px] text-sand-300 font-mono bg-black/40 p-2 rounded-lg border border-white/5 break-words">
-                      {syncErrorDetail}
-                    </div>
-                    <div className="space-y-1 text-[10px] text-sand-400">
-                      <div>1. Ensure phone & PC are on the <strong>same Wi-Fi router</strong>.</div>
-                      <div>2. On Desktop Counter POS, click <strong>"Unblock Windows Firewall"</strong> to allow Port 5050.</div>
-                      <div>3. Verify IP on Counter POS screen matches what you typed.</div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const target = counterInputUrl.trim();
-                      if (!target) {
-                        setIsSyncConnected(false);
-                        return;
-                      }
-                      localStorage.setItem('hotel_rj_counter_sync_url', target);
-                      localStorage.setItem('hotel_rj_sync_token', counterInputToken.trim());
-                      setCounterSyncUrl(target);
-                      const ok = await performManualSync(target);
-                      if (ok) {
-                        setTimeout(() => setIsSyncModalOpen(false), 900);
-                      }
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider active:scale-95 transition-all"
-                  >
-                    Connect & Sync Now
-                  </button>
-
-                  {counterSyncUrl && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        localStorage.removeItem('hotel_rj_counter_sync_url');
-                        setCounterSyncUrl('');
-                        setCounterInputUrl('');
-                        setIsSyncConnected(false);
-                        setPrintSuccessMsg('Disconnected from Counter');
-                        setTimeout(() => setPrintSuccessMsg(null), 2500);
-                      }}
-                      className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-rose-400 text-xs font-semibold"
-                    >
-                      Disconnect
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <SyncModal
+          isElectron={isElectron}
+          setIsSyncModalOpen={setIsSyncModalOpen}
+          syncInfo={syncInfo}
+          setFirewallStatusMsg={setFirewallStatusMsg}
+          firewallStatusMsg={firewallStatusMsg}
+          isSyncConnected={isSyncConnected}
+          counterInputUrl={counterInputUrl}
+          setCounterInputUrl={setCounterInputUrl}
+          counterInputToken={counterInputToken}
+          setCounterInputToken={setCounterInputToken}
+          syncErrorDetail={syncErrorDetail}
+          setIsSyncConnected={setIsSyncConnected}
+          setCounterSyncUrl={setCounterSyncUrl}
+          performManualSync={performManualSync}
+          counterSyncUrl={counterSyncUrl}
+          setPrintSuccessMsg={setPrintSuccessMsg}
+        />
       )}
 
       {/* 11b. ACTIVE WAITERS & COUNTER NETWORK MODAL */}
       {isWaitersModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-[#11131c] border border-blue-500/30 rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-blue-400" />
-                <div>
-                  <h3 className="font-bold text-sm text-white">Active Waiters Station</h3>
-                  <p className="text-[10px] text-sand-400">
-                    Live devices connected to this Counter POS (Port 5050)
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsWaitersModalOpen(false)}
-                className="p-1 rounded-full text-sand-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Firewall Quick Action Card */}
-            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-white flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  Windows Firewall Rule
-                </span>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if ((window as any).ElectronAPI?.fixFirewall) {
-                      setFirewallStatusMsg('Applying rule (check UAC popup)...');
-                      const res = await (window as any).ElectronAPI.fixFirewall();
-                      setFirewallStatusMsg(res?.message || 'Rule applied');
-                      setTimeout(() => setFirewallStatusMsg(null), 4000);
-                    }
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-[11px] border border-emerald-500/30 active:scale-95 transition-all"
-                >
-                  Unblock Port 5050
-                </button>
-              </div>
-              <p className="text-[10px] text-sand-400">
-                If mobile waiters get "signal timeout", click above to allow incoming Wi-Fi connections through Windows Defender.
-              </p>
-              {firewallStatusMsg && (
-                <div className="text-[10px] text-center font-mono text-amber-300 bg-amber-500/10 p-1.5 rounded-lg border border-amber-500/20">
-                  {firewallStatusMsg}
-                </div>
-              )}
-            </div>
-
-            {/* Waiters List */}
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[45vh]">
-              {connectedWaiters.length === 0 ? (
-                <div className="p-8 text-center rounded-2xl bg-zinc-900/40 border border-white/5 space-y-2">
-                  <Users className="w-8 h-8 text-sand-600 mx-auto" />
-                  <div className="text-xs font-semibold text-sand-300">No Waiters Connected Yet</div>
-                  <p className="text-[11px] text-sand-500 max-w-xs mx-auto">
-                    Waiters will appear here automatically as soon as they tap "Connect & Sync Now" or work on a table from their Android app.
-                  </p>
-                </div>
-              ) : (
-                connectedWaiters.map((w) => (
-                  <div
-                    key={w.id}
-                    className="p-3 rounded-2xl bg-zinc-900/80 border border-white/10 flex items-center justify-between gap-3 hover:border-blue-500/30 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 font-bold flex items-center justify-center text-xs shrink-0">
-                        {w.name?.charAt(0) || 'W'}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs text-white">{w.name}</span>
-                          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            ONLINE
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-sand-400 font-mono flex items-center gap-2 mt-0.5">
-                          <span>IP: {w.ip}</span>
-                          <span>•</span>
-                          <span className="text-sand-300">{w.device}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <div className="text-[11px] font-bold text-amber-300">
-                        {w.activeTable ? `Viewing ${w.activeTable}` : 'Lobby'}
-                      </div>
-                      <div className="text-[9px] text-sand-500 font-mono mt-0.5">
-                        {new Date(w.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-sand-400">
-              <span>Total Active: <strong className="text-white">{connectedWaiters.length}</strong></span>
-              <button
-                type="button"
-                onClick={() => setIsWaitersModalOpen(false)}
-                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs active:scale-95 transition-all"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <WaitersModal
+          setIsWaitersModalOpen={setIsWaitersModalOpen}
+          setFirewallStatusMsg={setFirewallStatusMsg}
+          firewallStatusMsg={firewallStatusMsg}
+          connectedWaiters={connectedWaiters}
+        />
       )}
 
       {/* 12. LIVE DEBUG CONSOLE & SYSTEM LOGS MODAL */}
       {isLogsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-4">
-          <div className="w-full max-w-lg bg-[#0e1017] border border-amber-400/30 rounded-3xl p-4 shadow-2xl flex flex-col max-h-[92vh]">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <Bug className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="font-bold text-sm text-white">Live Debug Console</h3>
-                  <p className="text-[10px] text-sand-400">
-                    {isElectron
-                      ? 'Windows Error & Warning Monitor (%APPDATA%)'
-                      : 'Real-time logs for KOT, printer & errors'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsLogsModalOpen(false)}
-                className="p-1 rounded-full text-sand-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Diagnostic Badges */}
-            <div className="grid grid-cols-2 gap-2 my-3 text-[10px]">
-              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
-                <span className="text-sand-400 block">Platform:</span>
-                <span className="font-bold text-white">
-                  {isElectron
-                    ? 'Windows Desktop App (Electron)'
-                    : Capacitor.isNativePlatform()
-                    ? 'Native Android APK'
-                    : 'Web Browser'}
-                </span>
-              </div>
-              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
-                <span className="text-sand-400 block">Native Engine:</span>
-                <span
-                  className={`font-bold ${
-                    isElectron
-                      ? 'text-emerald-400'
-                      : BluetoothPrinter.isNativeAndroidAvailable()
-                      ? 'text-emerald-400'
-                      : 'text-amber-400'
-                  }`}
-                >
-                  {isElectron
-                    ? 'Active (Windows Silent Thermal)'
-                    : BluetoothPrinter.isNativeAndroidAvailable()
-                    ? 'Active (AndroidPrinter)'
-                    : 'Web Mode'}
-                </span>
-              </div>
-              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
-                <span className="text-sand-400 block">Active Table:</span>
-                <span className="font-bold text-white">
-                  {activeTable} ({totalItemsCount} items, {newItemsToFire.length} unfired)
-                </span>
-              </div>
-              <div className="p-2 rounded-xl bg-zinc-900 border border-white/10">
-                <span className="text-sand-400 block">Target Printer:</span>
-                <span className="font-bold text-white truncate block">
-                  {isElectron
-                    ? selectedWindowsPrinter || 'Windows Default Device'
-                    : localStorage.getItem('hotel_rj_printer_name') || 'Auto / Android Spooler'}
-                </span>
-              </div>
-            </div>
-
-            {/* Privacy notice */}
-            {isElectron && (
-              <div className="mb-2 p-2 rounded-xl bg-zinc-900/80 border border-white/10 text-[10px] text-sand-400 flex items-center justify-between">
-                <span>📁 Errors and warnings saved to Windows logs folder. Order details omitted.</span>
-                <button
-                  type="button"
-                  onClick={() => BluetoothPrinter.openWindowsLogsFolder()}
-                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/15 text-sand-200 text-[9px] font-bold shrink-0 ml-2"
-                >
-                  Open Folder
-                </button>
-              </div>
-            )}
-
-            {/* Logs List Container */}
-            <div className="flex-1 overflow-y-auto bg-black/60 rounded-2xl p-2.5 border border-white/10 font-mono text-[10px] space-y-1.5 max-h-[46vh]">
-              {logs.length === 0 ? (
-                <div className="text-center text-sand-500 py-6">No logs recorded yet.</div>
-              ) : (
-                logs.map((l) => {
-                  let badgeColor = 'text-sand-300';
-                  if (l.level === 'error') badgeColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
-                  else if (l.level === 'warn') badgeColor = 'text-amber-300 bg-amber-500/10 border-amber-500/30';
-                  else if (l.level === 'success') badgeColor = 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30';
-                  else badgeColor = 'text-blue-300 bg-blue-500/10 border-blue-500/30';
-
-                  return (
-                    <div key={l.id} className="p-1.5 rounded-lg bg-zinc-900/60 border border-white/5 space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-[9px]">
-                        <span className="text-sand-500">{l.timestamp}</span>
-                        <span className={`px-1 py-0.2 rounded border uppercase font-bold text-[8px] ${badgeColor}`}>
-                          {l.level}
-                        </span>
-                        <span className="text-sand-400 font-sans font-semibold">[{l.category}]</span>
-                      </div>
-                      <div className="text-sand-200 text-[10.5px] break-words">{l.message}</div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Footer Actions */}
-            <div className="pt-3 border-t border-white/10 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const text = logs
-                    .map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.category}] ${l.message}`)
-                    .join('\n');
-                  if (navigator.clipboard) {
-                    navigator.clipboard.writeText(text);
-                    setPrintSuccessMsg('✅ Logs copied to clipboard!');
-                    setTimeout(() => setPrintSuccessMsg(null), 2500);
-                  }
-                }}
-                className="flex-1 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold flex items-center justify-center gap-1.5 border border-white/10 active:scale-95 transition-all"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy All</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const text =
-                    `*HOTEL RJ POS LOGS*\nDate: ${new Date().toLocaleString()}\nPlatform: ${
-                      isElectron ? 'Windows Desktop' : Capacitor.isNativePlatform() ? 'Android Native' : 'Browser'
-                    }\n--------------------\n` +
-                    logs.slice(0, 25).map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`).join('\n');
-                  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-                }}
-                className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
-              >
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>WhatsApp Logs</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => Logger.clear()}
-                className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-rose-400 text-xs font-semibold"
-                title="Clear Logs"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <LogsModal
+          isElectron={isElectron}
+          setIsLogsModalOpen={setIsLogsModalOpen}
+          activeTable={activeTable}
+          totalItemsCount={totalItemsCount}
+          newItemsToFire={newItemsToFire}
+          selectedWindowsPrinter={selectedWindowsPrinter}
+          logs={logs}
+          setPrintSuccessMsg={setPrintSuccessMsg}
+        />
       )}
 
       {/* 9E. RECENT BILLS HISTORY & VOID MANAGER MODAL */}

@@ -1,29 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  TrendingUp,
-  DollarSign,
-  Smartphone,
-  ChefHat,
-  ShieldAlert,
-  ArrowLeft,
-  RefreshCw,
-  PlusCircle,
-  Trash2,
-  Share2,
-  Lock,
-  AlertTriangle,
-  Receipt,
-  Download,
-  Building,
-  PartyPopper,
-  UtensilsCrossed,
-  Calendar,
-  Layers,
-  Cloud,
-  Database,
-  Check,
-  Ban,
-} from 'lucide-react';
+import { TrendingUp, DollarSign, Smartphone, ChefHat, ShieldAlert, ArrowLeft, RefreshCw, PlusCircle, Trash2, Share2, Lock, AlertTriangle, Receipt, Download, Building, PartyPopper, UtensilsCrossed, Calendar, Layers, Cloud, Ban } from 'lucide-react';
 import {
   fetchAnalytics,
   addExpense,
@@ -41,7 +17,9 @@ import { HOTEL_INFO } from '../data/hotelData';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, STORAGE_KEYS } from '../config';
 import { verifyManagerPin, formatLock } from '../utils/pin';
 import { PairDeviceModal } from './PairDeviceModal';
-import { PairedDevicesPanel } from './PairedDevicesPanel';
+import { CloudSyncModal } from './owner/CloudSyncModal';
+import { ShareReportModal } from './owner/ShareReportModal';
+import { ExpenseModal } from './owner/ExpenseModal';
 
 interface OwnerInsightsProps {
   onBack: () => void;
@@ -1189,359 +1167,53 @@ _Saved permanently in Hotel RJ Database_`;
       {/* Add Expense Modal */}
       {/* ----------------------------------------------------------- */}
       {isExpenseModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-stone-900 border border-stone-700 rounded-2xl p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <PlusCircle className="w-4 h-4 text-gold-400" />
-              <span>Record Daily Expense (Kharacha)</span>
-            </h3>
-
-            <form onSubmit={handleAddExpense} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-stone-400 mb-1">Expense Category</label>
-                <select
-                  value={expenseCategory}
-                  onChange={(e) => setExpenseCategory(e.target.value)}
-                  className="w-full py-2.5 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white focus:outline-none focus:border-gold-400"
-                >
-                  <option value="Kitchen / Vegetables">Vegetables & Grocery</option>
-                  <option value="Dairy / Milk / Paneer">Dairy / Milk / Paneer</option>
-                  <option value="Raw Chicken / Meat / Fish">Raw Chicken / Meat / Fish</option>
-                  <option value="Ice / Cold Storage">Ice Blocks / Cold Storage</option>
-                  <option value="Gas Cylinder / Fuel">LPG Cylinder / Fuel</option>
-                  <option value="Diesel (Generator)">Diesel for Generator</option>
-                  <option value="Staff Advance / Daily Wage">Staff Daily Advance</option>
-                  <option value="Hotel Maintenance">Cleaning / Maintenance</option>
-                  <option value="Other Misc">Other Miscellaneous</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-stone-400 mb-1">Amount (₹)</label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  required
-                  placeholder="e.g. 500"
-                  value={expenseAmount}
-                  onChange={(e) => setExpenseAmount(e.target.value)}
-                  className="w-full py-2.5 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white font-mono text-base font-bold focus:outline-none focus:border-gold-400"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-stone-400 mb-1">Paid From</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExpensePaidBy('Cash Drawer')}
-                    className={`py-2 rounded-xl font-semibold transition-all border ${
-                      expensePaidBy === 'Cash Drawer'
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
-                        : 'bg-stone-950 text-stone-400 border-stone-800'
-                    }`}
-                  >
-                    💵 Cash Drawer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExpensePaidBy('UPI')}
-                    className={`py-2 rounded-xl font-semibold transition-all border ${
-                      expensePaidBy === 'UPI'
-                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50'
-                        : 'bg-stone-950 text-stone-400 border-stone-800'
-                    }`}
-                  >
-                    📱 Counter UPI
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-stone-400 mb-1">Notes / Description (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 10 kg potatoes + 5 kg onions"
-                  value={expenseNotes}
-                  onChange={(e) => setExpenseNotes(e.target.value)}
-                  className="w-full py-2.5 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white focus:outline-none focus:border-gold-400"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsExpenseModalOpen(false)}
-                  className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={expenseSubmitting}
-                  className="flex-1 py-2.5 bg-gold-500 hover:bg-gold-400 text-black font-bold rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50"
-                >
-                  Save Expense
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ExpenseModal
+          handleAddExpense={handleAddExpense}
+          expenseCategory={expenseCategory}
+          setExpenseCategory={setExpenseCategory}
+          expenseAmount={expenseAmount}
+          setExpenseAmount={setExpenseAmount}
+          setExpensePaidBy={setExpensePaidBy}
+          expensePaidBy={expensePaidBy}
+          expenseNotes={expenseNotes}
+          setExpenseNotes={setExpenseNotes}
+          setIsExpenseModalOpen={setIsExpenseModalOpen}
+          expenseSubmitting={expenseSubmitting}
+        />
       )}
 
       {/* ----------------------------------------------------------- */}
       {/* WhatsApp Share Modal */}
       {/* ----------------------------------------------------------- */}
       {isShareModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-stone-900 border border-stone-700 rounded-2xl p-5 shadow-2xl space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Share2 className="w-4 h-4 text-emerald-400" />
-              <span>Share Daily Business Report on WhatsApp</span>
-            </h3>
-
-            <form onSubmit={handleShareWhatsApp} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-stone-400 mb-1">
-                  Recipient Mobile Number (Optional, leave blank to pick in WhatsApp)
-                </label>
-                <div className="flex">
-                  <span className="py-2.5 px-3 bg-stone-800 border border-r-0 border-stone-700 rounded-l-xl text-stone-400 font-mono">
-                    +91
-                  </span>
-                  <input
-                    type="tel"
-                    placeholder="Enter owner 10-digit mobile number"
-                    value={targetPhone}
-                    onChange={(e) => setTargetPhone(e.target.value)}
-                    className="flex-1 py-2.5 px-3 bg-stone-950 border border-stone-700 rounded-r-xl text-white font-mono focus:outline-none focus:border-emerald-400"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-stone-400 mb-1">Message Preview:</label>
-                <pre className="p-3 bg-stone-950 border border-stone-800 rounded-xl text-[11px] text-stone-300 font-mono max-h-56 overflow-y-auto whitespace-pre-wrap">
-                  {whatsappSummaryText}
-                </pre>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsShareModalOpen(false)}
-                  className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl transition-all"
-                >
-                  Close
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>Open WhatsApp</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ShareReportModal
+          handleShareWhatsApp={handleShareWhatsApp}
+          targetPhone={targetPhone}
+          setTargetPhone={setTargetPhone}
+          whatsappSummaryText={whatsappSummaryText}
+          setIsShareModalOpen={setIsShareModalOpen}
+        />
       )}
 
       {/* ----------------------------------------------------------- */}
       {/* Supabase Cloud Sync Configuration Modal */}
       {/* ----------------------------------------------------------- */}
       {isCloudModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-xl bg-stone-900 border border-stone-700 rounded-2xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-stone-800 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Cloud className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Supabase Cloud Sync</h3>
-                  <p className="text-[11px] text-stone-400">
-                    Real-time cloud backup of all bills, audit logs & expenses
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsCloudModalOpen(false)}
-                className="text-stone-400 hover:text-white p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Cloud Status Card */}
-            <div className="bg-stone-950 border border-stone-800 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-stone-400 font-medium">Sync Status:</span>
-                <span
-                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${
-                    cloudConfig?.connected
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                      : cloudConfig?.isConfigured
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-stone-800 text-stone-400 border-stone-700'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      cloudConfig?.connected ? 'bg-emerald-400 animate-pulse' : 'bg-stone-400'
-                    }`}
-                  />
-                  {cloudConfig?.connected
-                    ? 'Connected & Active'
-                    : cloudConfig?.isConfigured
-                    ? 'Configured (Offline/Checking)'
-                    : 'Not Configured (Offline Mode)'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-                <div className="bg-stone-900/60 p-2 rounded-lg border border-stone-800/80">
-                  <span className="text-stone-400 block">Last Synced:</span>
-                  <span className="font-semibold text-stone-200">
-                    {cloudConfig?.lastSyncTime
-                      ? new Date(cloudConfig.lastSyncTime).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })
-                      : 'Never'}
-                  </span>
-                </div>
-                <div className="bg-stone-900/60 p-2 rounded-lg border border-stone-800/80">
-                  <span className="text-stone-400 block">Queued Bills:</span>
-                  <span className="font-semibold text-stone-200">
-                    {cloudConfig?.pendingBills ?? 0} bills pending upload
-                  </span>
-                </div>
-              </div>
-
-              {cloudConfig?.isConfigured && (
-                <div className="pt-1 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleTriggerCloudSync}
-                    disabled={syncingCloud}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${syncingCloud ? 'animate-spin' : ''}`} />
-                    <span>{syncingCloud ? 'Syncing...' : 'Sync All Records Now'}</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Supabase Credentials Form */}
-            <form onSubmit={handleSaveCloudConfig} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-stone-300 font-semibold mb-1">
-                  Supabase Project URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://your-project-id.supabase.co"
-                  value={inputSupabaseUrl}
-                  onChange={(e) => setInputSupabaseUrl(e.target.value)}
-                  className="w-full py-2.5 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-400"
-                />
-                <span className="text-[10px] text-stone-500 mt-1 block">
-                  Found in: Supabase Dashboard &gt; Project Settings &gt; API &gt; Project URL
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-stone-300 font-semibold mb-1">
-                  Supabase Anon Public API Key
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  value={inputSupabaseKey}
-                  onChange={(e) => setInputSupabaseKey(e.target.value)}
-                  className="w-full py-2 px-3 bg-stone-950 border border-stone-700 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-emerald-400 resize-none"
-                />
-                <span className="text-[10px] text-stone-500 mt-1 block">
-                  Found in: Supabase Dashboard &gt; Project Settings &gt; API &gt; Project API keys &gt; <code className="text-stone-400">anon public</code>
-                </span>
-              </div>
-
-              {/* Live Test Connection Section */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleTestCloudConnection}
-                  disabled={testingCloud || !inputSupabaseUrl.trim() || !inputSupabaseKey.trim()}
-                  className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-200 font-semibold flex items-center gap-1.5 transition-all disabled:opacity-40"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${testingCloud ? 'animate-spin text-gold-400' : ''}`} />
-                  <span>{testingCloud ? 'Testing...' : 'Test Connection'}</span>
-                </button>
-
-                {testResult && (
-                  <div
-                    className={`flex-1 py-1.5 px-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 ${
-                      testResult.success
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                    }`}
-                  >
-                    {testResult.success ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>Connected! Supabase bills table verified.</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                        <span className="truncate">{testResult.error || 'Connection failed'}</span>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <PairedDevicesPanel onPair={() => setIsPairOpen(true)} />
-
-              {/* Free Setup Instructions Box */}
-              <div className="bg-stone-950/70 border border-stone-800 rounded-xl p-3 space-y-1.5">
-                <div className="flex items-center gap-1.5 text-gold-400 font-bold text-xs">
-                  <Database className="w-3.5 h-3.5" />
-                  <span>Cloud Database Status: Active &amp; Pre-configured</span>
-                </div>
-                <p className="text-[11px] text-stone-300 leading-relaxed">
-                  Your Supabase cloud database is pre-configured with project <code className="text-emerald-400 font-mono">kupbuusakxvsfprwdpbr</code>. All 6 tables (<span className="text-stone-200">bills, audit_logs, expenses, menu_items, rooms, tables_config</span>) are synchronized in real-time.
-                </p>
-                <p className="text-[11px] text-stone-400">
-                  You can click <strong className="text-emerald-400">Sync All Records Now</strong> anytime to trigger an immediate force sync, or enter custom credentials if migrating to another Supabase project.
-                </p>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCloudModalOpen(false)}
-                  className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold rounded-xl transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
-                >
-                  <Cloud className="w-3.5 h-3.5" />
-                  <span>Save &amp; Enable Sync</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CloudSyncModal
+          setIsCloudModalOpen={setIsCloudModalOpen}
+          cloudConfig={cloudConfig}
+          handleTriggerCloudSync={handleTriggerCloudSync}
+          syncingCloud={syncingCloud}
+          handleSaveCloudConfig={handleSaveCloudConfig}
+          inputSupabaseUrl={inputSupabaseUrl}
+          setInputSupabaseUrl={setInputSupabaseUrl}
+          inputSupabaseKey={inputSupabaseKey}
+          setInputSupabaseKey={setInputSupabaseKey}
+          handleTestCloudConnection={handleTestCloudConnection}
+          testingCloud={testingCloud}
+          testResult={testResult}
+          setIsPairOpen={setIsPairOpen}
+        />
       )}
       <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
     </div>
