@@ -163,6 +163,12 @@ ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tables_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE banquet_bookings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS banquet_bookings_all ON banquet_bookings;
+CREATE POLICY banquet_bookings_all ON banquet_bookings
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
 -- NOTE: The previous wide-open anon policies were removed on purpose.
 -- Apply supabase/migrations/20261106b_lockdown_rls.sql (after 20261106a_device_pairing_tables.sql) to enable secure access
 -- (public read of menu_items only; everything else for paired devices).
