@@ -30,7 +30,8 @@ CREATE INDEX IF NOT EXISTS idx_banquet_status ON banquet_bookings(status);
 ALTER TABLE banquet_bookings ENABLE ROW LEVEL SECURITY;
 
 -- Allow paired devices and anon (during local development / initial setup) access
-CREATE POLICY IF NOT EXISTS banquet_bookings_all ON banquet_bookings
+DROP POLICY IF EXISTS banquet_bookings_all ON banquet_bookings;
+CREATE POLICY banquet_bookings_all ON banquet_bookings
   FOR ALL
   USING (true)
   WITH CHECK (true);
