@@ -247,16 +247,34 @@ class LocalSyncServer {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Sync-Token');
 
+      const clientIp = req.socket.remoteAddress ? req.socket.remoteAddress.replace(/^.*:/, '') : '127.0.0.1';
+
+      // Attach client socket error listeners to prevent uncaught exceptions on socket hangup
+      req.on('error', (err) => {
+        logger.warn('SyncServer', `Socket request error from ${clientIp}: ${err.message}`);
+      });
+      res.on('error', (err) => {
+        logger.warn('SyncServer', `Socket response error to ${clientIp}: ${err.message}`);
+      });
+
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
         return;
       }
 
-      const clientIp = req.socket.remoteAddress ? req.socket.remoteAddress.replace(/^.*:/, '') : '127.0.0.1';
-      const url = new URL(req.url, `http://${req.headers.host}`);
+      let url;
+      try {
+        url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      } catch (uErr) {
+        logger.warn('SyncServer', `Malformed URL from ${clientIp}: ${req.url}`);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Malformed URL' }));
+        return;
+      }
 
-      if (!this.authorize(req, res, clientIp, url.pathname)) return;
+      try {
+        if (!this.authorize(req, res, clientIp, url.pathname)) return;
 
       if (req.method === 'GET' && url.pathname === '/api/status') {
         logger.warn('SyncServer', `Ping /api/status from ${clientIp}`);
@@ -880,13 +898,28 @@ class LocalSyncServer {
         if (fs.existsSync(targetPath)) {
           const ext = path.extname(targetPath).toLowerCase();
           res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
-          fs.createReadStream(targetPath).pipe(res);
+          const stream = fs.createReadStream(targetPath);
+          stream.on('error', (sErr) => {
+            logger.warn('SyncServer', `File stream error for ${targetPath}: ${sErr.message}`);
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'text/plain' });
+              res.end('File read error');
+            }
+          });
+          stream.pipe(res);
           return;
         }
       }
 
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
+      } catch (err) {
+        logger.error('SyncServer', `Unhandled error in route handler [${req.method} ${req.url}]: ${err.message}`, err);
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Internal server error', message: err.message }));
+        }
+      }
     });
 
     this.server.on('error', (err) => {

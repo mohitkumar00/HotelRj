@@ -12,6 +12,10 @@ describe('getApiBaseUrl', () => {
     localStorage.setItem(STORAGE_KEYS.syncUrl, ' 192.168.1.15:5050/ ');
     expect(getApiBaseUrl()).toBe('http://192.168.1.15:5050');
   });
+  it('automatically appends default port 5050 when given raw IP without port', () => {
+    localStorage.setItem(STORAGE_KEYS.syncUrl, '192.168.1.15');
+    expect(getApiBaseUrl()).toBe('http://192.168.1.15:5050');
+  });
   it('keeps an explicit https address', () => {
     localStorage.setItem(STORAGE_KEYS.syncUrl, 'https://counter.example.com//');
     expect(getApiBaseUrl()).toBe('https://counter.example.com');

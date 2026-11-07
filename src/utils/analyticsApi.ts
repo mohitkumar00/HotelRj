@@ -178,7 +178,8 @@ async function fetchHttpServer(endpoint: string, init?: RequestInit): Promise<Re
   const base = getApiBaseUrl();
   if (!base) return null;
   const url = `${base}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
-  return fetch(url, init);
+  const signal = init?.signal || AbortSignal.timeout(6000);
+  return fetch(url, { ...init, signal });
 }
 
 export async function fetchAnalytics(

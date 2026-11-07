@@ -23,9 +23,28 @@ class WindowsLogger {
       if (!fs.existsSync(this.logsDir)) {
         fs.mkdirSync(this.logsDir, { recursive: true });
       }
+      this.pruneOldLogs();
     } catch (e) {
       console.error('Failed to create logs directory:', e);
     }
+  }
+
+  pruneOldLogs(maxDays = 30) {
+    try {
+      if (!fs.existsSync(this.logsDir)) return;
+      const files = fs.readdirSync(this.logsDir);
+      const now = Date.now();
+      const maxAgeMs = maxDays * 24 * 60 * 60 * 1000;
+      for (const f of files) {
+        if (f.startsWith('hotel-rj-') && f.endsWith('.log')) {
+          const full = path.join(this.logsDir, f);
+          const stat = fs.statSync(full);
+          if (now - stat.mtimeMs > maxAgeMs) {
+            fs.unlinkSync(full);
+          }
+        }
+      }
+    } catch {}
   }
 
   getLogFilePath() {

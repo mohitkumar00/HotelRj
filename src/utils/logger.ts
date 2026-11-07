@@ -1,7 +1,8 @@
 /**
  * Hotel RJ In-App Live Debug Logger
  * Captures console events, native bridge logs, and user actions
- * Allows waiters & managers to view live logs directly on their phone screen.
+ * Allows waiters & managers to view live logs directly on their phone screen
+ * and persists warnings & errors to Windows disk when running in desktop mode.
  */
 
 export interface LogEntry {
@@ -28,15 +29,20 @@ class AppLogger {
     // Intercept uncaught window errors
     if (typeof window !== 'undefined') {
       window.addEventListener('error', (event) => {
-        this.error('WindowError', event.message, {
+        this.error('WindowError', event.message || 'Uncaught error', {
           filename: event.filename,
           lineno: event.lineno,
           colno: event.colno,
+          stack: event.error?.stack,
         });
       });
 
       window.addEventListener('unhandledrejection', (event) => {
-        this.error('UnhandledPromise', String(event.reason));
+        const reason = event.reason;
+        const msg = typeof reason === 'object' && reason ? (reason.message || String(reason)) : String(reason);
+        this.error('UnhandledPromise', msg || 'Promise rejected without error message', {
+          stack: reason?.stack,
+        });
       });
     }
 
@@ -69,6 +75,18 @@ class AppLogger {
       console.warn(`[${category}] ${message}`, details || '');
     } else {
       console.log(`[${category}] ${message}`, details || '');
+    }
+
+    // Forward to Windows persistent disk log file if running on Electron
+    if (typeof window !== 'undefined' && (window as any).ElectronAPI) {
+      try {
+        const api = (window as any).ElectronAPI;
+        if (level === 'error' && typeof api.logError === 'function') {
+          api.logError(category, message, details);
+        } else if (level === 'warn' && typeof api.logWarning === 'function') {
+          api.logWarning(category, message);
+        }
+      } catch {}
     }
 
     this.notify();

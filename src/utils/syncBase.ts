@@ -10,8 +10,13 @@ import { readString } from './storage';
 export function getApiBaseUrl(): string {
   const saved = (readString(STORAGE_KEYS.syncUrl) || readString(STORAGE_KEYS.legacySyncUrl) || '').trim();
   if (saved) {
-    const withScheme = /^https?:\/\//i.test(saved) ? saved : `http://${saved}`;
-    return withScheme.replace(/\/+$/, '');
+    let withScheme = /^https?:\/\//i.test(saved) ? saved : `http://${saved}`;
+    withScheme = withScheme.replace(/\/+$/, '');
+    // If no port specified and not https domain, default to SYNC_SERVER_PORT
+    if (!withScheme.match(/:\d+$/) && !withScheme.startsWith('https://')) {
+      withScheme = `${withScheme}:${SYNC_SERVER_PORT}`;
+    }
+    return withScheme;
   }
 
   if (typeof window !== 'undefined' && window.location && window.location.origin) {
