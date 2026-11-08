@@ -37,6 +37,13 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
     return () => ipcRenderer.removeListener('sync-waiters-updated', handler);
   },
 
+  // Listen for hotel operations updates (cloud sync data pulls)
+  onHotelOpsUpdate: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('hotel-ops-updated', handler);
+    return () => ipcRenderer.removeListener('hotel-ops-updated', handler);
+  },
+
   // Prompt to add inbound Windows Firewall rule for port 5050
   fixFirewall: () => ipcRenderer.invoke('fix-firewall'),
 

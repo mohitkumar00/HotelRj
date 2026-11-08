@@ -682,6 +682,14 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   useEffect(() => {
     loadHotelOpsData();
+    if (typeof window !== 'undefined' && (window as any).ElectronAPI?.onHotelOpsUpdate) {
+      const unsub = (window as any).ElectronAPI.onHotelOpsUpdate(() => {
+        loadHotelOpsData();
+      });
+      return () => {
+        unsub?.();
+      };
+    }
   }, [loadHotelOpsData]);
 
   const loadRecentBills = async () => {

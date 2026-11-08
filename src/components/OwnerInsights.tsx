@@ -143,6 +143,7 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
       if (res.success) {
         alert(`✅ Synced ${res.syncedBills || 0} bills to Supabase successfully!`);
         loadCloudConfig();
+        loadData();
       } else {
         alert(`Cloud sync issue: ${res.error || 'Check internet connection'}`);
       }

@@ -555,6 +555,65 @@ class HotelDatabase {
     return this.data.menuCategories || [];
   }
 
+  updateMenuFromCloud(cloudItems) {
+    if (!Array.isArray(cloudItems) || cloudItems.length === 0) return;
+    if (!this.data.menuCategories || this.data.menuCategories.length === 0) {
+      this.data.menuCategories = JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES));
+    }
+
+    const itemMap = new Map();
+    const cloudIds = new Set();
+    for (const row of cloudItems) {
+      itemMap.set(row.id, row);
+      cloudIds.add(row.id);
+    }
+
+    for (const cat of this.data.menuCategories) {
+      if (Array.isArray(cat.items)) {
+        // Prune any dishes that have been deleted from Supabase Cloud
+        cat.items = cat.items.filter((localItem) => cloudIds.has(localItem.id));
+
+        for (let i = 0; i < cat.items.length; i++) {
+          const localItem = cat.items[i];
+          const cloudItem = itemMap.get(localItem.id);
+          if (cloudItem) {
+            cat.items[i] = {
+              ...localItem,
+              name: cloudItem.name || localItem.name,
+              price: Number(cloudItem.price) || localItem.price,
+              isAvailable: cloudItem.is_available !== false,
+              dietary: cloudItem.dietary || localItem.dietary,
+              popular: cloudItem.popular !== undefined ? !!cloudItem.popular : localItem.popular,
+              description: cloudItem.description || localItem.description,
+              image: cloudItem.image || localItem.image,
+            };
+            itemMap.delete(localItem.id);
+          }
+        }
+      }
+    }
+
+    for (const [id, row] of itemMap.entries()) {
+      const catId = row.category_id || 'chef_specials';
+      let targetCat = this.data.menuCategories.find((c) => c.id === catId) || this.data.menuCategories[0];
+      if (targetCat) {
+        if (!targetCat.items) targetCat.items = [];
+        targetCat.items.push({
+          id: row.id,
+          name: row.name,
+          hindiName: row.hindi_name || '',
+          price: Number(row.price) || 0,
+          category: catId,
+          dietary: row.dietary || 'veg',
+          image: row.image,
+          isAvailable: row.is_available !== false,
+          popular: !!row.popular,
+          description: row.description || '',
+        });
+      }
+    }
+  }
+
   toggleDishAvailability(dishId, isAvailable) {
     if (!dishId) return { success: false, error: 'Missing dishId' };
     let targetDish = null;

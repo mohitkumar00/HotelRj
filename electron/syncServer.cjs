@@ -591,6 +591,9 @@ class LocalSyncServer {
             const id = data.id || url.searchParams.get('id');
             if (id) {
               db.deleteExpense(id);
+              if (cloudSync && cloudSync.isConfigured()) {
+                cloudSync.deleteFromCloud('expenses', 'id', id).catch((e) => logger.warn('SyncServer', 'Error deleting expense from cloud: ' + e.message));
+              }
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
@@ -672,7 +675,7 @@ class LocalSyncServer {
             const dishId = data.dishId || data.id || url.searchParams.get('id');
             const result = db.deleteDish(dishId);
             if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+              cloudSync.deleteFromCloud('menu_items', 'id', dishId).catch((e) => logger.warn('SyncServer', 'Error deleting dish from cloud: ' + e.message));
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -743,7 +746,7 @@ class LocalSyncServer {
             const roomId = data.roomId || data.id || url.searchParams.get('id');
             const result = db.deleteRoom(roomId);
             if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+              cloudSync.deleteFromCloud('rooms', 'id', roomId).catch((e) => logger.warn('SyncServer', 'Error deleting room from cloud: ' + e.message));
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -793,7 +796,7 @@ class LocalSyncServer {
             const tableId = data.tableId || data.id || url.searchParams.get('id');
             const result = db.deleteTableConfig(tableId);
             if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+              cloudSync.deleteFromCloud('tables_config', 'id', tableId).catch((e) => logger.warn('SyncServer', 'Error deleting table config from cloud: ' + e.message));
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -844,7 +847,7 @@ class LocalSyncServer {
             const bookingId = data.bookingId || data.id || url.searchParams.get('id');
             const result = db.deleteBanquetBooking(bookingId);
             if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+              cloudSync.deleteFromCloud('banquet_bookings', 'id', bookingId).catch((e) => logger.warn('SyncServer', 'Error deleting banquet booking from cloud: ' + e.message));
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));

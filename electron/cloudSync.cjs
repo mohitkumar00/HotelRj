@@ -58,6 +58,7 @@ class SupabaseCloudSync {
     this.isSyncing = false;
     this.session = null; // { accessToken, refreshToken, expiresAt, email }
     this.refreshPromise = null;
+    this.onDataUpdatedCallback = null;
     this.loadSession();
     this.loadConfig();
     this.startBackgroundTimer();
@@ -274,7 +275,406 @@ class SupabaseCloudSync {
   }
 
   // -------------------------------------------------------------
-  // Primary Sync Worker
+  // Delete a record from Supabase Cloud
+  // -------------------------------------------------------------
+  async deleteFromCloud(tableName, idColumn, idValue) {
+    if (!this.isConfigured()) return { success: false, reason: 'not_configured' };
+    try {
+      const url = this.config.supabaseUrl;
+      const headers = await this.authHeaders();
+      const endpoint = `${url}/rest/v1/${tableName}?${idColumn}=eq.${encodeURIComponent(idValue)}`;
+      const res = await fetch(endpoint, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        logger.warn('CloudSync', `Deleted ${idValue} from ${tableName} in Supabase Cloud`);
+        return { success: true };
+      } else {
+        const text = await res.text().catch(() => '');
+        logger.warn('CloudSync', `Delete ${idValue} from ${tableName} returned HTTP ${res.status}: ${text}`);
+        return { success: false, error: `HTTP ${res.status}` };
+      }
+    } catch (err) {
+      logger.error('CloudSync', `Error deleting ${idValue} from ${tableName}`, err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Pull Latest Records from Supabase Cloud (2-Way Sync)
+  // -------------------------------------------------------------
+  async pullFromCloud() {
+    if (!this.isConfigured()) return { success: false, reason: 'not_configured' };
+    try {
+      const url = this.config.supabaseUrl;
+      const headers = await this.authHeaders();
+
+      // 1. Pull Tables Configuration
+      try {
+        const res = await fetch(`${url}/rest/v1/tables_config?select=*&order=sort_order`, { headers });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            db.data.tablesConfig = rows.map((r) => ({
+              id: r.id,
+              name: r.name,
+              section: r.section || 'dining',
+              capacity: Number(r.capacity) || 4,
+              isActive: r.is_active !== false,
+              sortOrder: Number(r.sort_order) || 1,
+            }));
+            logger.warn('CloudSync', `Pulled ${rows.length} tables from Supabase Cloud`);
+          }
+        }
+      } catch (tErr) {
+        logger.warn('CloudSync', `Error pulling tables from Cloud: ${tErr.message}`);
+      }
+
+      // 2. Pull Rooms Configuration & Live Status
+      try {
+        const res = await fetch(`${url}/rest/v1/rooms?select=*`, { headers });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            db.data.rooms = rows.map((r) => ({
+              id: r.id,
+              name: r.name,
+              tier: r.tier || 'deluxe',
+              pricePerNight: Number(r.price_per_night) || 1600,
+              status: r.status || 'available',
+              maxGuests: Number(r.max_guests) || 2,
+              bedType: r.bed_type || '1 King Bed',
+              guestName: r.guest_name || undefined,
+              checkInDate: r.check_in_date || undefined,
+              checkOutDate: r.check_out_date || undefined,
+              folioAmount: Number(r.folio_amount) || 0,
+              notes: r.notes || undefined,
+            }));
+            logger.warn('CloudSync', `Pulled ${rows.length} rooms from Supabase Cloud`);
+          }
+        }
+      } catch (rErr) {
+        logger.warn('CloudSync', `Error pulling rooms from Cloud: ${rErr.message}`);
+      }
+
+      // 3. Pull Live Menu Items, Prices & 86 Sold-Out Status
+      try {
+        const res = await fetch(`${url}/rest/v1/menu_items?select=*&order=category_id,name`, { headers });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            db.updateMenuFromCloud(rows);
+            logger.warn('CloudSync', `Pulled ${rows.length} menu items from Supabase Cloud`);
+          }
+        }
+      } catch (mErr) {
+        logger.warn('CloudSync', `Error pulling menu items from Cloud: ${mErr.message}`);
+      }
+
+      // 4. Pull Banquet Bookings
+      try {
+        const res = await fetch(`${url}/rest/v1/banquet_bookings?select=*&order=event_date.asc`, { headers });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            db.data.banquetBookings = rows.map((b) => ({
+              id: b.id,
+              eventDate: b.event_date,
+              slot: b.slot,
+              customStartTime: b.custom_start_time || undefined,
+              customEndTime: b.custom_end_time || undefined,
+              venue: b.venue,
+              eventType: b.event_type,
+              noOfGuests: Number(b.no_of_guests) || 0,
+              customerName: b.customer_name || 'Guest',
+              customerPhone: b.customer_phone || '',
+              totalAmount: Number(b.total_amount) || 0,
+              advancePaid: Number(b.advance_paid) || 0,
+              balanceDue: Number(b.balance_due) || 0,
+              advancePaymentMode: b.advance_payment_mode || 'Cash',
+              specialNotes: b.special_notes || undefined,
+              status: b.status || 'confirmed',
+              createdBy: b.created_by || 'Staff',
+              updatedAt: b.updated_at,
+            }));
+            logger.warn('CloudSync', `Pulled ${rows.length} banquet bookings from Supabase Cloud`);
+          }
+        }
+      } catch (bErr) {
+        logger.warn('CloudSync', `Error pulling banquet bookings from Cloud: ${bErr.message}`);
+      }
+
+      // 5. Pull Expenses
+      try {
+        const res = await fetch(`${url}/rest/v1/expenses?select=*&order=created_at.desc&limit=200`, { headers });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            db.data.expenses = rows.map((e) => ({
+              id: e.id,
+              title: e.title,
+              category: e.category,
+              amount: Number(e.amount) || 0,
+              paidBy: e.paid_by || 'Cash Drawer',
+              notes: e.notes || undefined,
+              recordedBy: e.recorded_by || 'Manager',
+              dateStr: e.date_str,
+              createdAt: e.created_at,
+            }));
+            logger.warn('CloudSync', `Pulled ${rows.length} expenses from Supabase Cloud`);
+          }
+        }
+      } catch (eErr) {
+        logger.warn('CloudSync', `Error pulling expenses from Cloud: ${eErr.message}`);
+      }
+
+      // Persist local database with pulled data
+      db.persist();
+
+      return { success: true };
+    } catch (err) {
+      logger.error('CloudSync', 'Error in pullFromCloud', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Push Local Records to Supabase Cloud
+  // -------------------------------------------------------------
+  async pushToCloud() {
+    const url = this.config.supabaseUrl;
+    const headers = {
+      ...(await this.authHeaders()),
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    };
+
+    // 1. Sync Settled Bills
+    const bills = db.data.settledBills || [];
+    let syncedBillsCount = 0;
+
+    if (bills.length > 0) {
+      const batchSize = 50;
+      for (let i = 0; i < bills.length; i += batchSize) {
+        const batch = bills.slice(i, i + batchSize).map((b) => ({
+          id: b.id,
+          bill_number: b.billNumber || 0,
+          status: b.status || 'settled',
+          cancel_reason: b.cancelReason || null,
+          cancelled_by: b.cancelledBy || null,
+          cancelled_at: b.cancelledAt || null,
+          department: b.department || 'restaurant',
+          table_id: b.tableId || 'Table',
+          order_type: b.orderType || 'dine-in',
+          room_number: b.roomNumber || null,
+          server_name: b.serverName || 'Staff',
+          settled_by: b.settledBy || 'Cashier',
+          customer_phone: b.customerPhone || null,
+          customer_name: b.customerName || null,
+          subtotal: Number(b.subtotal) || 0,
+          tax: Number(b.tax) || 0,
+          discount: Number(b.discount) || 0,
+          total: Number(b.total) || 0,
+          payment_method: b.paymentMethod || 'cash',
+          payment_details: b.paymentDetails || {},
+          items: b.items || [],
+          date_str: b.dateStr || new Date().toISOString().split('T')[0],
+          timestamp: b.timestamp ? new Date(b.timestamp).toISOString() : new Date().toISOString(),
+        }));
+
+        const res = await fetch(`${url}/rest/v1/bills`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(batch),
+        });
+
+        if (res.ok) {
+          syncedBillsCount += batch.length;
+        } else {
+          console.warn('[CloudSync] Bills sync batch warning:', res.statusText);
+        }
+      }
+    }
+
+    // 2. Sync Audit Logs
+    const auditLogs = db.data.auditLogs || [];
+    if (auditLogs.length > 0) {
+      const recentLogs = auditLogs.slice(0, 100).map((l) => ({
+        id: l.id,
+        type: l.type,
+        table_id: l.tableId,
+        staff_name: l.staffName || 'Staff',
+        item_name: l.itemName || null,
+        item_price: Number(l.itemPrice) || 0,
+        quantity: Number(l.quantity) || 1,
+        reason: l.reason,
+        timestamp: l.timestamp ? new Date(l.timestamp).toISOString() : new Date().toISOString(),
+      }));
+
+      const res = await fetch(`${url}/rest/v1/audit_logs`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(recentLogs),
+      });
+      if (!res.ok) {
+        console.warn('[CloudSync] Audit log sync warning:', res.statusText);
+      }
+    }
+
+    // 3. Sync Daily Expenses
+    const expenses = db.data.expenses || [];
+    if (expenses.length > 0) {
+      const batch = expenses.map((e) => ({
+        id: e.id,
+        title: e.title,
+        category: e.category,
+        amount: Number(e.amount) || 0,
+        paid_by: e.paidBy || 'Cash Drawer',
+        notes: e.notes || null,
+        recorded_by: e.recordedBy || 'Manager',
+        date_str: e.dateStr,
+        created_at: e.createdAt ? new Date(e.createdAt).toISOString() : new Date().toISOString(),
+      }));
+
+      const res = await fetch(`${url}/rest/v1/expenses`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(batch),
+      });
+      if (!res.ok) {
+        console.warn('[CloudSync] Expenses sync warning:', res.statusText);
+      }
+    }
+
+    // 4. Sync Menu Items
+    const menuCategories = db.data.menuCategories || [];
+    const allDishes = [];
+    for (const cat of menuCategories) {
+      if (Array.isArray(cat.items)) {
+        for (const item of cat.items) {
+          allDishes.push({
+            id: item.id,
+            category_id: cat.id,
+            category_title: cat.name,
+            name: item.name,
+            hindi_name: item.hindiName || null,
+            price: Number(item.price) || 0,
+            dietary: item.dietary || 'veg',
+            image: item.image || null,
+            is_available: item.isAvailable !== false,
+            popular: !!item.popular,
+            description: item.description || null,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    if (allDishes.length > 0) {
+      const res = await fetch(`${url}/rest/v1/menu_items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(allDishes),
+      });
+      if (!res.ok) {
+        console.warn('[CloudSync] Menu items sync warning:', res.statusText);
+      }
+    }
+
+    // 5. Sync Rooms
+    const rooms = db.data.rooms || [];
+    if (rooms.length > 0) {
+      const batch = rooms.map((r) => ({
+        id: r.id,
+        name: r.name,
+        tier: r.tier || 'deluxe',
+        price_per_night: Number(r.pricePerNight) || 1600,
+        status: r.status || 'available',
+        max_guests: Number(r.maxGuests) || 2,
+        bed_type: r.bedType || null,
+        guest_name: r.guestName || null,
+        check_in_date: r.checkInDate || null,
+        check_out_date: r.checkOutDate || null,
+        folio_amount: Number(r.folioAmount) || 0,
+        notes: r.notes || null,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const res = await fetch(`${url}/rest/v1/rooms`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(batch),
+      });
+      if (!res.ok) {
+        console.warn('[CloudSync] Rooms sync warning:', res.statusText);
+      }
+    }
+
+    // 6. Sync Tables & Outlets Configuration
+    const tablesConfig = db.data.tablesConfig || [];
+    if (tablesConfig.length > 0) {
+      const batch = tablesConfig.map((t) => ({
+        id: t.id,
+        name: t.name,
+        section: t.section || 'dining',
+        capacity: Number(t.capacity) || 4,
+        is_active: t.isActive !== false,
+        sort_order: Number(t.sortOrder) || 1,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const res = await fetch(`${url}/rest/v1/tables_config`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(batch),
+      });
+      if (!res.ok) {
+        console.warn('[CloudSync] Tables config sync warning:', res.statusText);
+      }
+    }
+
+    // 7. Sync Banquet & Event Bookings
+    const banquetBookings = db.data.banquetBookings || [];
+    if (banquetBookings.length > 0) {
+      const batch = banquetBookings.map((b) => ({
+        id: b.id,
+        event_date: b.eventDate,
+        slot: b.slot,
+        custom_start_time: b.customStartTime || null,
+        custom_end_time: b.customEndTime || null,
+        venue: b.venue,
+        event_type: b.eventType,
+        no_of_guests: Number(b.noOfGuests) || 0,
+        customer_name: b.customerName || 'Guest',
+        customer_phone: b.customerPhone || '',
+        total_amount: Number(b.totalAmount) || 0,
+        advance_paid: Number(b.advancePaid) || 0,
+        balance_due: Number(b.balanceDue) || 0,
+        advance_payment_mode: b.advancePaymentMode || 'Cash',
+        special_notes: b.specialNotes || null,
+        status: b.status || 'confirmed',
+        created_by: b.createdBy || 'Staff',
+        updated_at: b.updatedAt || new Date().toISOString(),
+      }));
+
+      const res = await fetch(`${url}/rest/v1/banquet_bookings`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(batch),
+      });
+      if (!res.ok) {
+        console.warn('[CloudSync] Banquet bookings sync warning:', res.statusText);
+      }
+    }
+
+    return {
+      syncedBills: syncedBillsCount,
+    };
+  }
+
+  // -------------------------------------------------------------
+  // Primary 2-Way Sync Worker (Pull from Cloud -> Push Local)
   // -------------------------------------------------------------
   async syncAll() {
     if (!this.isConfigured()) {
@@ -290,255 +690,31 @@ class SupabaseCloudSync {
     this.config.lastSyncError = null;
 
     try {
-      const url = this.config.supabaseUrl;
-      const headers = {
-        ...(await this.authHeaders()),
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates', // Upsert logic
-      };
+      // Step 1: Pull latest data from Supabase Cloud
+      await this.pullFromCloud();
 
-      // 1. Sync Settled Bills
-      const bills = db.data.settledBills || [];
-      let syncedBillsCount = 0;
-
-      if (bills.length > 0) {
-        // Send in batches of 50
-        const batchSize = 50;
-        for (let i = 0; i < bills.length; i += batchSize) {
-          const batch = bills.slice(i, i + batchSize).map((b) => ({
-            id: b.id,
-            bill_number: b.billNumber || 0,
-            status: b.status || 'settled',
-            cancel_reason: b.cancelReason || null,
-            cancelled_by: b.cancelledBy || null,
-            cancelled_at: b.cancelledAt || null,
-            department: b.department || 'restaurant',
-            table_id: b.tableId || 'Table',
-            order_type: b.orderType || 'dine-in',
-            room_number: b.roomNumber || null,
-            server_name: b.serverName || 'Staff',
-            settled_by: b.settledBy || 'Cashier',
-            customer_phone: b.customerPhone || null,
-            customer_name: b.customerName || null,
-            subtotal: Number(b.subtotal) || 0,
-            tax: Number(b.tax) || 0,
-            discount: Number(b.discount) || 0,
-            total: Number(b.total) || 0,
-            payment_method: b.paymentMethod || 'cash',
-            payment_details: b.paymentDetails || {},
-            items: b.items || [],
-            date_str: b.dateStr || '',
-            timestamp: b.timestamp || new Date().toISOString(),
-          }));
-
-          const res = await fetch(`${url}/rest/v1/bills`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(batch),
-          });
-
-          if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Failed to sync bills batch: ${res.status} ${errText}`);
-          }
-          syncedBillsCount += batch.length;
-        }
-      }
-
-      // 2. Sync Anti-Theft Audit Logs
-      const auditLogs = db.data.auditLogs || [];
-      if (auditLogs.length > 0) {
-        const batchSize = 50;
-        for (let i = 0; i < auditLogs.length; i += batchSize) {
-          const batch = auditLogs.slice(i, i + batchSize).map((a) => ({
-            id: a.id,
-            type: a.type || 'ITEM_VOID',
-            table_id: a.tableId || 'Table',
-            staff_name: a.staffName || 'Staff',
-            item_name: a.itemName || null,
-            item_price: Number(a.itemPrice) || 0,
-            quantity: Number(a.quantity) || 1,
-            reason: a.reason || 'None',
-            date_str: a.dateStr || '',
-            timestamp: a.timestamp || new Date().toISOString(),
-          }));
-
-          const res = await fetch(`${url}/rest/v1/audit_logs`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(batch),
-          });
-
-          if (!res.ok) {
-            console.warn('[CloudSync] Audit log sync warning:', res.statusText);
-          }
-        }
-      }
-
-      // 3. Sync Petty Cash Expenses
-      const expenses = db.data.expenses || [];
-      if (expenses.length > 0) {
-        const batchSize = 50;
-        for (let i = 0; i < expenses.length; i += batchSize) {
-          const batch = expenses.slice(i, i + batchSize).map((e) => ({
-            id: e.id,
-            category: e.category || 'General',
-            amount: Number(e.amount) || 0,
-            paid_by: e.paidBy || 'Cash Drawer',
-            notes: e.notes || '',
-            recorded_by: e.recordedBy || 'Cashier',
-            date_str: e.dateStr || '',
-            timestamp: e.timestamp || new Date().toISOString(),
-          }));
-
-          const res = await fetch(`${url}/rest/v1/expenses`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(batch),
-          });
-
-          if (!res.ok) {
-            console.warn('[CloudSync] Expense sync warning:', res.statusText);
-          }
-        }
-      }
-
-      // 4. Sync Menu Items & Availability (Dishes + Kitchen 86 Sold-Out Status)
-      const categories = db.data.menuCategories || [];
-      const allMenuItems = [];
-      for (const cat of categories) {
-        if (Array.isArray(cat.items)) {
-          for (const item of cat.items) {
-            allMenuItems.push({
-              id: item.id,
-              category_id: cat.id,
-              category_title: cat.title,
-              name: item.name,
-              hindi_name: item.hindiName || null,
-              price: Number(item.price) || 0,
-              dietary: item.dietary || 'veg',
-              is_available: item.isAvailable !== false,
-              popular: !!item.popular,
-              description: item.description || null,
-              updated_at: new Date().toISOString(),
-            });
-          }
-        }
-      }
-
-      if (allMenuItems.length > 0) {
-        const batchSize = 100;
-        for (let i = 0; i < allMenuItems.length; i += batchSize) {
-          const batch = allMenuItems.slice(i, i + batchSize);
-          const res = await fetch(`${url}/rest/v1/menu_items`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(batch),
-          });
-          if (!res.ok) {
-            console.warn('[CloudSync] Menu items sync warning:', res.statusText);
-          }
-        }
-      }
-
-      // 5. Sync Rooms & Housekeeping Status
-      const rooms = db.data.rooms || [];
-      if (rooms.length > 0) {
-        const batch = rooms.map((r) => ({
-          id: r.id,
-          name: r.name,
-          tier: r.tier || 'deluxe',
-          price_per_night: Number(r.pricePerNight) || 1600,
-          status: r.status || 'available',
-          max_guests: Number(r.maxGuests) || 2,
-          bed_type: r.bedType || '1 King Bed',
-          guest_name: r.guestName || null,
-          check_in_date: r.checkInDate || null,
-          check_out_date: r.checkOutDate || null,
-          folio_amount: Number(r.folioAmount) || 0,
-          notes: r.notes || null,
-          updated_at: new Date().toISOString(),
-        }));
-
-        const res = await fetch(`${url}/rest/v1/rooms`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(batch),
-        });
-        if (!res.ok) {
-          console.warn('[CloudSync] Rooms sync warning:', res.statusText);
-        }
-      }
-
-      // 6. Sync Tables & Outlets Configuration
-      const tablesConfig = db.data.tablesConfig || [];
-      if (tablesConfig.length > 0) {
-        const batch = tablesConfig.map((t) => ({
-          id: t.id,
-          name: t.name,
-          section: t.section || 'dining',
-          capacity: Number(t.capacity) || 4,
-          is_active: t.isActive !== false,
-          sort_order: Number(t.sortOrder) || 1,
-          updated_at: new Date().toISOString(),
-        }));
-
-        const res = await fetch(`${url}/rest/v1/tables_config`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(batch),
-        });
-        if (!res.ok) {
-          console.warn('[CloudSync] Tables config sync warning:', res.statusText);
-        }
-      }
-
-            // 7. Sync Banquet & Event Bookings
-      const banquetBookings = db.data.banquetBookings || [];
-      if (banquetBookings.length > 0) {
-        const batch = banquetBookings.map((b) => ({
-          id: b.id,
-          event_date: b.eventDate,
-          slot: b.slot,
-          custom_start_time: b.customStartTime || null,
-          custom_end_time: b.customEndTime || null,
-          venue: b.venue,
-          event_type: b.eventType,
-          no_of_guests: Number(b.noOfGuests) || 0,
-          customer_name: b.customerName || 'Guest',
-          customer_phone: b.customerPhone || '',
-          total_amount: Number(b.totalAmount) || 0,
-          advance_paid: Number(b.advancePaid) || 0,
-          balance_due: Number(b.balanceDue) || 0,
-          advance_payment_mode: b.advancePaymentMode || 'Cash',
-          special_notes: b.specialNotes || null,
-          status: b.status || 'confirmed',
-          created_by: b.createdBy || 'Staff',
-          updated_at: b.updatedAt || new Date().toISOString(),
-        }));
-
-        const res = await fetch(`${url}/rest/v1/banquet_bookings`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(batch),
-        });
-        if (!res.ok) {
-          console.warn('[CloudSync] Banquet bookings sync warning:', res.statusText);
-        }
-      }
+      // Step 2: Push local data to Supabase Cloud
+      const pushResult = await this.pushToCloud();
 
       this.config.lastSyncTime = new Date().toISOString();
       this.config.lastSyncStatus = 'success';
       this.config.lastSyncError = null;
 
-      logger.warn('CloudSync', `Synced ${syncedBillsCount} bills and records to Supabase`);
+      logger.warn('CloudSync', `Synced ${pushResult.syncedBills} bills and 2-way merged data with Supabase Cloud`);
 
       // Persist last sync time to config
       fs.writeFileSync(configFilePath, JSON.stringify(this.config, null, 2), 'utf8');
 
+      // Notify UI of updated ops data
+      if (this.onDataUpdatedCallback) {
+        try {
+          this.onDataUpdatedCallback({ type: 'cloud-sync-complete' });
+        } catch {}
+      }
+
       return {
         success: true,
-        syncedBills: syncedBillsCount,
+        syncedBills: pushResult.syncedBills,
         lastSyncTime: this.config.lastSyncTime,
       };
     } catch (err) {
