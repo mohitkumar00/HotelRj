@@ -333,12 +333,22 @@ class SupabaseCloudSync {
             }
             // Preserve newly created local tables not yet synced to cloud
             const mergedTables = Array.from(cloudMap.values());
-            for (const lt of (db.data.tablesConfig || [])) {
-              if (db.isPendingDeletion('tables_config', lt.id)) continue;
-              if (!cloudMap.has(norm(lt.id))) {
-                // If it was already cloudSynced, it was deleted in the cloud on another machine
-                if (lt.cloudSynced !== true) {
+            if (rows.length === 0) {
+              // Cloud is completely empty: seed with local default tables
+              for (const lt of (db.data.tablesConfig || [])) {
+                if (!db.isPendingDeletion('tables_config', lt.id)) {
                   mergedTables.push(lt);
+                }
+              }
+            } else {
+              // Cloud has tables: Cloud is authoritative. Only preserve fresh unpushed local tables
+              for (const lt of (db.data.tablesConfig || [])) {
+                if (db.isPendingDeletion('tables_config', lt.id)) continue;
+                if (!cloudMap.has(norm(lt.id))) {
+                  const isRecentLocal = lt.updatedAt && (Date.now() - lt.updatedAt < 300000);
+                  if (lt.isLocalNew && isRecentLocal) {
+                    mergedTables.push(lt);
+                  }
                 }
               }
             }
@@ -377,14 +387,25 @@ class SupabaseCloudSync {
                 cloudSynced: true,
               });
             }
-            // Preserve newly created local rooms not yet synced to cloud
+            // If Cloud already has rooms, Cloud is authoritative!
+            // Do NOT re-inject local default rooms. Only preserve rooms explicitly created by user while offline.
             const mergedRooms = Array.from(cloudMap.values());
-            for (const lr of (db.data.rooms || [])) {
-              if (db.isPendingDeletion('rooms', lr.id)) continue;
-              if (!cloudMap.has(norm(lr.id))) {
-                // If it was already cloudSynced, it was deleted in the cloud on another machine
-                if (lr.cloudSynced !== true) {
+            if (rows.length === 0) {
+              // Cloud is completely empty: seed with local default rooms
+              for (const lr of (db.data.rooms || [])) {
+                if (!db.isPendingDeletion('rooms', lr.id)) {
                   mergedRooms.push(lr);
+                }
+              }
+            } else {
+              // Cloud has rooms: only preserve unpushed rooms created recently by user
+              for (const lr of (db.data.rooms || [])) {
+                if (db.isPendingDeletion('rooms', lr.id)) continue;
+                if (!cloudMap.has(norm(lr.id))) {
+                  const isRecentLocal = lr.updatedAt && (Date.now() - lr.updatedAt < 300000);
+                  if (lr.isLocalNew && isRecentLocal) {
+                    mergedRooms.push(lr);
+                  }
                 }
               }
             }
@@ -431,8 +452,8 @@ class SupabaseCloudSync {
                 customerName: b.customer_name || 'Guest',
                 customerPhone: b.customer_phone || '',
                 totalAmount: Number(b.total_amount) || 0,
-                advancePaid: Number(b.advance_paid) || 0,
-                balanceDue: Number(b.balance_due) || 0,
+                advancePaid: Number(b.advancePaid) || 0,
+                balanceDue: Number(b.balanceDue) || 0,
                 advancePaymentMode: b.advance_payment_mode || 'Cash',
                 specialNotes: b.special_notes || undefined,
                 status: b.status || 'confirmed',
@@ -441,13 +462,20 @@ class SupabaseCloudSync {
                 cloudSynced: true,
               });
             }
-            // Preserve newly created local bookings not yet synced
             const mergedBookings = Array.from(cloudMap.values());
-            for (const lb of (db.data.banquetBookings || [])) {
-              if (db.isPendingDeletion('banquet_bookings', lb.id)) continue;
-              if (!cloudMap.has(lb.id)) {
-                if (lb.cloudSynced !== true) {
+            if (rows.length === 0) {
+              for (const lb of (db.data.banquetBookings || [])) {
+                if (!db.isPendingDeletion('banquet_bookings', lb.id)) {
                   mergedBookings.push(lb);
+                }
+              }
+            } else {
+              for (const lb of (db.data.banquetBookings || [])) {
+                if (db.isPendingDeletion('banquet_bookings', lb.id)) continue;
+                if (!cloudMap.has(lb.id)) {
+                  if (lb.isLocalNew) {
+                    mergedBookings.push(lb);
+                  }
                 }
               }
             }
@@ -481,13 +509,20 @@ class SupabaseCloudSync {
                 cloudSynced: true,
               });
             }
-            // Preserve newly created local expenses not yet synced
             const mergedExpenses = Array.from(cloudMap.values());
-            for (const le of (db.data.expenses || [])) {
-              if (db.isPendingDeletion('expenses', le.id)) continue;
-              if (!cloudMap.has(le.id)) {
-                if (le.cloudSynced !== true) {
+            if (rows.length === 0) {
+              for (const le of (db.data.expenses || [])) {
+                if (!db.isPendingDeletion('expenses', le.id)) {
                   mergedExpenses.push(le);
+                }
+              }
+            } else {
+              for (const le of (db.data.expenses || [])) {
+                if (db.isPendingDeletion('expenses', le.id)) continue;
+                if (!cloudMap.has(le.id)) {
+                  if (le.isLocalNew) {
+                    mergedExpenses.push(le);
+                  }
                 }
               }
             }
@@ -680,7 +715,10 @@ class SupabaseCloudSync {
         body: JSON.stringify(batch),
       });
       if (res.ok) {
-        for (const e of rawExpenses) e.cloudSynced = true;
+        for (const e of rawExpenses) {
+          e.cloudSynced = true;
+          e.isLocalNew = false;
+        }
       } else {
         console.warn('[CloudSync] Expenses sync warning:', res.statusText);
       }
@@ -720,7 +758,10 @@ class SupabaseCloudSync {
         body: JSON.stringify(allDishes),
       });
       if (res.ok) {
-        for (const d of validLocalDishes) d.cloudSynced = true;
+        for (const d of validLocalDishes) {
+          d.cloudSynced = true;
+          d.isLocalNew = false;
+        }
       } else {
         console.warn('[CloudSync] Menu items sync warning:', res.statusText);
       }
@@ -751,7 +792,10 @@ class SupabaseCloudSync {
         body: JSON.stringify(batch),
       });
       if (res.ok) {
-        for (const r of rawRooms) r.cloudSynced = true;
+        for (const r of rawRooms) {
+          r.cloudSynced = true;
+          r.isLocalNew = false;
+        }
       } else {
         console.warn('[CloudSync] Rooms sync warning:', res.statusText);
       }
@@ -776,7 +820,10 @@ class SupabaseCloudSync {
         body: JSON.stringify(batch),
       });
       if (res.ok) {
-        for (const t of rawTables) t.cloudSynced = true;
+        for (const t of rawTables) {
+          t.cloudSynced = true;
+          t.isLocalNew = false;
+        }
       } else {
         console.warn('[CloudSync] Tables config sync warning:', res.statusText);
       }
@@ -799,7 +846,7 @@ class SupabaseCloudSync {
         total_amount: Number(b.totalAmount) || 0,
         advance_paid: Number(b.advancePaid) || 0,
         balance_due: Number(b.balanceDue) || 0,
-        advance_payment_mode: b.advancePaymentMode || 'Cash',
+        advancePaymentMode: b.advancePaymentMode || 'Cash',
         special_notes: b.specialNotes || null,
         status: b.status || 'confirmed',
         created_by: b.createdBy || 'Staff',
@@ -812,7 +859,10 @@ class SupabaseCloudSync {
         body: JSON.stringify(batch),
       });
       if (res.ok) {
-        for (const b of rawBookings) b.cloudSynced = true;
+        for (const b of rawBookings) {
+          b.cloudSynced = true;
+          b.isLocalNew = false;
+        }
       } else {
         console.warn('[CloudSync] Banquet bookings sync warning:', res.statusText);
       }
@@ -842,11 +892,11 @@ class SupabaseCloudSync {
     this.config.lastSyncError = null;
 
     try {
-      // Step 1: Push local data to Supabase Cloud FIRST
-      const pushResult = await this.pushToCloud();
-
-      // Step 2: Pull latest data from Supabase Cloud
+      // Step 1: Pull latest data from Supabase Cloud FIRST so deletions and edits take precedence
       await this.pullFromCloud();
+
+      // Step 2: Push local data to Supabase Cloud
+      const pushResult = await this.pushToCloud();
 
       this.config.lastSyncTime = new Date().toISOString();
       this.config.lastSyncStatus = 'success';

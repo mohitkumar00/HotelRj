@@ -332,6 +332,7 @@ class HotelDatabase {
       timestamp,
       dateStr,
       cloudSynced: false,
+      isLocalNew: true,
       updatedAt: Date.now(),
     };
 
@@ -934,6 +935,7 @@ class HotelDatabase {
         name: roomData.name || roomData.id.trim(),
         updatedAt: Date.now(),
         cloudSynced: false,
+        isLocalNew: true,
       };
       this.data.rooms[existingIdx] = savedRoom;
     } else {
@@ -949,6 +951,7 @@ class HotelDatabase {
         bedType: roomData.bedType || (oldRoomRecord && oldRoomRecord.bedType) || '1 King Bed',
         updatedAt: Date.now(),
         cloudSynced: false,
+        isLocalNew: true,
       };
       this.data.rooms.push(savedRoom);
     }
@@ -1010,6 +1013,7 @@ class HotelDatabase {
         name: tableData.name || tableData.id.trim(),
         updatedAt: Date.now(),
         cloudSynced: false,
+        isLocalNew: true,
       };
       this.data.tablesConfig[existingIdx] = savedTable;
     } else {
@@ -1024,6 +1028,7 @@ class HotelDatabase {
         sortOrder: Number(tableData.sortOrder) || (this.data.tablesConfig.length + 1),
         updatedAt: Date.now(),
         cloudSynced: false,
+        isLocalNew: true,
       };
       this.data.tablesConfig.push(savedTable);
     }
@@ -1067,6 +1072,7 @@ class HotelDatabase {
         ...booking,
         updatedAt: new Date().toISOString(),
         cloudSynced: false,
+        isLocalNew: true,
       };
       list[idx] = saved;
     } else {
@@ -1075,6 +1081,7 @@ class HotelDatabase {
         createdAt: booking.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         cloudSynced: false,
+        isLocalNew: true,
       };
       list.push(saved);
     }

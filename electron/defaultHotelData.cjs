@@ -465,67 +465,22 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "Room 201",
-    "name": "Room 201 (Super Deluxe)",
+    "id": "Room 104",
+    "name": "Room 104 (Executive)",
     "tier": "executive",
-    "pricePerNight": 2200,
+    "pricePerNight": 2000,
     "status": "available",
     "maxGuests": 2,
     "bedType": "1 King Bed"
   },
   {
-    "id": "Room 202",
-    "name": "Room 202 (Super Deluxe)",
+    "id": "Room 105",
+    "name": "Room 105 (Executive)",
     "tier": "executive",
-    "pricePerNight": 2200,
+    "pricePerNight": 2000,
     "status": "available",
     "maxGuests": 2,
     "bedType": "1 King Bed"
-  },
-  {
-    "id": "Room 203",
-    "name": "Room 203 (Super Deluxe)",
-    "tier": "executive",
-    "pricePerNight": 2200,
-    "status": "available",
-    "maxGuests": 2,
-    "bedType": "1 King Bed"
-  },
-  {
-    "id": "Room 204",
-    "name": "Room 204 (Super Deluxe)",
-    "tier": "executive",
-    "pricePerNight": 2200,
-    "status": "available",
-    "maxGuests": 2,
-    "bedType": "1 King Bed"
-  },
-  {
-    "id": "Room 301",
-    "name": "Room 301 (Family Suite)",
-    "tier": "family",
-    "pricePerNight": 3000,
-    "status": "available",
-    "maxGuests": 4,
-    "bedType": "2 Double Beds"
-  },
-  {
-    "id": "Room 302",
-    "name": "Room 302 (Family Suite)",
-    "tier": "family",
-    "pricePerNight": 3000,
-    "status": "available",
-    "maxGuests": 4,
-    "bedType": "2 Double Beds"
-  },
-  {
-    "id": "Room 305",
-    "name": "Room 305 (Family Suite)",
-    "tier": "family",
-    "pricePerNight": 3000,
-    "status": "available",
-    "maxGuests": 4,
-    "bedType": "2 Double Beds"
   }
 ],
   DEFAULT_TABLES_CONFIG: [
