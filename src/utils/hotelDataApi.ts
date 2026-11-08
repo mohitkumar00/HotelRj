@@ -212,7 +212,7 @@ export async function toggleDishAvailabilityApi(
   return { success: false };
 }
 
-export async function saveDishApi(dishData: Partial<MenuItem> & { categoryId?: string }): Promise<{ success: boolean; dish?: MenuItem }> {
+export async function saveDishApi(dishData: Partial<MenuItem> & { categoryId?: string; originalId?: string }): Promise<{ success: boolean; dish?: MenuItem }> {
   if (typeof window !== 'undefined' && window.ElectronAPI && window.ElectronAPI.saveDish) {
     try {
       return await window.ElectronAPI.saveDish(dishData);
@@ -241,6 +241,16 @@ export async function saveDishApi(dishData: Partial<MenuItem> & { categoryId?: s
   // Supabase Cloud API Fallback
   try {
     const id = dishData.id || `dish-${Date.now()}`;
+    const origId = dishData.originalId;
+
+    if (origId && origId !== id) {
+      await fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/menu_items?id=eq.${encodeURIComponent(origId)}`, {
+        method: 'DELETE',
+        headers: await getSupabaseHeaders(),
+        signal: AbortSignal.timeout(4000),
+      }).catch(() => {});
+    }
+
     const row = {
       id,
       name: dishData.name || 'Unnamed Dish',

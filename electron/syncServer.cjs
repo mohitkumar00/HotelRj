@@ -559,7 +559,7 @@ class LocalSyncServer {
       if (req.method === 'POST' && url.pathname === '/api/expense') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
             const expense = data.expense;
@@ -571,6 +571,9 @@ class LocalSyncServer {
 
             const record = db.saveExpense(expense);
             logger.warn('SyncServer', `Expense recorded: ${expense.category} (₹${expense.amount}) - "${expense.notes}"`);
+            if (cloudSync.isConfigured()) {
+              await cloudSync.pushToCloud().catch((e) => logger.warn('SyncServer', 'Error pushing expense: ' + e.message));
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, expense: record }));
           } catch (err) {
@@ -585,14 +588,17 @@ class LocalSyncServer {
       if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/expense/delete') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
             const id = data.id || url.searchParams.get('id');
             if (id) {
               db.deleteExpense(id);
               if (cloudSync && cloudSync.isConfigured()) {
-                cloudSync.deleteFromCloud('expenses', 'id', id).catch((e) => logger.warn('SyncServer', 'Error deleting expense from cloud: ' + e.message));
+                const dRes = await cloudSync.deleteFromCloud('expenses', 'id', id).catch((e) => logger.warn('SyncServer', 'Error deleting expense from cloud: ' + e.message));
+                if (dRes && dRes.success) {
+                  db.removePendingDeletion('expenses', id);
+                }
               }
             }
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -648,12 +654,16 @@ class LocalSyncServer {
       if (req.method === 'POST' && url.pathname === '/api/menu/dish') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
-            const result = db.saveDish(data.dish || data);
+            const dishData = data.dish || data;
+            const result = db.saveDish(dishData, dishData.originalId);
             if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+              if (result.renamedFrom) {
+                await cloudSync.deleteFromCloud('menu_items', 'id', result.renamedFrom).catch(() => {});
+              }
+              await cloudSync.pushToCloud().catch((e) => logger.warn('SyncServer', 'Error syncing saved dish: ' + e.message));
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -669,13 +679,17 @@ class LocalSyncServer {
       if ((req.method === 'DELETE' || req.method === 'POST') && (url.pathname === '/api/menu/dish/delete' || url.pathname === '/api/menu/dish')) {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
             const dishId = data.dishId || data.id || url.searchParams.get('id');
             const result = db.deleteDish(dishId);
             if (result.success && cloudSync.isConfigured()) {
-              cloudSync.deleteFromCloud('menu_items', 'id', dishId).catch((e) => logger.warn('SyncServer', 'Error deleting dish from cloud: ' + e.message));
+              const targetId = result.deletedId || dishId;
+              const dRes = await cloudSync.deleteFromCloud('menu_items', 'id', targetId).catch((e) => logger.warn('SyncServer', 'Error deleting dish from cloud: ' + e.message));
+              if (dRes && dRes.success) {
+                db.removePendingDeletion('menu_items', targetId);
+              }
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -751,7 +765,10 @@ class LocalSyncServer {
             const result = db.deleteRoom(roomId);
             if (result.success && cloudSync.isConfigured()) {
               const targetId = result.deletedId || roomId;
-              await cloudSync.deleteFromCloud('rooms', 'id', targetId).catch((e) => logger.warn('SyncServer', 'Error deleting room from cloud: ' + e.message));
+              const dRes = await cloudSync.deleteFromCloud('rooms', 'id', targetId).catch((e) => logger.warn('SyncServer', 'Error deleting room from cloud: ' + e.message));
+              if (dRes && dRes.success) {
+                db.removePendingDeletion('rooms', targetId);
+              }
               if (targetId !== roomId) {
                 await cloudSync.deleteFromCloud('rooms', 'id', roomId).catch(() => {});
               }
@@ -786,7 +803,7 @@ class LocalSyncServer {
               if (result.renamedFrom) {
                 await cloudSync.deleteFromCloud('tables_config', 'id', result.renamedFrom).catch(() => {});
               }
-              cloudSync.pushToCloud().catch(() => {});
+              await cloudSync.pushToCloud().catch(() => {});
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -809,7 +826,10 @@ class LocalSyncServer {
             const result = db.deleteTableConfig(tableId);
             if (result.success && cloudSync.isConfigured()) {
               const targetId = result.deletedId || tableId;
-              await cloudSync.deleteFromCloud('tables_config', 'id', targetId).catch((e) => logger.warn('SyncServer', 'Error deleting table config from cloud: ' + e.message));
+              const dRes = await cloudSync.deleteFromCloud('tables_config', 'id', targetId).catch((e) => logger.warn('SyncServer', 'Error deleting table config from cloud: ' + e.message));
+              if (dRes && dRes.success) {
+                db.removePendingDeletion('tables_config', targetId);
+              }
               if (targetId !== tableId) {
                 await cloudSync.deleteFromCloud('tables_config', 'id', tableId).catch(() => {});
               }
@@ -836,12 +856,12 @@ class LocalSyncServer {
       if (req.method === 'POST' && url.pathname === '/api/banquet-bookings') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
             const result = db.saveBanquetBooking(data.booking || data);
             if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+              await cloudSync.pushToCloud().catch((e) => logger.warn('SyncServer', 'Error pushing banquet booking: ' + e.message));
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -857,13 +877,16 @@ class LocalSyncServer {
       if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/banquet-bookings/delete') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
             const bookingId = data.bookingId || data.id || url.searchParams.get('id');
             const result = db.deleteBanquetBooking(bookingId);
             if (result.success && cloudSync.isConfigured()) {
-              cloudSync.deleteFromCloud('banquet_bookings', 'id', bookingId).catch((e) => logger.warn('SyncServer', 'Error deleting banquet booking from cloud: ' + e.message));
+              const dRes = await cloudSync.deleteFromCloud('banquet_bookings', 'id', bookingId).catch((e) => logger.warn('SyncServer', 'Error deleting banquet booking from cloud: ' + e.message));
+              if (dRes && dRes.success) {
+                db.removePendingDeletion('banquet_bookings', bookingId);
+              }
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));

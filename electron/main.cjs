@@ -317,7 +317,11 @@ ipcMain.handle('save-expense', async (event, expense) => {
   try {
     const record = db.saveExpense(expense);
     if (cloudSync && cloudSync.isConfigured()) {
-      setTimeout(() => cloudSync.syncAll().catch(() => {}), 200);
+      try {
+        await cloudSync.pushToCloud();
+      } catch (e) {
+        logger.warn('CloudSync', 'Error pushing expense to cloud: ' + e.message);
+      }
     }
     return { success: true, expense: record };
   } catch (err) {
@@ -330,7 +334,14 @@ ipcMain.handle('delete-expense', async (event, id) => {
   try {
     db.deleteExpense(id);
     if (cloudSync && cloudSync.isConfigured()) {
-      cloudSync.deleteFromCloud('expenses', 'id', id).catch((e) => logger.warn('CloudSync', 'Error deleting expense from cloud: ' + e.message));
+      try {
+        const dRes = await cloudSync.deleteFromCloud('expenses', 'id', id);
+        if (dRes && dRes.success) {
+          db.removePendingDeletion('expenses', id);
+        }
+      } catch (e) {
+        logger.warn('CloudSync', 'Error deleting expense from cloud: ' + e.message);
+      }
     }
     return { success: true };
   } catch (err) {
@@ -365,15 +376,27 @@ ipcMain.handle('get-menu', async () => {
 ipcMain.handle('toggle-dish-availability', async (event, { dishId, isAvailable }) => {
   const result = db.toggleDishAvailability(dishId, isAvailable);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    setTimeout(() => cloudSync.syncAll(), 100);
+    try {
+      await cloudSync.pushToCloud();
+    } catch (e) {
+      logger.warn('CloudSync', 'Error syncing dish availability: ' + e.message);
+    }
   }
   return result;
 });
 
 ipcMain.handle('save-dish', async (event, dishData) => {
-  const result = db.saveDish(dishData);
+  const originalId = dishData?.originalId;
+  const result = db.saveDish(dishData, originalId);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    setTimeout(() => cloudSync.syncAll(), 100);
+    try {
+      if (result.renamedFrom) {
+        await cloudSync.deleteFromCloud('menu_items', 'id', result.renamedFrom);
+      }
+      await cloudSync.pushToCloud();
+    } catch (e) {
+      logger.warn('CloudSync', 'Error syncing saved dish: ' + e.message);
+    }
   }
   return result;
 });
@@ -381,7 +404,15 @@ ipcMain.handle('save-dish', async (event, dishData) => {
 ipcMain.handle('delete-dish', async (event, dishId) => {
   const result = db.deleteDish(dishId);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    cloudSync.deleteFromCloud('menu_items', 'id', dishId).catch((e) => logger.warn('CloudSync', 'Error deleting dish from cloud: ' + e.message));
+    try {
+      const targetId = result.deletedId || dishId;
+      const dRes = await cloudSync.deleteFromCloud('menu_items', 'id', targetId);
+      if (dRes && dRes.success) {
+        db.removePendingDeletion('menu_items', targetId);
+      }
+    } catch (e) {
+      logger.warn('CloudSync', 'Error deleting dish from cloud: ' + e.message);
+    }
   }
   return result;
 });
@@ -393,7 +424,11 @@ ipcMain.handle('get-rooms', async () => {
 ipcMain.handle('update-room-status', async (event, { roomId, status, guestDetails }) => {
   const result = db.updateRoomStatus(roomId, status, guestDetails);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    setTimeout(() => cloudSync.syncAll(), 100);
+    try {
+      await cloudSync.pushToCloud();
+    } catch (e) {
+      logger.warn('CloudSync', 'Error syncing room status: ' + e.message);
+    }
   }
   return result;
 });
@@ -419,7 +454,10 @@ ipcMain.handle('delete-room', async (event, roomId) => {
   if (result.success && cloudSync && cloudSync.isConfigured()) {
     try {
       const targetId = result.deletedId || roomId;
-      await cloudSync.deleteFromCloud('rooms', 'id', targetId);
+      const dRes = await cloudSync.deleteFromCloud('rooms', 'id', targetId);
+      if (dRes && dRes.success) {
+        db.removePendingDeletion('rooms', targetId);
+      }
       if (targetId !== roomId) {
         await cloudSync.deleteFromCloud('rooms', 'id', roomId);
       }
@@ -459,7 +497,10 @@ ipcMain.handle('delete-table-config', async (event, tableId) => {
   if (result.success && cloudSync && cloudSync.isConfigured()) {
     try {
       const targetId = result.deletedId || tableId;
-      await cloudSync.deleteFromCloud('tables_config', 'id', targetId);
+      const dRes = await cloudSync.deleteFromCloud('tables_config', 'id', targetId);
+      if (dRes && dRes.success) {
+        db.removePendingDeletion('tables_config', targetId);
+      }
       if (targetId !== tableId) {
         await cloudSync.deleteFromCloud('tables_config', 'id', tableId);
       }
@@ -478,7 +519,11 @@ ipcMain.handle('get-banquet-bookings', async () => {
 ipcMain.handle('save-banquet-booking', async (event, booking) => {
   const result = db.saveBanquetBooking(booking);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    setTimeout(() => cloudSync.syncAll(), 100);
+    try {
+      await cloudSync.pushToCloud();
+    } catch (e) {
+      logger.warn('CloudSync', 'Error syncing banquet booking: ' + e.message);
+    }
   }
   return result;
 });
@@ -486,7 +531,14 @@ ipcMain.handle('save-banquet-booking', async (event, booking) => {
 ipcMain.handle('delete-banquet-booking', async (event, id) => {
   const result = db.deleteBanquetBooking(id);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    cloudSync.deleteFromCloud('banquet_bookings', 'id', id).catch((e) => logger.warn('CloudSync', 'Error deleting banquet booking from cloud: ' + e.message));
+    try {
+      const dRes = await cloudSync.deleteFromCloud('banquet_bookings', 'id', id);
+      if (dRes && dRes.success) {
+        db.removePendingDeletion('banquet_bookings', id);
+      }
+    } catch (e) {
+      logger.warn('CloudSync', 'Error deleting banquet booking from cloud: ' + e.message);
+    }
   }
   return result;
 });

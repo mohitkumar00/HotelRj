@@ -71,6 +71,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   // Dish Edit/Create Modal state
   const [editingDish, setEditingDish] = useState<{
     id?: string;
+    originalId?: string;
     categoryId?: string;
     name: string;
     hindiName?: string;
@@ -692,6 +693,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                               onClick={() =>
                                 setEditingDish({
                                   id: dish.id,
+                                  originalId: dish.id,
                                   categoryId: dish.categoryId,
                                   name: dish.name,
                                   hindiName: dish.hindiName || '',

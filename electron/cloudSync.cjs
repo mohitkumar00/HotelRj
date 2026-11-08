@@ -319,6 +319,7 @@ class SupabaseCloudSync {
             const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
             const cloudMap = new Map();
             for (const r of rows) {
+              if (db.isPendingDeletion('tables_config', r.id)) continue;
               const normId = norm(r.id);
               cloudMap.set(normId, {
                 id: r.id,
@@ -327,13 +328,18 @@ class SupabaseCloudSync {
                 capacity: Number(r.capacity) || 4,
                 isActive: r.is_active !== false,
                 sortOrder: Number(r.sort_order) || 1,
+                cloudSynced: true,
               });
             }
-            // Preserve newly created local tables not yet synced
+            // Preserve newly created local tables not yet synced to cloud
             const mergedTables = Array.from(cloudMap.values());
             for (const lt of (db.data.tablesConfig || [])) {
+              if (db.isPendingDeletion('tables_config', lt.id)) continue;
               if (!cloudMap.has(norm(lt.id))) {
-                mergedTables.push(lt);
+                // If it was already cloudSynced, it was deleted in the cloud on another machine
+                if (lt.cloudSynced !== true) {
+                  mergedTables.push(lt);
+                }
               }
             }
             db.data.tablesConfig = mergedTables;
@@ -353,6 +359,7 @@ class SupabaseCloudSync {
             const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
             const cloudMap = new Map();
             for (const r of rows) {
+              if (db.isPendingDeletion('rooms', r.id)) continue;
               const normId = norm(r.id);
               cloudMap.set(normId, {
                 id: r.id,
@@ -367,13 +374,18 @@ class SupabaseCloudSync {
                 checkOutDate: r.check_out_date || undefined,
                 folioAmount: Number(r.folio_amount) || 0,
                 notes: r.notes || undefined,
+                cloudSynced: true,
               });
             }
-            // Preserve newly created local rooms not yet synced
+            // Preserve newly created local rooms not yet synced to cloud
             const mergedRooms = Array.from(cloudMap.values());
             for (const lr of (db.data.rooms || [])) {
+              if (db.isPendingDeletion('rooms', lr.id)) continue;
               if (!cloudMap.has(norm(lr.id))) {
-                mergedRooms.push(lr);
+                // If it was already cloudSynced, it was deleted in the cloud on another machine
+                if (lr.cloudSynced !== true) {
+                  mergedRooms.push(lr);
+                }
               }
             }
             db.data.rooms = mergedRooms;
@@ -403,28 +415,44 @@ class SupabaseCloudSync {
         const res = await fetch(`${url}/rest/v1/banquet_bookings?select=*&order=event_date.asc`, { headers });
         if (res.ok) {
           const rows = await res.json();
-          if (Array.isArray(rows) && rows.length > 0) {
-            db.data.banquetBookings = rows.map((b) => ({
-              id: b.id,
-              eventDate: b.event_date,
-              slot: b.slot,
-              customStartTime: b.custom_start_time || undefined,
-              customEndTime: b.custom_end_time || undefined,
-              venue: b.venue,
-              eventType: b.event_type,
-              noOfGuests: Number(b.no_of_guests) || 0,
-              customerName: b.customer_name || 'Guest',
-              customerPhone: b.customer_phone || '',
-              totalAmount: Number(b.total_amount) || 0,
-              advancePaid: Number(b.advance_paid) || 0,
-              balanceDue: Number(b.balance_due) || 0,
-              advancePaymentMode: b.advance_payment_mode || 'Cash',
-              specialNotes: b.special_notes || undefined,
-              status: b.status || 'confirmed',
-              createdBy: b.created_by || 'Staff',
-              updatedAt: b.updated_at,
-            }));
-            logger.warn('CloudSync', `Pulled ${rows.length} banquet bookings from Supabase Cloud`);
+          if (Array.isArray(rows)) {
+            const cloudMap = new Map();
+            for (const b of rows) {
+              if (db.isPendingDeletion('banquet_bookings', b.id)) continue;
+              cloudMap.set(b.id, {
+                id: b.id,
+                eventDate: b.event_date,
+                slot: b.slot,
+                customStartTime: b.custom_start_time || undefined,
+                customEndTime: b.custom_end_time || undefined,
+                venue: b.venue,
+                eventType: b.event_type,
+                noOfGuests: Number(b.no_of_guests) || 0,
+                customerName: b.customer_name || 'Guest',
+                customerPhone: b.customer_phone || '',
+                totalAmount: Number(b.total_amount) || 0,
+                advancePaid: Number(b.advance_paid) || 0,
+                balanceDue: Number(b.balance_due) || 0,
+                advancePaymentMode: b.advance_payment_mode || 'Cash',
+                specialNotes: b.special_notes || undefined,
+                status: b.status || 'confirmed',
+                createdBy: b.created_by || 'Staff',
+                updatedAt: b.updated_at,
+                cloudSynced: true,
+              });
+            }
+            // Preserve newly created local bookings not yet synced
+            const mergedBookings = Array.from(cloudMap.values());
+            for (const lb of (db.data.banquetBookings || [])) {
+              if (db.isPendingDeletion('banquet_bookings', lb.id)) continue;
+              if (!cloudMap.has(lb.id)) {
+                if (lb.cloudSynced !== true) {
+                  mergedBookings.push(lb);
+                }
+              }
+            }
+            db.data.banquetBookings = mergedBookings;
+            logger.warn('CloudSync', `Pulled & merged ${rows.length} banquet bookings from Supabase Cloud`);
           }
         }
       } catch (bErr) {
@@ -436,23 +464,93 @@ class SupabaseCloudSync {
         const res = await fetch(`${url}/rest/v1/expenses?select=*&order=created_at.desc&limit=200`, { headers });
         if (res.ok) {
           const rows = await res.json();
-          if (Array.isArray(rows) && rows.length > 0) {
-            db.data.expenses = rows.map((e) => ({
-              id: e.id,
-              title: e.title,
-              category: e.category,
-              amount: Number(e.amount) || 0,
-              paidBy: e.paid_by || 'Cash Drawer',
-              notes: e.notes || undefined,
-              recordedBy: e.recorded_by || 'Manager',
-              dateStr: e.date_str,
-              createdAt: e.created_at,
-            }));
-            logger.warn('CloudSync', `Pulled ${rows.length} expenses from Supabase Cloud`);
+          if (Array.isArray(rows)) {
+            const cloudMap = new Map();
+            for (const e of rows) {
+              if (db.isPendingDeletion('expenses', e.id)) continue;
+              cloudMap.set(e.id, {
+                id: e.id,
+                title: e.title || e.category,
+                category: e.category,
+                amount: Number(e.amount) || 0,
+                paidBy: e.paid_by || 'Cash Drawer',
+                notes: e.notes || undefined,
+                recordedBy: e.recorded_by || 'Manager',
+                dateStr: e.date_str,
+                createdAt: e.created_at,
+                cloudSynced: true,
+              });
+            }
+            // Preserve newly created local expenses not yet synced
+            const mergedExpenses = Array.from(cloudMap.values());
+            for (const le of (db.data.expenses || [])) {
+              if (db.isPendingDeletion('expenses', le.id)) continue;
+              if (!cloudMap.has(le.id)) {
+                if (le.cloudSynced !== true) {
+                  mergedExpenses.push(le);
+                }
+              }
+            }
+            db.data.expenses = mergedExpenses;
+            logger.warn('CloudSync', `Pulled & merged ${rows.length} expenses from Supabase Cloud`);
           }
         }
       } catch (eErr) {
         logger.warn('CloudSync', `Error pulling expenses from Cloud: ${eErr.message}`);
+      }
+
+      // 6. Pull Settled Bills & Anti-Theft Cancellations from Other Registers
+      try {
+        const res = await fetch(`${url}/rest/v1/bills?select=*&order=timestamp.desc&limit=100`, { headers });
+        if (res.ok) {
+          const rows = await res.json();
+          if (Array.isArray(rows) && rows.length > 0) {
+            const localBillsMap = new Map();
+            for (const b of (db.data.settledBills || [])) {
+              localBillsMap.set(b.id, b);
+            }
+            for (const r of rows) {
+              const existing = localBillsMap.get(r.id);
+              if (!existing) {
+                localBillsMap.set(r.id, {
+                  id: r.id,
+                  billNumber: r.bill_number,
+                  status: r.status || 'settled',
+                  cancelReason: r.cancel_reason || null,
+                  cancelledBy: r.cancelled_by || null,
+                  cancelledAt: r.cancelled_at || null,
+                  department: r.department || 'restaurant',
+                  tableId: r.table_id,
+                  orderType: r.order_type,
+                  roomNumber: r.room_number || null,
+                  serverName: r.server_name,
+                  settledBy: r.settled_by,
+                  customerPhone: r.customer_phone,
+                  customerName: r.customer_name,
+                  subtotal: Number(r.subtotal) || 0,
+                  tax: Number(r.tax) || 0,
+                  discount: Number(r.discount) || 0,
+                  total: Number(r.total) || 0,
+                  paymentMethod: r.payment_method,
+                  paymentDetails: r.payment_details || {},
+                  items: r.items || [],
+                  dateStr: r.date_str,
+                  timestamp: r.timestamp,
+                });
+              } else if (r.status === 'cancelled' && existing.status !== 'cancelled') {
+                existing.status = 'cancelled';
+                existing.cancelReason = r.cancel_reason;
+                existing.cancelledBy = r.cancelled_by;
+                existing.cancelledAt = r.cancelled_at;
+              }
+            }
+            db.data.settledBills = Array.from(localBillsMap.values()).sort(
+              (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+            );
+          }
+        }
+      } catch (billErr) {
+        logger.warn('CloudSync', `Error pulling settled bills: ${billErr.message}`);
       }
 
       // Persist local database with pulled data
@@ -475,6 +573,19 @@ class SupabaseCloudSync {
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates',
     };
+
+    // 0. Process any pending deletions from offline or previous attempts
+    const pending = db.getPendingDeletions();
+    for (const p of pending) {
+      try {
+        const dRes = await this.deleteFromCloud(p.table, 'id', p.id);
+        if (dRes && dRes.success) {
+          db.removePendingDeletion(p.table, p.id);
+        }
+      } catch (dErr) {
+        // Will retry on next sync
+      }
+    }
 
     // 1. Sync Settled Bills
     const bills = db.data.settledBills || [];
@@ -549,11 +660,11 @@ class SupabaseCloudSync {
     }
 
     // 3. Sync Daily Expenses
-    const expenses = db.data.expenses || [];
-    if (expenses.length > 0) {
-      const batch = expenses.map((e) => ({
+    const rawExpenses = (db.data.expenses || []).filter((e) => !db.isPendingDeletion('expenses', e.id));
+    if (rawExpenses.length > 0) {
+      const batch = rawExpenses.map((e) => ({
         id: e.id,
-        title: e.title,
+        title: e.title || e.category,
         category: e.category,
         amount: Number(e.amount) || 0,
         paid_by: e.paidBy || 'Cash Drawer',
@@ -568,7 +679,9 @@ class SupabaseCloudSync {
         headers,
         body: JSON.stringify(batch),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        for (const e of rawExpenses) e.cloudSynced = true;
+      } else {
         console.warn('[CloudSync] Expenses sync warning:', res.statusText);
       }
     }
@@ -576,9 +689,12 @@ class SupabaseCloudSync {
     // 4. Sync Menu Items
     const menuCategories = db.data.menuCategories || [];
     const allDishes = [];
+    const validLocalDishes = [];
     for (const cat of menuCategories) {
       if (Array.isArray(cat.items)) {
         for (const item of cat.items) {
+          if (db.isPendingDeletion('menu_items', item.id)) continue;
+          validLocalDishes.push(item);
           allDishes.push({
             id: item.id,
             category_id: cat.id,
@@ -603,15 +719,17 @@ class SupabaseCloudSync {
         headers,
         body: JSON.stringify(allDishes),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        for (const d of validLocalDishes) d.cloudSynced = true;
+      } else {
         console.warn('[CloudSync] Menu items sync warning:', res.statusText);
       }
     }
 
     // 5. Sync Rooms
-    const rooms = db.data.rooms || [];
-    if (rooms.length > 0) {
-      const batch = rooms.map((r) => ({
+    const rawRooms = (db.data.rooms || []).filter((r) => !db.isPendingDeletion('rooms', r.id));
+    if (rawRooms.length > 0) {
+      const batch = rawRooms.map((r) => ({
         id: r.id,
         name: r.name,
         tier: r.tier || 'deluxe',
@@ -632,15 +750,17 @@ class SupabaseCloudSync {
         headers,
         body: JSON.stringify(batch),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        for (const r of rawRooms) r.cloudSynced = true;
+      } else {
         console.warn('[CloudSync] Rooms sync warning:', res.statusText);
       }
     }
 
     // 6. Sync Tables & Outlets Configuration
-    const tablesConfig = db.data.tablesConfig || [];
-    if (tablesConfig.length > 0) {
-      const batch = tablesConfig.map((t) => ({
+    const rawTables = (db.data.tablesConfig || []).filter((t) => !db.isPendingDeletion('tables_config', t.id));
+    if (rawTables.length > 0) {
+      const batch = rawTables.map((t) => ({
         id: t.id,
         name: t.name,
         section: t.section || 'dining',
@@ -655,15 +775,17 @@ class SupabaseCloudSync {
         headers,
         body: JSON.stringify(batch),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        for (const t of rawTables) t.cloudSynced = true;
+      } else {
         console.warn('[CloudSync] Tables config sync warning:', res.statusText);
       }
     }
 
     // 7. Sync Banquet & Event Bookings
-    const banquetBookings = db.data.banquetBookings || [];
-    if (banquetBookings.length > 0) {
-      const batch = banquetBookings.map((b) => ({
+    const rawBookings = (db.data.banquetBookings || []).filter((b) => !db.isPendingDeletion('banquet_bookings', b.id));
+    if (rawBookings.length > 0) {
+      const batch = rawBookings.map((b) => ({
         id: b.id,
         event_date: b.eventDate,
         slot: b.slot,
@@ -689,10 +811,14 @@ class SupabaseCloudSync {
         headers,
         body: JSON.stringify(batch),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        for (const b of rawBookings) b.cloudSynced = true;
+      } else {
         console.warn('[CloudSync] Banquet bookings sync warning:', res.statusText);
       }
     }
+
+    db.persist();
 
     return {
       syncedBills: syncedBillsCount,

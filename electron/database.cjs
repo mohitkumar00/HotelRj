@@ -30,6 +30,7 @@ class HotelDatabase {
       menuCategories: JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES)),
       rooms: JSON.parse(JSON.stringify(DEFAULT_ROOMS)),
       tablesConfig: JSON.parse(JSON.stringify(DEFAULT_TABLES_CONFIG)),
+      pendingDeletions: [],
     };
     this.ensureDirectory();
     this.load();
@@ -66,6 +67,7 @@ class HotelDatabase {
             tablesConfig: Array.isArray(parsed.tablesConfig)
               ? parsed.tablesConfig 
               : JSON.parse(JSON.stringify(DEFAULT_TABLES_CONFIG)),
+            pendingDeletions: Array.isArray(parsed.pendingDeletions) ? parsed.pendingDeletions : [],
           };
 
           // Backfill department for legacy records
@@ -120,6 +122,52 @@ class HotelDatabase {
     } catch (err) {
       console.error('[Database] Failed to persist database:', err);
     }
+  }
+
+  // -------------------------------------------------------------
+  // Pending Deletions Management (Offline Resilience & Anti-Resurrection)
+  // -------------------------------------------------------------
+  recordPendingDeletion(table, id) {
+    if (!table || !id) return;
+    if (!this.data.pendingDeletions) this.data.pendingDeletions = [];
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const targetNorm = norm(id);
+    const existing = this.data.pendingDeletions.find(
+      (p) => p.table === table && norm(p.id) === targetNorm
+    );
+    if (!existing) {
+      this.data.pendingDeletions.push({
+        table,
+        id,
+        timestamp: Date.now(),
+      });
+      this.persist();
+    }
+  }
+
+  getPendingDeletions(table = null) {
+    const list = this.data.pendingDeletions || [];
+    if (!table) return list;
+    return list.filter((p) => p.table === table);
+  }
+
+  removePendingDeletion(table, id) {
+    if (!this.data.pendingDeletions || !id) return;
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const targetNorm = norm(id);
+    this.data.pendingDeletions = this.data.pendingDeletions.filter(
+      (p) => !(p.table === table && norm(p.id) === targetNorm)
+    );
+    this.persist();
+  }
+
+  isPendingDeletion(table, id) {
+    if (!this.data.pendingDeletions || !id) return false;
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const targetNorm = norm(id);
+    return this.data.pendingDeletions.some(
+      (p) => p.table === table && norm(p.id) === targetNorm
+    );
   }
 
   // Helper: auto-detect department
@@ -275,6 +323,7 @@ class HotelDatabase {
 
     const record = {
       id: expense.id || `EXP-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      title: expense.title || expense.category || 'General Expense',
       category: expense.category || 'General',
       amount: Number(expense.amount) || 0,
       paidBy: expense.paidBy || 'Cash Drawer',
@@ -282,15 +331,27 @@ class HotelDatabase {
       recordedBy: expense.recordedBy || 'Cashier',
       timestamp,
       dateStr,
+      cloudSynced: false,
+      updatedAt: Date.now(),
     };
 
-    this.data.expenses.unshift(record);
+    if (!this.data.expenses) this.data.expenses = [];
+    const existingIdx = this.data.expenses.findIndex((e) => e.id === record.id);
+    if (existingIdx >= 0) {
+      this.data.expenses[existingIdx] = { ...this.data.expenses[existingIdx], ...record };
+    } else {
+      this.data.expenses.unshift(record);
+    }
+
+    this.removePendingDeletion('expenses', record.id);
     this.persist();
     return record;
   }
 
   deleteExpense(expenseId) {
-    this.data.expenses = this.data.expenses.filter((e) => e.id !== expenseId);
+    if (!expenseId) return false;
+    this.data.expenses = (this.data.expenses || []).filter((e) => e.id !== expenseId);
+    this.recordPendingDeletion('expenses', expenseId);
     this.persist();
     return true;
   }
@@ -573,37 +634,53 @@ class HotelDatabase {
 
     const itemMap = new Map();
     const cloudIds = new Set();
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+
     for (const row of cloudItems) {
-      itemMap.set(row.id, row);
-      cloudIds.add(row.id);
+      if (this.isPendingDeletion('menu_items', row.id)) continue;
+      const normId = norm(row.id);
+      itemMap.set(normId, row);
+      cloudIds.add(normId);
     }
 
     for (const cat of this.data.menuCategories) {
       if (Array.isArray(cat.items)) {
-        // Prune any dishes that have been deleted from Supabase Cloud
-        cat.items = cat.items.filter((localItem) => cloudIds.has(localItem.id));
+        // Prune any dishes that have been deleted from Supabase Cloud on another laptop,
+        // but preserve dishes newly created locally that haven't been pushed yet.
+        cat.items = cat.items.filter((localItem) => {
+          const lNorm = norm(localItem.id);
+          if (this.isPendingDeletion('menu_items', localItem.id)) return false;
+          if (cloudIds.has(lNorm)) return true;
+          // If it was already cloudSynced, it was deleted in cloud on another machine
+          if (localItem.cloudSynced === true) return false;
+          // Preserve local un-synced dish
+          return true;
+        });
 
         for (let i = 0; i < cat.items.length; i++) {
           const localItem = cat.items[i];
-          const cloudItem = itemMap.get(localItem.id);
+          const cloudItem = itemMap.get(norm(localItem.id));
           if (cloudItem) {
             cat.items[i] = {
               ...localItem,
+              id: cloudItem.id,
               name: cloudItem.name || localItem.name,
+              hindiName: cloudItem.hindi_name !== undefined ? cloudItem.hindi_name : localItem.hindiName,
               price: Number(cloudItem.price) || localItem.price,
               isAvailable: cloudItem.is_available !== false,
               dietary: cloudItem.dietary || localItem.dietary,
               popular: cloudItem.popular !== undefined ? !!cloudItem.popular : localItem.popular,
-              description: cloudItem.description || localItem.description,
+              description: cloudItem.description !== undefined ? cloudItem.description : localItem.description,
               image: cloudItem.image || localItem.image,
+              cloudSynced: true,
             };
-            itemMap.delete(localItem.id);
+            itemMap.delete(norm(localItem.id));
           }
         }
       }
     }
 
-    for (const [id, row] of itemMap.entries()) {
+    for (const [normId, row] of itemMap.entries()) {
       const catId = row.category_id || 'chef_specials';
       let targetCat = this.data.menuCategories.find((c) => c.id === catId) || this.data.menuCategories[0];
       if (targetCat) {
@@ -619,9 +696,12 @@ class HotelDatabase {
           isAvailable: row.is_available !== false,
           popular: !!row.popular,
           description: row.description || '',
+          cloudSynced: true,
         });
       }
     }
+
+    this.persist();
   }
 
   toggleDishAvailability(dishId, isAvailable) {
@@ -647,6 +727,7 @@ class HotelDatabase {
     const newStatus = isAvailable !== undefined ? !!isAvailable : !targetDish.isAvailable;
     targetDish.isAvailable = newStatus;
     targetDish.updatedAt = Date.now();
+    targetDish.cloudSynced = false;
 
     // Anti-theft audit log
     this.saveAuditLog({
@@ -663,82 +744,103 @@ class HotelDatabase {
     return { success: true, dish: targetDish, categoryId: targetCategory?.id };
   }
 
-  saveDish(dishData) {
+  saveDish(dishData, originalId = null) {
     if (!dishData || !dishData.name) {
       return { success: false, error: 'Missing dish name or details' };
     }
 
-    const catId = dishData.categoryId || dishData.category || 'chef_specials';
-    let targetCat = (this.data.menuCategories || []).find((c) => c.id === catId);
-
-    if (!targetCat) {
-      if (!this.data.menuCategories || this.data.menuCategories.length === 0) {
-        this.data.menuCategories = JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES));
-      }
-      targetCat = this.data.menuCategories.find((c) => c.id === catId) || this.data.menuCategories[0];
+    if (!this.data.menuCategories || this.data.menuCategories.length === 0) {
+      this.data.menuCategories = JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES));
     }
 
+    const catId = dishData.categoryId || dishData.category || 'chef_specials';
+    let targetCat = this.data.menuCategories.find((c) => c.id === catId);
+    if (!targetCat) {
+      targetCat = this.data.menuCategories[0];
+    }
     if (!targetCat.items) targetCat.items = [];
 
-    const existingIndex = targetCat.items.findIndex((i) => i.id === dishData.id);
-    let savedDish;
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const targetIdNorm = dishData.id ? norm(dishData.id) : null;
+    const origIdNorm = originalId ? norm(originalId) : null;
 
-    if (existingIndex >= 0) {
-      savedDish = {
-        ...targetCat.items[existingIndex],
-        ...dishData,
-        updatedAt: Date.now(),
-      };
-      targetCat.items[existingIndex] = savedDish;
-      this.saveAuditLog({
-        type: 'ITEM_VOID',
-        tableId: 'Menu-Config',
-        staffName: 'Manager',
-        itemName: savedDish.name,
-        itemPrice: Number(savedDish.price) || 0,
-        quantity: 1,
-        reason: `Updated dish price/details: ₹${savedDish.price}`,
-      });
-    } else {
-      const newId = dishData.id || `dish-${Date.now()}`;
-      savedDish = {
-        id: newId,
-        name: dishData.name,
-        hindiName: dishData.hindiName || '',
-        price: Number(dishData.price) || 0,
-        dietary: dishData.dietary || 'veg',
-        category: targetCat.id,
-        popular: !!dishData.popular,
-        isAvailable: dishData.isAvailable !== undefined ? !!dishData.isAvailable : true,
-        description: dishData.description || '',
-        updatedAt: Date.now(),
-      };
-      targetCat.items.push(savedDish);
-      this.saveAuditLog({
-        type: 'ITEM_VOID',
-        tableId: 'Menu-Config',
-        staffName: 'Manager',
-        itemName: savedDish.name,
-        itemPrice: Number(savedDish.price) || 0,
-        quantity: 1,
-        reason: `Added new dish to menu: ${savedDish.name} (₹${savedDish.price})`,
-      });
+    // Search across ALL categories: if dish already exists (even in another category), remove it to prevent duplicates
+    let oldDishRecord = null;
+    let removedFromCatId = null;
+
+    for (const cat of this.data.menuCategories) {
+      if (Array.isArray(cat.items)) {
+        for (let i = 0; i < cat.items.length; i++) {
+          const item = cat.items[i];
+          const itemNorm = norm(item.id);
+          const isMatch = (origIdNorm && itemNorm === origIdNorm) || (targetIdNorm && itemNorm === targetIdNorm);
+          if (isMatch) {
+            oldDishRecord = item;
+            removedFromCatId = cat.id;
+            cat.items.splice(i, 1);
+            break;
+          }
+        }
+      }
     }
 
+    const newId = dishData.id || (oldDishRecord && oldDishRecord.id) || `dish-${Date.now()}`;
+    const savedDish = {
+      ...(oldDishRecord || {}),
+      ...dishData,
+      id: newId,
+      name: dishData.name.trim(),
+      hindiName: dishData.hindiName || (oldDishRecord && oldDishRecord.hindiName) || '',
+      price: Number(dishData.price) >= 0 ? Number(dishData.price) : (oldDishRecord ? Number(oldDishRecord.price) : 0),
+      dietary: dishData.dietary || (oldDishRecord && oldDishRecord.dietary) || 'veg',
+      category: targetCat.id,
+      popular: dishData.popular !== undefined ? !!dishData.popular : (oldDishRecord ? !!oldDishRecord.popular : false),
+      isAvailable: dishData.isAvailable !== undefined ? !!dishData.isAvailable : (oldDishRecord ? oldDishRecord.isAvailable !== false : true),
+      description: dishData.description !== undefined ? dishData.description : (oldDishRecord ? oldDishRecord.description || '' : ''),
+      updatedAt: Date.now(),
+      cloudSynced: false,
+    };
+
+    targetCat.items.push(savedDish);
+
+    this.removePendingDeletion('menu_items', savedDish.id);
+    if (originalId) {
+      this.removePendingDeletion('menu_items', originalId);
+    }
+
+    this.saveAuditLog({
+      type: 'ITEM_VOID',
+      tableId: 'Menu-Config',
+      staffName: 'Manager',
+      itemName: savedDish.name,
+      itemPrice: Number(savedDish.price) || 0,
+      quantity: 1,
+      reason: oldDishRecord ? `Updated dish: ${savedDish.name} (₹${savedDish.price})` : `Added new dish: ${savedDish.name} (₹${savedDish.price})`,
+    });
+
     this.persist();
-    return { success: true, dish: savedDish };
+    return {
+      success: true,
+      dish: savedDish,
+      renamedFrom: originalId && norm(originalId) !== norm(savedDish.id) ? originalId : null,
+      movedFromCategory: removedFromCatId && removedFromCatId !== targetCat.id ? removedFromCatId : null,
+    };
   }
 
   deleteDish(dishId) {
     if (!dishId) return { success: false, error: 'Missing dishId' };
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const targetNorm = norm(dishId);
     let deleted = false;
     let deletedName = '';
+    let deletedId = dishId;
 
     for (const cat of (this.data.menuCategories || [])) {
       if (Array.isArray(cat.items)) {
-        const idx = cat.items.findIndex((i) => i.id === dishId);
+        const idx = cat.items.findIndex((i) => norm(i.id) === targetNorm);
         if (idx >= 0) {
           deletedName = cat.items[idx].name;
+          deletedId = cat.items[idx].id;
           cat.items.splice(idx, 1);
           deleted = true;
           break;
@@ -747,6 +849,7 @@ class HotelDatabase {
     }
 
     if (deleted) {
+      this.recordPendingDeletion('menu_items', deletedId);
       this.saveAuditLog({
         type: 'ITEM_VOID',
         tableId: 'Menu-Config',
@@ -754,10 +857,10 @@ class HotelDatabase {
         itemName: deletedName,
         itemPrice: 0,
         quantity: 1,
-        reason: `Dish deleted from menu database (${dishId})`,
+        reason: `Dish deleted from menu database (${deletedId})`,
       });
       this.persist();
-      return { success: true };
+      return { success: true, deletedId };
     }
     return { success: false, error: 'Dish not found' };
   }
@@ -817,6 +920,7 @@ class HotelDatabase {
         oldRoomRecord = this.data.rooms[oldIdx];
         this.data.rooms.splice(oldIdx, 1);
         removedOld = true;
+        this.recordPendingDeletion('rooms', oldRoomRecord.id);
       }
     }
 
@@ -829,6 +933,7 @@ class HotelDatabase {
         id: roomData.id.trim(),
         name: roomData.name || roomData.id.trim(),
         updatedAt: Date.now(),
+        cloudSynced: false,
       };
       this.data.rooms[existingIdx] = savedRoom;
     } else {
@@ -843,10 +948,12 @@ class HotelDatabase {
         maxGuests: Number(roomData.maxGuests) || (oldRoomRecord && oldRoomRecord.maxGuests) || 2,
         bedType: roomData.bedType || (oldRoomRecord && oldRoomRecord.bedType) || '1 King Bed',
         updatedAt: Date.now(),
+        cloudSynced: false,
       };
       this.data.rooms.push(savedRoom);
     }
 
+    this.removePendingDeletion('rooms', savedRoom.id);
     this.persist();
     return { success: true, room: savedRoom, renamedFrom: removedOld ? (oldRoomRecord?.id || originalId) : null };
   }
@@ -859,6 +966,7 @@ class HotelDatabase {
     if (idx >= 0) {
       const deletedRoom = this.data.rooms[idx];
       this.data.rooms.splice(idx, 1);
+      this.recordPendingDeletion('rooms', deletedRoom.id);
       this.persist();
       return { success: true, deletedId: deletedRoom.id };
     }
@@ -888,6 +996,7 @@ class HotelDatabase {
         oldTableRecord = this.data.tablesConfig[oldIdx];
         this.data.tablesConfig.splice(oldIdx, 1);
         removedOld = true;
+        this.recordPendingDeletion('tables_config', oldTableRecord.id);
       }
     }
 
@@ -900,6 +1009,7 @@ class HotelDatabase {
         id: tableData.id.trim(),
         name: tableData.name || tableData.id.trim(),
         updatedAt: Date.now(),
+        cloudSynced: false,
       };
       this.data.tablesConfig[existingIdx] = savedTable;
     } else {
@@ -913,10 +1023,12 @@ class HotelDatabase {
         isActive: tableData.isActive !== undefined ? !!tableData.isActive : true,
         sortOrder: Number(tableData.sortOrder) || (this.data.tablesConfig.length + 1),
         updatedAt: Date.now(),
+        cloudSynced: false,
       };
       this.data.tablesConfig.push(savedTable);
     }
 
+    this.removePendingDeletion('tables_config', savedTable.id);
     this.persist();
     return { success: true, table: savedTable, renamedFrom: removedOld ? (oldTableRecord?.id || originalId) : null };
   }
@@ -929,6 +1041,7 @@ class HotelDatabase {
     if (idx >= 0) {
       const deletedTable = this.data.tablesConfig[idx];
       this.data.tablesConfig.splice(idx, 1);
+      this.recordPendingDeletion('tables_config', deletedTable.id);
       this.persist();
       return { success: true, deletedId: deletedTable.id };
     }
@@ -944,23 +1057,39 @@ class HotelDatabase {
 
   saveBanquetBooking(booking) {
     if (!booking || !booking.id) return { success: false, error: 'Invalid booking data' };
-    const list = this.data.banquetBookings || [];
+    if (!this.data.banquetBookings) this.data.banquetBookings = [];
+    const list = this.data.banquetBookings;
     const idx = list.findIndex((b) => b.id === booking.id);
+    let saved;
     if (idx >= 0) {
-      list[idx] = { ...list[idx], ...booking, updatedAt: new Date().toISOString() };
+      saved = {
+        ...list[idx],
+        ...booking,
+        updatedAt: new Date().toISOString(),
+        cloudSynced: false,
+      };
+      list[idx] = saved;
     } else {
-      list.push({ ...booking, createdAt: booking.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() });
+      saved = {
+        ...booking,
+        createdAt: booking.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        cloudSynced: false,
+      };
+      list.push(saved);
     }
+    this.removePendingDeletion('banquet_bookings', saved.id);
     this.data.banquetBookings = list;
     this.persist();
-    return { success: true, booking };
+    return { success: true, booking: saved };
   }
 
   deleteBanquetBooking(id) {
     if (!id) return { success: false, error: 'Booking ID required' };
     this.data.banquetBookings = (this.data.banquetBookings || []).filter((b) => b.id !== id);
+    this.recordPendingDeletion('banquet_bookings', id);
     this.persist();
-    return { success: true };
+    return { success: true, deletedId: id };
   }
 
   // -------------------------------------------------------------
