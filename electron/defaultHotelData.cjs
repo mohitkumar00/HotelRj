@@ -438,7 +438,7 @@ module.exports = {
   DEFAULT_MENU_CATEGORIES: MENU_CATEGORIES,
   DEFAULT_ROOMS: [
   {
-    "id": "room-101",
+    "id": "Room 101",
     "name": "Room 101 (Deluxe King)",
     "tier": "deluxe",
     "pricePerNight": 1600,
@@ -447,7 +447,7 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "room-102",
+    "id": "Room 102",
     "name": "Room 102 (Deluxe King)",
     "tier": "deluxe",
     "pricePerNight": 1600,
@@ -456,7 +456,7 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "room-103",
+    "id": "Room 103",
     "name": "Room 103 (Deluxe King)",
     "tier": "deluxe",
     "pricePerNight": 1600,
@@ -465,7 +465,7 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "room-201",
+    "id": "Room 201",
     "name": "Room 201 (Super Deluxe)",
     "tier": "executive",
     "pricePerNight": 2200,
@@ -474,7 +474,7 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "room-202",
+    "id": "Room 202",
     "name": "Room 202 (Super Deluxe)",
     "tier": "executive",
     "pricePerNight": 2200,
@@ -483,7 +483,7 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "room-203",
+    "id": "Room 203",
     "name": "Room 203 (Super Deluxe)",
     "tier": "executive",
     "pricePerNight": 2200,
@@ -492,7 +492,7 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "room-204",
+    "id": "Room 204",
     "name": "Room 204 (Super Deluxe)",
     "tier": "executive",
     "pricePerNight": 2200,
@@ -501,7 +501,7 @@ module.exports = {
     "bedType": "1 King Bed"
   },
   {
-    "id": "room-301",
+    "id": "Room 301",
     "name": "Room 301 (Family Suite)",
     "tier": "family",
     "pricePerNight": 3000,
@@ -510,7 +510,7 @@ module.exports = {
     "bedType": "2 Double Beds"
   },
   {
-    "id": "room-302",
+    "id": "Room 302",
     "name": "Room 302 (Family Suite)",
     "tier": "family",
     "pricePerNight": 3000,
@@ -519,7 +519,7 @@ module.exports = {
     "bedType": "2 Double Beds"
   },
   {
-    "id": "room-305",
+    "id": "Room 305",
     "name": "Room 305 (Family Suite)",
     "tier": "family",
     "pricePerNight": 3000,

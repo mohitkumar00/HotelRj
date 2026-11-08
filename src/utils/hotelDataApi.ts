@@ -492,7 +492,7 @@ export async function updateRoomStatusApi(
   return { success: false };
 }
 
-export async function saveRoomApi(roomData: Partial<HotelRoomRecord>): Promise<{ success: boolean; room?: HotelRoomRecord }> {
+export async function saveRoomApi(roomData: Partial<HotelRoomRecord> & { originalId?: string }): Promise<{ success: boolean; room?: HotelRoomRecord }> {
   // 1. Electron IPC
   if (typeof window !== 'undefined' && window.ElectronAPI && window.ElectronAPI.saveRoom) {
     try {
@@ -523,6 +523,13 @@ export async function saveRoomApi(roomData: Partial<HotelRoomRecord>): Promise<{
   // 3. Supabase Cloud API Fallback
   try {
     const id = roomData.id || `Room ${Date.now()}`;
+    // If room was renamed, delete the old ID in Supabase
+    if (roomData.originalId && roomData.originalId !== id) {
+      fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/rooms?id=eq.${encodeURIComponent(roomData.originalId)}`, {
+        method: 'DELETE',
+        headers: await getSupabaseHeaders(),
+      }).catch(() => {});
+    }
     const row = {
       id,
       name: roomData.name || id,
@@ -684,7 +691,7 @@ export async function fetchTablesConfigApi(): Promise<TableConfigItem[]> {
   return DEFAULT_TABLES;
 }
 
-export async function saveTableConfigApi(tableData: Partial<TableConfigItem>): Promise<{ success: boolean; table?: TableConfigItem }> {
+export async function saveTableConfigApi(tableData: Partial<TableConfigItem> & { originalId?: string }): Promise<{ success: boolean; table?: TableConfigItem }> {
   // 1. Electron IPC
   if (typeof window !== 'undefined' && window.ElectronAPI && window.ElectronAPI.saveTableConfig) {
     try {
@@ -715,6 +722,13 @@ export async function saveTableConfigApi(tableData: Partial<TableConfigItem>): P
   // 3. Supabase Cloud API Fallback
   try {
     const id = tableData.id || `T-${Date.now()}`;
+    // If table was renamed, delete the old ID in Supabase
+    if (tableData.originalId && tableData.originalId !== id) {
+      fetch(`${DEFAULT_SUPABASE_URL}/rest/v1/tables_config?id=eq.${encodeURIComponent(tableData.originalId)}`, {
+        method: 'DELETE',
+        headers: await getSupabaseHeaders(),
+      }).catch(() => {});
+    }
     const row = {
       id,
       name: tableData.name || id,

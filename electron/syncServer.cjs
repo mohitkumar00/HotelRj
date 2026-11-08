@@ -719,12 +719,16 @@ class LocalSyncServer {
       if (req.method === 'POST' && url.pathname === '/api/rooms') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
-            const result = db.saveRoom(data.room || data);
+            const roomData = data.room || data;
+            const result = db.saveRoom(roomData, roomData.originalId);
             if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+              if (result.renamedFrom) {
+                await cloudSync.deleteFromCloud('rooms', 'id', result.renamedFrom).catch(() => {});
+              }
+              cloudSync.pushToCloud().catch(() => {});
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -740,13 +744,17 @@ class LocalSyncServer {
       if ((req.method === 'DELETE' || req.method === 'POST') && (url.pathname === '/api/rooms/delete')) {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
             const roomId = data.roomId || data.id || url.searchParams.get('id');
             const result = db.deleteRoom(roomId);
             if (result.success && cloudSync.isConfigured()) {
-              cloudSync.deleteFromCloud('rooms', 'id', roomId).catch((e) => logger.warn('SyncServer', 'Error deleting room from cloud: ' + e.message));
+              const targetId = result.deletedId || roomId;
+              await cloudSync.deleteFromCloud('rooms', 'id', targetId).catch((e) => logger.warn('SyncServer', 'Error deleting room from cloud: ' + e.message));
+              if (targetId !== roomId) {
+                await cloudSync.deleteFromCloud('rooms', 'id', roomId).catch(() => {});
+              }
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -769,12 +777,16 @@ class LocalSyncServer {
       if (req.method === 'POST' && url.pathname === '/api/tables-config') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
-            const result = db.saveTableConfig(data.table || data);
-            if (result.success && cloudSync.isConfigured()) {
-              setTimeout(() => cloudSync.syncAll(), 150);
+            const tableData = data.table || data;
+            const result = db.saveTableConfig(tableData, tableData.originalId);
+            if (result.success && cloudSync && cloudSync.isConfigured()) {
+              if (result.renamedFrom) {
+                await cloudSync.deleteFromCloud('tables_config', 'id', result.renamedFrom).catch(() => {});
+              }
+              cloudSync.pushToCloud().catch(() => {});
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));
@@ -790,13 +802,17 @@ class LocalSyncServer {
       if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/tables-config/delete') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const data = JSON.parse(body || '{}');
             const tableId = data.tableId || data.id || url.searchParams.get('id');
             const result = db.deleteTableConfig(tableId);
             if (result.success && cloudSync.isConfigured()) {
-              cloudSync.deleteFromCloud('tables_config', 'id', tableId).catch((e) => logger.warn('SyncServer', 'Error deleting table config from cloud: ' + e.message));
+              const targetId = result.deletedId || tableId;
+              await cloudSync.deleteFromCloud('tables_config', 'id', targetId).catch((e) => logger.warn('SyncServer', 'Error deleting table config from cloud: ' + e.message));
+              if (targetId !== tableId) {
+                await cloudSync.deleteFromCloud('tables_config', 'id', tableId).catch(() => {});
+              }
             }
             res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(result));

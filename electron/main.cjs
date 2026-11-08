@@ -399,9 +399,17 @@ ipcMain.handle('update-room-status', async (event, { roomId, status, guestDetail
 });
 
 ipcMain.handle('save-room', async (event, roomData) => {
-  const result = db.saveRoom(roomData);
+  const originalId = roomData?.originalId;
+  const result = db.saveRoom(roomData, originalId);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    setTimeout(() => cloudSync.syncAll(), 100);
+    try {
+      if (result.renamedFrom) {
+        await cloudSync.deleteFromCloud('rooms', 'id', result.renamedFrom);
+      }
+      await cloudSync.pushToCloud();
+    } catch (e) {
+      logger.warn('CloudSync', 'Error syncing saved room: ' + e.message);
+    }
   }
   return result;
 });
@@ -409,7 +417,19 @@ ipcMain.handle('save-room', async (event, roomData) => {
 ipcMain.handle('delete-room', async (event, roomId) => {
   const result = db.deleteRoom(roomId);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    cloudSync.deleteFromCloud('rooms', 'id', roomId).catch((e) => logger.warn('CloudSync', 'Error deleting room from cloud: ' + e.message));
+    try {
+      const targetId = result.deletedId || roomId;
+      await cloudSync.deleteFromCloud('rooms', 'id', targetId);
+      if (targetId !== roomId) {
+        await cloudSync.deleteFromCloud('rooms', 'id', roomId);
+      }
+      const alt = targetId.toLowerCase().replace(/\s+/g, '-');
+      if (alt !== targetId.toLowerCase()) {
+        await cloudSync.deleteFromCloud('rooms', 'id', alt);
+      }
+    } catch (e) {
+      logger.warn('CloudSync', 'Error deleting room from cloud: ' + e.message);
+    }
   }
   return result;
 });
@@ -419,9 +439,17 @@ ipcMain.handle('get-tables-config', async () => {
 });
 
 ipcMain.handle('save-table-config', async (event, tableData) => {
-  const result = db.saveTableConfig(tableData);
+  const originalId = tableData?.originalId;
+  const result = db.saveTableConfig(tableData, originalId);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    setTimeout(() => cloudSync.syncAll(), 100);
+    try {
+      if (result.renamedFrom) {
+        await cloudSync.deleteFromCloud('tables_config', 'id', result.renamedFrom);
+      }
+      await cloudSync.pushToCloud();
+    } catch (e) {
+      logger.warn('CloudSync', 'Error syncing saved table: ' + e.message);
+    }
   }
   return result;
 });
@@ -429,7 +457,15 @@ ipcMain.handle('save-table-config', async (event, tableData) => {
 ipcMain.handle('delete-table-config', async (event, tableId) => {
   const result = db.deleteTableConfig(tableId);
   if (result.success && cloudSync && cloudSync.isConfigured()) {
-    cloudSync.deleteFromCloud('tables_config', 'id', tableId).catch((e) => logger.warn('CloudSync', 'Error deleting table config from cloud: ' + e.message));
+    try {
+      const targetId = result.deletedId || tableId;
+      await cloudSync.deleteFromCloud('tables_config', 'id', targetId);
+      if (targetId !== tableId) {
+        await cloudSync.deleteFromCloud('tables_config', 'id', tableId);
+      }
+    } catch (e) {
+      logger.warn('CloudSync', 'Error deleting table config from cloud: ' + e.message);
+    }
   }
   return result;
 });

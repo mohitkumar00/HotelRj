@@ -3,9 +3,9 @@ import { X } from 'lucide-react';
 import { HotelRoomRecord } from '../../types';
 
 export interface EditRoomModalProps {
-  setEditingRoom: React.Dispatch<React.SetStateAction<HotelRoomRecord | null>>;
+  setEditingRoom: React.Dispatch<React.SetStateAction<(HotelRoomRecord & { originalId?: string }) | null>>;
   handleSaveRoom: (e: React.FormEvent) => Promise<void>;
-  editingRoom: HotelRoomRecord;
+  editingRoom: HotelRoomRecord & { originalId?: string };
 }
 
 export const EditRoomModal: React.FC<EditRoomModalProps> = ({

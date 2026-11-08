@@ -315,16 +315,29 @@ class SupabaseCloudSync {
         const res = await fetch(`${url}/rest/v1/tables_config?select=*&order=sort_order`, { headers });
         if (res.ok) {
           const rows = await res.json();
-          if (Array.isArray(rows) && rows.length > 0) {
-            db.data.tablesConfig = rows.map((r) => ({
-              id: r.id,
-              name: r.name,
-              section: r.section || 'dining',
-              capacity: Number(r.capacity) || 4,
-              isActive: r.is_active !== false,
-              sortOrder: Number(r.sort_order) || 1,
-            }));
-            logger.warn('CloudSync', `Pulled ${rows.length} tables from Supabase Cloud`);
+          if (Array.isArray(rows)) {
+            const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+            const cloudMap = new Map();
+            for (const r of rows) {
+              const normId = norm(r.id);
+              cloudMap.set(normId, {
+                id: r.id,
+                name: r.name,
+                section: r.section || 'dining',
+                capacity: Number(r.capacity) || 4,
+                isActive: r.is_active !== false,
+                sortOrder: Number(r.sort_order) || 1,
+              });
+            }
+            // Preserve newly created local tables not yet synced
+            const mergedTables = Array.from(cloudMap.values());
+            for (const lt of (db.data.tablesConfig || [])) {
+              if (!cloudMap.has(norm(lt.id))) {
+                mergedTables.push(lt);
+              }
+            }
+            db.data.tablesConfig = mergedTables;
+            logger.warn('CloudSync', `Pulled & merged ${rows.length} tables from Supabase Cloud`);
           }
         }
       } catch (tErr) {
@@ -336,22 +349,35 @@ class SupabaseCloudSync {
         const res = await fetch(`${url}/rest/v1/rooms?select=*`, { headers });
         if (res.ok) {
           const rows = await res.json();
-          if (Array.isArray(rows) && rows.length > 0) {
-            db.data.rooms = rows.map((r) => ({
-              id: r.id,
-              name: r.name,
-              tier: r.tier || 'deluxe',
-              pricePerNight: Number(r.price_per_night) || 1600,
-              status: r.status || 'available',
-              maxGuests: Number(r.max_guests) || 2,
-              bedType: r.bed_type || '1 King Bed',
-              guestName: r.guest_name || undefined,
-              checkInDate: r.check_in_date || undefined,
-              checkOutDate: r.check_out_date || undefined,
-              folioAmount: Number(r.folio_amount) || 0,
-              notes: r.notes || undefined,
-            }));
-            logger.warn('CloudSync', `Pulled ${rows.length} rooms from Supabase Cloud`);
+          if (Array.isArray(rows)) {
+            const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+            const cloudMap = new Map();
+            for (const r of rows) {
+              const normId = norm(r.id);
+              cloudMap.set(normId, {
+                id: r.id,
+                name: r.name,
+                tier: r.tier || 'deluxe',
+                pricePerNight: Number(r.price_per_night) || 1600,
+                status: r.status || 'available',
+                maxGuests: Number(r.max_guests) || 2,
+                bedType: r.bed_type || '1 King Bed',
+                guestName: r.guest_name || undefined,
+                checkInDate: r.check_in_date || undefined,
+                checkOutDate: r.check_out_date || undefined,
+                folioAmount: Number(r.folio_amount) || 0,
+                notes: r.notes || undefined,
+              });
+            }
+            // Preserve newly created local rooms not yet synced
+            const mergedRooms = Array.from(cloudMap.values());
+            for (const lr of (db.data.rooms || [])) {
+              if (!cloudMap.has(norm(lr.id))) {
+                mergedRooms.push(lr);
+              }
+            }
+            db.data.rooms = mergedRooms;
+            logger.warn('CloudSync', `Pulled & merged ${rows.length} rooms from Supabase Cloud`);
           }
         }
       } catch (rErr) {
@@ -690,11 +716,11 @@ class SupabaseCloudSync {
     this.config.lastSyncError = null;
 
     try {
-      // Step 1: Pull latest data from Supabase Cloud
-      await this.pullFromCloud();
-
-      // Step 2: Push local data to Supabase Cloud
+      // Step 1: Push local data to Supabase Cloud FIRST
       const pushResult = await this.pushToCloud();
+
+      // Step 2: Pull latest data from Supabase Cloud
+      await this.pullFromCloud();
 
       this.config.lastSyncTime = new Date().toISOString();
       this.config.lastSyncStatus = 'success';

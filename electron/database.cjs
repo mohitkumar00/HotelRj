@@ -60,10 +60,10 @@ class HotelDatabase {
             menuCategories: Array.isArray(parsed.menuCategories) && parsed.menuCategories.length > 0 
               ? parsed.menuCategories 
               : JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES)),
-            rooms: Array.isArray(parsed.rooms) && parsed.rooms.length > 0 
+            rooms: Array.isArray(parsed.rooms)
               ? parsed.rooms 
               : JSON.parse(JSON.stringify(DEFAULT_ROOMS)),
-            tablesConfig: Array.isArray(parsed.tablesConfig) && parsed.tablesConfig.length > 0 
+            tablesConfig: Array.isArray(parsed.tablesConfig)
               ? parsed.tablesConfig 
               : JSON.parse(JSON.stringify(DEFAULT_TABLES_CONFIG)),
           };
@@ -76,6 +76,16 @@ class HotelDatabase {
               modified = true;
             }
           }
+
+          // Normalize legacy room IDs (e.g. 'room-101' -> 'Room 101')
+          for (const r of (this.data.rooms || [])) {
+            if (/^room-\d+/i.test(r.id)) {
+              const num = r.id.replace(/room-/i, '');
+              r.id = `Room ${num}`;
+              modified = true;
+            }
+          }
+
           if (modified) {
             this.persist();
           }
@@ -791,44 +801,66 @@ class HotelDatabase {
     return { success: true, room };
   }
 
-  saveRoom(roomData) {
+  saveRoom(roomData, originalId = null) {
     if (!roomData || !roomData.id) return { success: false, error: 'Missing room details' };
     if (!this.data.rooms) this.data.rooms = [];
 
-    const existingIdx = this.data.rooms.findIndex((r) => r.id === roomData.id);
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const newNorm = norm(roomData.id);
+    const origNorm = originalId ? norm(originalId) : null;
+
+    let removedOld = false;
+    let oldRoomRecord = null;
+    if (origNorm && origNorm !== newNorm) {
+      const oldIdx = this.data.rooms.findIndex((r) => norm(r.id) === origNorm);
+      if (oldIdx >= 0) {
+        oldRoomRecord = this.data.rooms[oldIdx];
+        this.data.rooms.splice(oldIdx, 1);
+        removedOld = true;
+      }
+    }
+
+    const existingIdx = this.data.rooms.findIndex((r) => norm(r.id) === newNorm);
     let savedRoom;
     if (existingIdx >= 0) {
       savedRoom = {
         ...this.data.rooms[existingIdx],
         ...roomData,
+        id: roomData.id.trim(),
+        name: roomData.name || roomData.id.trim(),
         updatedAt: Date.now(),
       };
       this.data.rooms[existingIdx] = savedRoom;
     } else {
       savedRoom = {
-        id: roomData.id,
-        name: roomData.name || roomData.id,
-        tier: roomData.tier || 'deluxe',
-        pricePerNight: Number(roomData.pricePerNight) || 1600,
-        status: roomData.status || 'available',
-        maxGuests: Number(roomData.maxGuests) || 2,
-        bedType: roomData.bedType || '1 King Bed',
+        ...(oldRoomRecord || {}),
+        ...roomData,
+        id: roomData.id.trim(),
+        name: roomData.name || roomData.id.trim(),
+        tier: roomData.tier || (oldRoomRecord && oldRoomRecord.tier) || 'deluxe',
+        pricePerNight: Number(roomData.pricePerNight) || (oldRoomRecord && oldRoomRecord.pricePerNight) || 1600,
+        status: roomData.status || (oldRoomRecord && oldRoomRecord.status) || 'available',
+        maxGuests: Number(roomData.maxGuests) || (oldRoomRecord && oldRoomRecord.maxGuests) || 2,
+        bedType: roomData.bedType || (oldRoomRecord && oldRoomRecord.bedType) || '1 King Bed',
         updatedAt: Date.now(),
       };
       this.data.rooms.push(savedRoom);
     }
 
     this.persist();
-    return { success: true, room: savedRoom };
+    return { success: true, room: savedRoom, renamedFrom: removedOld ? (oldRoomRecord?.id || originalId) : null };
   }
 
   deleteRoom(roomId) {
     if (!roomId) return { success: false, error: 'Missing roomId' };
-    const idx = (this.data.rooms || []).findIndex((r) => r.id === roomId);
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const target = norm(roomId);
+    const idx = (this.data.rooms || []).findIndex((r) => norm(r.id) === target);
     if (idx >= 0) {
+      const deletedRoom = this.data.rooms[idx];
       this.data.rooms.splice(idx, 1);
       this.persist();
-      return { success: true };
+      return { success: true, deletedId: deletedRoom.id };
     }
     return { success: false, error: 'Room not found' };
   }
@@ -840,25 +872,44 @@ class HotelDatabase {
     return this.data.tablesConfig || [];
   }
 
-  saveTableConfig(tableData) {
+  saveTableConfig(tableData, originalId = null) {
     if (!tableData || !tableData.id) return { success: false, error: 'Missing table ID' };
     if (!this.data.tablesConfig) this.data.tablesConfig = [];
 
-    const existingIdx = this.data.tablesConfig.findIndex((t) => t.id === tableData.id);
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const newNorm = norm(tableData.id);
+    const origNorm = originalId ? norm(originalId) : null;
+
+    let removedOld = false;
+    let oldTableRecord = null;
+    if (origNorm && origNorm !== newNorm) {
+      const oldIdx = this.data.tablesConfig.findIndex((t) => norm(t.id) === origNorm);
+      if (oldIdx >= 0) {
+        oldTableRecord = this.data.tablesConfig[oldIdx];
+        this.data.tablesConfig.splice(oldIdx, 1);
+        removedOld = true;
+      }
+    }
+
+    const existingIdx = this.data.tablesConfig.findIndex((t) => norm(t.id) === newNorm);
     let savedTable;
     if (existingIdx >= 0) {
       savedTable = {
         ...this.data.tablesConfig[existingIdx],
         ...tableData,
+        id: tableData.id.trim(),
+        name: tableData.name || tableData.id.trim(),
         updatedAt: Date.now(),
       };
       this.data.tablesConfig[existingIdx] = savedTable;
     } else {
       savedTable = {
-        id: tableData.id,
-        name: tableData.name || tableData.id,
-        section: tableData.section || 'dining',
-        capacity: Number(tableData.capacity) || 4,
+        ...(oldTableRecord || {}),
+        ...tableData,
+        id: tableData.id.trim(),
+        name: tableData.name || tableData.id.trim(),
+        section: tableData.section || (oldTableRecord && oldTableRecord.section) || 'dining',
+        capacity: Number(tableData.capacity) || (oldTableRecord && oldTableRecord.capacity) || 4,
         isActive: tableData.isActive !== undefined ? !!tableData.isActive : true,
         sortOrder: Number(tableData.sortOrder) || (this.data.tablesConfig.length + 1),
         updatedAt: Date.now(),
@@ -867,16 +918,19 @@ class HotelDatabase {
     }
 
     this.persist();
-    return { success: true, table: savedTable };
+    return { success: true, table: savedTable, renamedFrom: removedOld ? (oldTableRecord?.id || originalId) : null };
   }
 
   deleteTableConfig(tableId) {
     if (!tableId) return { success: false, error: 'Missing tableId' };
-    const idx = (this.data.tablesConfig || []).findIndex((t) => t.id === tableId);
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-]+/g, '');
+    const target = norm(tableId);
+    const idx = (this.data.tablesConfig || []).findIndex((t) => norm(t.id) === target);
     if (idx >= 0) {
+      const deletedTable = this.data.tablesConfig[idx];
       this.data.tablesConfig.splice(idx, 1);
       this.persist();
-      return { success: true };
+      return { success: true, deletedId: deletedTable.id };
     }
     return { success: false, error: 'Table config not found' };
   }

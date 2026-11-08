@@ -3,9 +3,9 @@ import { X } from 'lucide-react';
 import { TableConfigItem } from '../../types';
 
 export interface EditTableModalProps {
-  setEditingTable: React.Dispatch<React.SetStateAction<Partial<TableConfigItem> | null>>;
+  setEditingTable: React.Dispatch<React.SetStateAction<(Partial<TableConfigItem> & { originalId?: string }) | null>>;
   handleSaveTable: (e: React.FormEvent) => Promise<void>;
-  editingTable: Partial<TableConfigItem>;
+  editingTable: Partial<TableConfigItem> & { originalId?: string };
 }
 
 export const EditTableModal: React.FC<EditTableModalProps> = ({

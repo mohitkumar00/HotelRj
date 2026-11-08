@@ -84,12 +84,12 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   // Rooms state
   const [rooms, setRooms] = useState<HotelRoomRecord[]>([]);
   const [roomFilter, setRoomFilter] = useState<'all' | 'available' | 'occupied' | 'dirty' | 'maintenance'>('all');
-  const [editingRoom, setEditingRoom] = useState<HotelRoomRecord | null>(null);
+  const [editingRoom, setEditingRoom] = useState<(HotelRoomRecord & { originalId?: string }) | null>(null);
 
   // Tables state
   const [tablesConfig, setTablesConfig] = useState<TableConfigItem[]>([]);
   const [tableSectionFilter, setTableSectionFilter] = useState<'all' | 'dining' | 'parcel' | 'lawn' | 'banquet'>('all');
-  const [editingTable, setEditingTable] = useState<Partial<TableConfigItem> | null>(null);
+  const [editingTable, setEditingTable] = useState<(Partial<TableConfigItem> & { originalId?: string }) | null>(null);
 
   // Load all data when modal opens
   const loadAllData = async () => {
@@ -277,6 +277,8 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
       showNotification(`Room ${roomId} removed`);
       await loadAllData();
       if (onDataChanged) onDataChanged();
+    } else {
+      showNotification(`Failed to delete room ${roomId}`);
     }
   };
 
@@ -493,6 +495,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                         status: 'available',
                         maxGuests: 2,
                         bedType: '1 King Bed',
+                        originalId: '',
                       })
                     }
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 transition"
@@ -511,6 +514,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                         capacity: 4,
                         isActive: true,
                         sortOrder: tablesConfig.length + 1,
+                        originalId: '',
                       })
                     }
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 transition"
@@ -823,7 +827,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                           {/* Edit / Delete Footer */}
                           <div className="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-slate-800 text-xs">
                             <button
-                              onClick={() => setEditingRoom({ ...room })}
+                              onClick={() => setEditingRoom({ ...room, originalId: room.id })}
                               className="text-slate-400 hover:text-white flex items-center gap-1"
                             >
                               <Edit2 className="w-3.5 h-3.5" /> Edit Tariff
@@ -887,7 +891,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                         <button
-                          onClick={() => setEditingTable({ ...tbl })}
+                          onClick={() => setEditingTable({ ...tbl, originalId: tbl.id })}
                           className="p-1 text-slate-400 hover:text-white rounded"
                           title="Edit"
                         >
