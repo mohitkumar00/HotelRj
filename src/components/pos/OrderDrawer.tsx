@@ -1,5 +1,5 @@
 import React from 'react';
-import { Minus, Printer, FileText, Check, MessageCircle, X, Sparkles, Edit3, PlusCircle, CheckCircle } from 'lucide-react';
+import { Minus, Printer, FileText, Check, MessageCircle, X, Sparkles, Edit3, PlusCircle, CheckCircle, Trash2 } from 'lucide-react';
 import { parseItemPrice } from '../../utils/priceUtils';
 import { TableOrder, WaiterItemRecord } from '../../utils/tableMerge';
 
@@ -14,7 +14,7 @@ export interface OrderDrawerProps {
   openNoteEditor: (itemId: string, itemName: string, currentNotes?: string) => void;
   handleRemoveItem: (itemId: string) => void;
   handleFireKOT: () => Promise<void>;
-  alreadyFiredItems: { name: string; quantity: number; notes: string | undefined; }[];
+  alreadyFiredItems: { id: string; name: string; quantity: number; price: number; notes: string | undefined; }[];
   applyGst: boolean;
   setApplyGst: React.Dispatch<React.SetStateAction<boolean>>;
   totalItemsCount: number;
@@ -24,6 +24,7 @@ export interface OrderDrawerProps {
   handlePrintBill: () => Promise<void>;
   handleSendWhatsApp: () => void;
   handleOpenSettleModal: () => void;
+  handleCancelOrder: () => Promise<void>;
 }
 
 export const OrderDrawer: React.FC<OrderDrawerProps> = ({
@@ -47,8 +48,9 @@ export const OrderDrawer: React.FC<OrderDrawerProps> = ({
   handlePrintBill,
   handleSendWhatsApp,
   handleOpenSettleModal,
+  handleCancelOrder,
 }) => (
-  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150">
     <div className="w-full max-w-lg max-h-[92vh] bg-[#0e1017] text-white rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-2xl flex flex-col overflow-hidden">
       {/* Modal Header */}
       <div className="p-4 border-b border-white/10 flex items-center justify-between bg-[#131622]">
@@ -137,6 +139,7 @@ export const OrderDrawer: React.FC<OrderDrawerProps> = ({
                               type="button"
                               onClick={() => handleRemoveItem(ci.item.id)}
                               className="p-1 rounded bg-white/5 hover:bg-white/10 text-rose-400"
+                              title="Decrease quantity or remove dish"
                             >
                               <Minus className="w-3 h-3" />
                             </button>
@@ -157,25 +160,46 @@ export const OrderDrawer: React.FC<OrderDrawerProps> = ({
               </div>
             )}
 
-            {/* Wave 2: ALREADY COOKING IN KITCHEN */}
+            {/* Wave 2: ALREADY COOKING IN KITCHEN (WITH CANCEL/VOID ACTION) */}
             {alreadyFiredItems.length > 0 && (
               <div className="p-3 rounded-2xl bg-zinc-900 border border-white/5 space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Already Cooking in Kitchen</span>
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Already Cooking in Kitchen</span>
+                  </span>
+                  <span className="text-[10px] text-sand-400">
+                    Tap Void to cancel item
+                  </span>
+                </div>
 
                 <div className="divide-y divide-white/5 text-xs text-sand-300">
-                  {alreadyFiredItems.map((it, idx) => (
-                    <div key={idx} className="py-1.5 flex items-center justify-between">
-                      <span>
-                        {it.quantity}x {it.name}
-                      </span>
-                      {it.notes && (
-                        <span className="text-[10px] text-amber-300 italic">
-                          [{it.notes}]
+                  {alreadyFiredItems.map((it) => (
+                    <div key={it.id} className="py-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-white">
+                          {it.quantity}x {it.name}
+                        </div>
+                        {it.notes && (
+                          <div className="text-[10px] text-amber-300 italic">
+                            [{it.notes}]
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-mono text-sand-400">
+                          ₹{it.price * it.quantity}
                         </span>
-                      )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(it.id)}
+                          className="py-1 px-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                          title="Cancel / Void this dish"
+                        >
+                          <Minus className="w-3 h-3" />
+                          <span>Void</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -189,14 +213,14 @@ export const OrderDrawer: React.FC<OrderDrawerProps> = ({
               className="w-full py-2.5 px-3 rounded-2xl bg-amber-400/10 hover:bg-amber-400/20 border border-dashed border-amber-400/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-98 transition-all"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>+ Add Custom Dish / Chicken Making Charge</span>
+              <span>+ Add Custom Cooking / Service Charge</span>
             </button>
 
-            {/* Tax / GST Selection Radio Option */}
-            <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 space-y-2">
+            {/* GST Selector Toggle */}
+            <div className="p-3.5 rounded-2xl bg-[#131622] border border-white/10 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-sand-400">
-                  Tax Option (GST):
+                <span className="text-[11px] font-bold text-sand-200">
+                  Billing Tax Preference
                 </span>
                 <span className="text-[9.5px] font-mono text-sand-500">
                   GSTIN: 20BGPPJ2962J1ZA
@@ -292,14 +316,26 @@ export const OrderDrawer: React.FC<OrderDrawerProps> = ({
           </div>
 
           <div className="flex items-center justify-between pt-1">
-            <button
-              type="button"
-              onClick={handleOpenSettleModal}
-              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 active:scale-95 transition-all"
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              <span>Settle & Mark Vacant</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleOpenSettleModal}
+                className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 active:scale-95 transition-all"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                <span>Settle & Mark Vacant</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCancelOrder}
+                className="text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 active:scale-95 transition-all"
+                title="Cancel entire order and clear table"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Cancel Order</span>
+              </button>
+            </div>
 
             <button
               type="button"

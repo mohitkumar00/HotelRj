@@ -14,7 +14,9 @@ import { parseItemPrice } from '../utils/priceUtils';
 import { OwnerInsights } from './OwnerInsights';
 import { HotelOperationsModal } from './HotelOperationsModal';
 import { BanquetCalendarModal } from './BanquetCalendarModal';
-import { fetchMenuApi, fetchTablesConfigApi } from '../utils/hotelDataApi';
+import { fetchMenuApi, fetchTablesConfigApi, fetchRoomsApi } from '../utils/hotelDataApi';
+import { DEFAULT_ROOMS } from '../data/defaultHotelConfig';
+import { HotelRoomRecord } from '../types';
 import {
   settleBill,
   recordAuditLog,
@@ -661,15 +663,18 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     return MENU_CATEGORIES;
   });
   const [tablesConfigList, setTablesConfigList] = useState<TableConfigItem[]>([]);
+  const [roomsConfigList, setRoomsConfigList] = useState<HotelRoomRecord[]>([]);
 
   const loadHotelOpsData = useCallback(async () => {
     try {
-      const [menu, tbls] = await Promise.all([
+      const [menu, tbls, rms] = await Promise.all([
         fetchMenuApi(),
         fetchTablesConfigApi(),
+        fetchRoomsApi(),
       ]);
       if (menu && menu.length > 0) setLiveMenuCategories(menu);
       if (tbls && tbls.length > 0) setTablesConfigList(tbls);
+      if (rms && rms.length > 0) setRoomsConfigList(rms);
     } catch (err) {
       console.warn('Could not load hotel ops data:', err);
     }
@@ -1082,8 +1087,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     return currentItemsList
       .filter((ci) => ci.firedCount > 0)
       .map((ci) => ({
+        id: ci.item.id,
         name: ci.item.name,
         quantity: ci.firedCount,
+        price: parseItemPrice(ci.item.price),
         notes: ci.notes,
       }));
   }, [currentItemsList]);
@@ -1205,10 +1212,55 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }
   };
 
+  // Action: CANCEL ENTIRE TABLE ORDER (Clear table with audit log)
+  const handleCancelOrder = async () => {
+    if (currentItemsList.length === 0) return;
+    const hasFired = currentItemsList.some((ci) => (ci.firedCount || 0) > 0);
+    const confirmMsg = hasFired
+      ? `⚠️ This table has items already sent to the kitchen.\n\nCancel entire order on ${activeTable} and clear table?`
+      : `Cancel order on ${activeTable} and clear table?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    if (hasFired) {
+      const dishesSummary = currentItemsList.map((ci) => `${ci.quantity}x ${ci.item.name}`).join(', ');
+      await recordAuditLog({
+        type: 'KOT_CANCEL',
+        tableId: activeTable,
+        staffName: serverName,
+        reason: 'Entire order cancelled / guest changed mind',
+        itemPrice: grandTotal,
+        quantity: totalItemsCount,
+        itemName: dishesSummary.slice(0, 100),
+      });
+      Logger.warn('Order', `Entire order cancelled on ${activeTable}: ${dishesSummary} (₹${grandTotal})`);
+    }
+
+    triggerHaptic(40);
+    setTables((prev) => ({
+      ...prev,
+      [activeTable]: {
+        tableId: activeTable,
+        serverName,
+        openedAt: '',
+        status: 'vacant',
+        kotNumber: (prev[activeTable]?.kotNumber || 1) + 1,
+        items: {},
+        generalNote: '',
+        updatedAt: Date.now(),
+      },
+    }));
+
+    setIsOrderDrawerOpen(false);
+    setPrintSuccessMsg(`🗑️ Order on ${activeTable} cancelled & table cleared`);
+    setTimeout(() => setPrintSuccessMsg(null), 3500);
+  };
+
   // Action: OPEN SETTLE MODAL OR DIRECT CLEAR IF EMPTY
   const handleOpenSettleModal = () => {
     if (activeTable.startsWith('R-') || activeTable.includes('Room')) {
       setSettleDepartment('rooms');
+      setSettleRoomNumber(activeTable);
     } else if (activeTable.toLowerCase().includes('banquet') || activeTable.toLowerCase().includes('hall') || activeTable.toLowerCase().includes('lawn')) {
       setSettleDepartment('banquet');
     } else {
@@ -1298,8 +1350,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       const payload: SettleBillPayload = {
         tableId: activeTable,
         department: settleDepartment,
-        orderType: isTakeawayActive ? 'takeaway' : activeTable.startsWith('R-') ? 'room-service' : settleDepartment === 'banquet' ? 'banquet' : 'dine-in',
-        roomNumber: settlePaymentMethod === 'room-folio' ? settleRoomNumber : undefined,
+        orderType: isTakeawayActive ? 'takeaway' : (activeTable.startsWith('R-') || activeTable.includes('Room')) ? 'room-service' : settleDepartment === 'banquet' ? 'banquet' : 'dine-in',
+        roomNumber: (activeTable.includes('Room') || activeTable.startsWith('R-')) ? activeTable : settlePaymentMethod === 'room-folio' ? settleRoomNumber : undefined,
         serverName,
         settledBy: 'Counter Cashier',
         customerPhone: settleCustomerPhone.trim() || undefined,
@@ -1417,22 +1469,36 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   // Dynamic Table IDs list
   const currentTableIds = useMemo(() => {
-    if (tablesConfigList.length > 0) {
-      return tablesConfigList.filter((t) => t.isActive).map((t) => t.id);
-    }
-    return ALL_TABLE_IDS;
-  }, [tablesConfigList]);
+    // 1. Restaurant Dining & Takeaway tables
+    const tableIds = tablesConfigList.length > 0
+      ? tablesConfigList.filter((t) => t.isActive).map((t) => t.id)
+      : ALL_TABLE_IDS.filter((t) => !t.toLowerCase().startsWith('room') && !t.toLowerCase().includes('banquet') && !t.toLowerCase().includes('lawn') && !t.toLowerCase().includes('property'));
+
+    // 2. Hotel Guest Rooms
+    const roomIds = roomsConfigList.length > 0
+      ? roomsConfigList.map((r) => r.id)
+      : DEFAULT_ROOMS.map((r) => r.id);
+
+    // 3. Banquet & Event Venues
+    const banquetIds = [
+      'Banquet Hall 1 (AC)',
+      'Garden Lawn',
+      'Combined / Full Property',
+    ];
+
+    return Array.from(new Set([...tableIds, ...roomIds, ...banquetIds]));
+  }, [tablesConfigList, roomsConfigList]);
 
   // Filtered Table IDs list
   const filteredTables = useMemo(() => {
     if (tableFilter === 'dinein') {
-      return currentTableIds.filter((t) => t.startsWith('T-'));
+      return currentTableIds.filter((t) => t.startsWith('T-') || t.startsWith('Table '));
     }
     if (tableFilter === 'takeaway') {
       return currentTableIds.filter((t) => t.toLowerCase().includes('parcel') || t.toLowerCase().includes('takeaway'));
     }
     if (tableFilter === 'rooms') {
-      return currentTableIds.filter((t) => t.toLowerCase().startsWith('room'));
+      return currentTableIds.filter((t) => t.toLowerCase().startsWith('room') || t.startsWith('R-'));
     }
     if (tableFilter === 'banquet') {
       return currentTableIds.filter((t) => {
@@ -2187,6 +2253,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           handlePrintBill={handlePrintBill}
           handleSendWhatsApp={handleSendWhatsApp}
           handleOpenSettleModal={handleOpenSettleModal}
+          handleCancelOrder={handleCancelOrder}
         />
       )}
 

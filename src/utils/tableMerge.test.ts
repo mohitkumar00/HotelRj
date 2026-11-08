@@ -33,32 +33,53 @@ describe('mergeTables', () => {
     expect(merged.items.a).toBeUndefined();
   });
 
-  it('allows quantity decrements on unfired items when remote is newer', () => {
-    // Waiter on mobile tapped '-' to decrement quantity from 2 to 1
+  it('allows quantity decrements on items when remote is newer', () => {
+    // Waiter on mobile decremented quantity from 2 to 1
     const local = { 'T-1': table({ updatedAt: 1, items: { a: { item, quantity: 2, firedCount: 0 } } }) };
     const remote = { 'T-1': table({ updatedAt: 9, items: { a: { item, quantity: 1, firedCount: 0 } } }) };
     const merged = mergeTables(local, remote)['T-1'];
     expect(merged.items.a.quantity).toBe(1);
   });
 
-  it('protects already-fired kitchen items from being dropped when remote is newer', () => {
-    // Item 'a' was already fired to kitchen on counter (firedCount: 2)
-    // Remote payload did not have item 'a' (or was out-of-sync)
+  it('honors remote void / cancellation of fired items without resurrecting them', () => {
+    // Manager voided fired item 'a' and added item 'b'
     const local = { 'T-1': table({ updatedAt: 1, items: { a: { item, quantity: 2, firedCount: 2 } } }) };
     const remote = { 'T-1': table({ updatedAt: 9, items: { b: { item: itemB, quantity: 1, firedCount: 0 } } }) };
     const merged = mergeTables(local, remote)['T-1'];
-    expect(merged.items.a).toBeDefined();
-    expect(merged.items.a.quantity).toBe(2);
-    expect(merged.items.a.firedCount).toBe(2);
+    expect(merged.items.a).toBeUndefined();
     expect(merged.items.b.quantity).toBe(1);
   });
 
-  it('merges equal-timestamp tables protecting fired items', () => {
-    const local = { 'T-1': table({ updatedAt: 4, items: { a: { item, quantity: 1, firedCount: 1 } } }) };
-    const remote = { 'T-1': table({ updatedAt: 4, items: { a: { item, quantity: 3, firedCount: 2 } } }) };
-    const out = mergeTables(local, remote)['T-1'].items.a;
-    expect(out.quantity).toBe(3);
-    expect(out.firedCount).toBe(2);
+  it('strictly vacates table and clears all items when remote marks table vacant upon settlement', () => {
+    // Table had 3 fired items on local. Cashier settled bill on remote (status: 'vacant', items: {})
+    const local = {
+      'T-1': table({
+        status: 'kot_sent',
+        updatedAt: 5,
+        items: {
+          a: { item, quantity: 2, firedCount: 2 },
+          b: { item: itemB, quantity: 1, firedCount: 1 },
+        },
+      }),
+    };
+    const remote = {
+      'T-1': table({
+        status: 'vacant',
+        updatedAt: 10,
+        items: {},
+      }),
+    };
+    const merged = mergeTables(local, remote)['T-1'];
+    expect(merged.status).toBe('vacant');
+    expect(Object.keys(merged.items)).toHaveLength(0);
+  });
+
+  it('keeps local vacant if local is newer than remote', () => {
+    const local = { 'T-1': table({ status: 'vacant', updatedAt: 15, items: {} }) };
+    const remote = { 'T-1': table({ status: 'active', updatedAt: 10, items: { a: { item, quantity: 1, firedCount: 1 } } }) };
+    const merged = mergeTables(local, remote)['T-1'];
+    expect(merged.status).toBe('vacant');
+    expect(Object.keys(merged.items)).toHaveLength(0);
   });
 
   it('ignores invalid remote payloads', () => {

@@ -19,16 +19,19 @@ export interface TableOrder {
 }
 
 /**
- * Merges remote table state into local state (newest timestamp wins).
+ * Merges remote table state into local state (authoritative newest timestamp wins).
  * Rules:
- * 1. If remote is strictly newer (remote.updatedAt > local.updatedAt):
- *    - Remote table's items are the authoritative state (allows item additions, removals, and quantity decreases).
- *    - Only items that were already FIRED to the kitchen on local (localItem.firedCount > 0) are preserved
- *      so fired kitchen orders are never lost.
- * 2. If local is strictly newer (local.updatedAt > remote.updatedAt):
+ * 1. If remote is explicitly vacant (settled or cancelled) and rTime >= lTime:
+ *    - Table is VACANT with items: {}. Never resurrects settled/cancelled items.
+ * 2. If local is vacant and strictly newer than remote (lTime > rTime):
+ *    - Table remains VACANT with items: {}.
+ * 3. If remote is strictly newer (rTime > lTime):
+ *    - Remote table is authoritative. If remote is vacant, it stays vacant.
+ * 4. If local is strictly newer (lTime > rTime):
  *    - Local table is kept.
- * 3. If timestamps are equal:
- *    - Adopt remote table, protecting any items already fired on local.
+ * 5. If timestamps are equal (rTime === lTime):
+ *    - If either side is vacant, vacant wins (cleared/settled table).
+ *    - Otherwise adopt remote table.
  */
 export function mergeTables(
   local: { [key: string]: TableOrder },
@@ -49,62 +52,45 @@ export function mergeTables(
     const rTime = remoteTable.updatedAt || 0;
     const lTime = localTable.updatedAt || 0;
 
-    if (rTime > lTime) {
-      // Remote is strictly newer. Use remote's items as the base.
-      const items = { ...(remoteTable.items || {}) };
-
-      // Preserve only items already fired to kitchen on local (unfired items removed remotely stay removed)
-      for (const itemId of Object.keys(localTable.items || {})) {
-        const localItem = localTable.items[itemId];
-        if (localItem && (localItem.firedCount || 0) > 0) {
-          if (!items[itemId]) {
-            items[itemId] = localItem;
-          } else {
-            const rItem = items[itemId];
-            const maxFired = Math.max(rItem.firedCount || 0, localItem.firedCount || 0);
-            items[itemId] = {
-              ...rItem,
-              firedCount: maxFired,
-              quantity: Math.max(rItem.quantity || 0, maxFired),
-            };
-          }
-        }
-      }
-
+    // Rule 1: Remote is explicitly vacant and rTime >= lTime -> table is VACANT
+    if (remoteTable.status === 'vacant' && rTime >= lTime) {
       merged[tableId] = {
         ...remoteTable,
-        items,
+        items: {},
       };
-    } else if (lTime > rTime) {
-      // Local is strictly newer. Keep local table.
       continue;
-    } else {
-      // Equal timestamps: adopt remote while protecting any already-fired items
-      const items = { ...(remoteTable.items || {}) };
-      for (const itemId of Object.keys(localTable.items || {})) {
-        const localItem = localTable.items[itemId];
-        if (localItem && (localItem.firedCount || 0) > 0) {
-          if (!items[itemId]) {
-            items[itemId] = localItem;
-          } else {
-            const rItem = items[itemId];
-            const maxFired = Math.max(rItem.firedCount || 0, localItem.firedCount || 0);
-            items[itemId] = {
-              ...rItem,
-              firedCount: maxFired,
-              quantity: Math.max(rItem.quantity || 0, maxFired),
-            };
-          }
-        }
-      }
+    }
 
+    // Rule 2: Local is vacant and strictly newer than remote -> local remains VACANT
+    if (localTable.status === 'vacant' && lTime > rTime) {
       merged[tableId] = {
-        ...remoteTable,
-        status: remoteTable.status !== 'vacant' ? remoteTable.status : localTable.status,
-        kotNumber: Math.max(localTable.kotNumber || 1, remoteTable.kotNumber || 1),
-        openedAt: remoteTable.openedAt || localTable.openedAt,
-        items,
+        ...localTable,
+        items: {},
       };
+      continue;
+    }
+
+    // Rule 3: Remote is strictly newer -> remote is authoritative
+    if (rTime > lTime) {
+      merged[tableId] = remoteTable;
+      continue;
+    }
+
+    // Rule 4: Local is strictly newer -> local is authoritative
+    if (lTime > rTime) {
+      continue;
+    }
+
+    // Rule 5: Timestamps are equal -> vacant wins, or adopt remote
+    if (remoteTable.status === 'vacant' || localTable.status === 'vacant') {
+      const vacantTbl = remoteTable.status === 'vacant' ? remoteTable : localTable;
+      merged[tableId] = {
+        ...vacantTbl,
+        status: 'vacant',
+        items: {},
+      };
+    } else {
+      merged[tableId] = remoteTable;
     }
   }
 
