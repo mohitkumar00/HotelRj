@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { checkPinAgainst, getLockRemainingMs, hashPin, isValidPinFormat, verifyManagerPin } from './pin';
+import { checkPinAgainst, getLockRemainingMs, hashPin, isValidPinFormat, verifyManagerPin, changeManagerPin, setManagerPin } from './pin';
 import { normalizeEmail } from './deviceAuth';
 import { STORAGE_KEYS } from '../config';
 
@@ -38,6 +38,31 @@ describe('verifyManagerPin', () => {
     const r = await verifyManagerPin('7391');
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.reason).toBe('locked');
+  });
+
+  it('changes PIN successfully when current PIN is correct and invalidates previous PIN', async () => {
+    // Starts with default 1234
+    expect((await verifyManagerPin('1234')).ok).toBe(true);
+
+    // Fails with wrong current PIN
+    const failRes = await changeManagerPin('9999', '5678');
+    expect(failRes.ok).toBe(false);
+
+    // Changes PIN with correct current PIN 1234 -> 5678
+    const successRes = await changeManagerPin('1234', '5678');
+    expect(successRes.ok).toBe(true);
+
+    // 1234 no longer works!
+    expect((await verifyManagerPin('1234')).ok).toBe(false);
+
+    // 5678 works!
+    expect((await verifyManagerPin('5678')).ok).toBe(true);
+
+    // Can change again from 5678 -> 9012
+    const nextRes = await changeManagerPin('5678', '9012');
+    expect(nextRes.ok).toBe(true);
+    expect((await verifyManagerPin('5678')).ok).toBe(false);
+    expect((await verifyManagerPin('9012')).ok).toBe(true);
   });
 });
 

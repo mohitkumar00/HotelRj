@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Lock } from 'lucide-react';
+import { AlertTriangle, Lock, KeyRound } from 'lucide-react';
 
 export interface ManagerPinPromptModalProps {
   handleManagerPinSubmit: (e?: React.FormEvent) => Promise<void>;
@@ -10,6 +10,7 @@ export interface ManagerPinPromptModalProps {
   setIsManagerPinPromptOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setTargetManagerAction: React.Dispatch<React.SetStateAction<'insights' | 'menu' | 'banquet' | 'bills' | 'printer' | 'logs' | null>>;
   isCheckingManagerPin: boolean;
+  onOpenChangePin?: () => void;
 }
 
 export const ManagerPinPromptModal: React.FC<ManagerPinPromptModalProps> = ({
@@ -21,6 +22,7 @@ export const ManagerPinPromptModal: React.FC<ManagerPinPromptModalProps> = ({
   setIsManagerPinPromptOpen,
   setTargetManagerAction,
   isCheckingManagerPin,
+  onOpenChangePin,
 }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
     <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl">
@@ -76,6 +78,24 @@ export const ManagerPinPromptModal: React.FC<ManagerPinPromptModalProps> = ({
             {isCheckingManagerPin ? 'Verifying...' : 'Unlock Portal'}
           </button>
         </div>
+
+        {onOpenChangePin && (
+          <div className="pt-2.5 border-t border-zinc-900 mt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setIsManagerPinPromptOpen(false);
+                setTargetManagerAction(null);
+                setManagerPinInput('');
+                onOpenChangePin();
+              }}
+              className="text-[11px] text-amber-400/90 hover:text-amber-300 font-medium flex items-center justify-center gap-1.5 mx-auto transition"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Change Manager PIN</span>
+            </button>
+          </div>
+        )}
       </form>
     </div>
   </div>

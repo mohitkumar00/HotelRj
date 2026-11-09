@@ -29,6 +29,7 @@ import type { ConnectedWaiter, SyncServerInfo } from './pos/types';
 import { ALL_TABLE_IDS } from './pos/constants';
 import { ManagerMenuModal } from './pos/ManagerMenuModal';
 import { ManagerPinPromptModal } from './pos/ManagerPinPromptModal';
+import { ChangePinModal } from './pos/ChangePinModal';
 import { CancelBillModal } from './pos/CancelBillModal';
 import { BillsHistoryModal } from './pos/BillsHistoryModal';
 import { LogsModal } from './pos/LogsModal';
@@ -654,6 +655,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [managerPinInput, setManagerPinInput] = useState('');
   const [managerPinError, setManagerPinError] = useState<string | null>(null);
   const [isCheckingManagerPin, setIsCheckingManagerPin] = useState(false);
+  const [isChangePinOpen, setIsChangePinOpen] = useState(false);
 
   const handleOpenManagerAction = (
     action: 'insights' | 'menu' | 'banquet' | 'bills' | 'printer' | 'logs'
@@ -2542,6 +2544,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           setIsManagerPinPromptOpen={setIsManagerPinPromptOpen}
           setTargetManagerAction={setTargetManagerAction}
           isCheckingManagerPin={isCheckingManagerPin}
+          onOpenChangePin={() => setIsChangePinOpen(true)}
         />
       )}
 
@@ -2550,8 +2553,15 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         <ManagerMenuModal
           setIsManagerMenuOpen={setIsManagerMenuOpen}
           handleOpenManagerAction={handleOpenManagerAction}
+          onOpenChangePin={() => setIsChangePinOpen(true)}
         />
       )}
+
+      {/* Change Manager PIN Modal */}
+      <ChangePinModal
+        isOpen={isChangePinOpen}
+        onClose={() => setIsChangePinOpen(false)}
+      />
     </div>
   );
 };

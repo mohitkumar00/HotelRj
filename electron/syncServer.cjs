@@ -305,6 +305,35 @@ class LocalSyncServer {
         return;
       }
 
+      if (req.method === 'GET' && url.pathname === '/api/settings/pin') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, pinRecord: db.getManagerPin() }));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/settings/pin') {
+        let body = '';
+        req.on('data', (chunk) => (body += chunk));
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body || '{}');
+            if (data && data.pinRecord) {
+              db.setManagerPin(data.pinRecord);
+              logger.warn('SyncServer', `Manager PIN updated from ${clientIp}`);
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true }));
+            } else {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Missing pinRecord' }));
+            }
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+        return;
+      }
+
       if (req.method === 'POST' && url.pathname === '/api/waiter/heartbeat') {
         let body = '';
         req.on('data', (chunk) => (body += chunk));

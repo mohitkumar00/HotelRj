@@ -87,4 +87,6 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
   getCloudAccessToken: () => ipcRenderer.invoke('get-cloud-access-token'),
   clearCloudSession: () => ipcRenderer.invoke('clear-cloud-session'),
   getSyncToken: () => ipcRenderer.invoke('get-sync-token'),
+  getManagerPin: () => ipcRenderer.invoke('get-manager-pin'),
+  setManagerPin: (record) => ipcRenderer.invoke('set-manager-pin', record),
 });

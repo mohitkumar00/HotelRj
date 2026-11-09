@@ -228,6 +228,15 @@ ipcMain.handle('get-sync-token', () => {
   return syncServer.syncToken;
 });
 
+// Manager PIN persistence in local DB
+ipcMain.handle('get-manager-pin', () => {
+  return db.getManagerPin();
+});
+
+ipcMain.handle('set-manager-pin', (event, record) => {
+  return db.setManagerPin(record);
+});
+
 // Sync tables broadcast from counter window
 ipcMain.on('sync-tables', (event, tables) => {
   syncServer.updateState(tables);

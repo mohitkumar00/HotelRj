@@ -31,6 +31,7 @@ class HotelDatabase {
       rooms: JSON.parse(JSON.stringify(DEFAULT_ROOMS)),
       tablesConfig: JSON.parse(JSON.stringify(DEFAULT_TABLES_CONFIG)),
       pendingDeletions: [],
+      managerPin: null,
     };
     this.ensureDirectory();
     this.load();
@@ -68,6 +69,7 @@ class HotelDatabase {
               ? parsed.tablesConfig 
               : JSON.parse(JSON.stringify(DEFAULT_TABLES_CONFIG)),
             pendingDeletions: Array.isArray(parsed.pendingDeletions) ? parsed.pendingDeletions : [],
+            managerPin: parsed.managerPin || null,
           };
 
           // Backfill department for legacy records
@@ -1154,6 +1156,16 @@ class HotelDatabase {
       backupPath: dbBackupPath,
       filePath: dbFilePath,
     };
+  }
+
+  getManagerPin() {
+    return this.data.managerPin || null;
+  }
+
+  setManagerPin(record) {
+    this.data.managerPin = record;
+    this.save();
+    return true;
   }
 }
 

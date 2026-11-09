@@ -1,14 +1,16 @@
 import React from 'react';
-import { Printer, X, Bug, TrendingUp, Receipt, Sliders, Calendar } from 'lucide-react';
+import { Printer, X, Bug, TrendingUp, Receipt, Sliders, Calendar, KeyRound } from 'lucide-react';
 
 export interface ManagerMenuModalProps {
   setIsManagerMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
   handleOpenManagerAction: (action: 'insights' | 'menu' | 'banquet' | 'bills' | 'printer' | 'logs') => void;
+  onOpenChangePin?: () => void;
 }
 
 export const ManagerMenuModal: React.FC<ManagerMenuModalProps> = ({
   setIsManagerMenuOpen,
   handleOpenManagerAction,
+  onOpenChangePin,
 }) => (
   <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
     <div className="bg-zinc-950 border border-zinc-800 rounded-t-3xl sm:rounded-3xl w-full max-w-lg p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -123,6 +125,26 @@ export const ManagerMenuModal: React.FC<ManagerMenuModalProps> = ({
           <Bug className="w-4 h-4 text-amber-400" />
           <span className="text-xs font-semibold">Debug &amp; Sync Logs</span>
         </button>
+
+        {/* Card 7: Change Manager PIN */}
+        {onOpenChangePin && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsManagerMenuOpen(false);
+              onOpenChangePin();
+            }}
+            className="p-3 rounded-2xl bg-zinc-900/70 hover:bg-zinc-850 border border-amber-500/20 text-left flex items-center gap-3 transition-all active:scale-95 text-zinc-300 sm:col-span-2"
+          >
+            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400">
+              <KeyRound className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-black text-white">Change Manager PIN</span>
+              <p className="text-[10px] text-zinc-400 mt-0.5">Update the 4-digit PIN used to access reports, rooms & management</p>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Session Sign-Out / Lock */}

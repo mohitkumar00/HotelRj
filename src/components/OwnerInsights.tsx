@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, DollarSign, Smartphone, ChefHat, ShieldAlert, ArrowLeft, RefreshCw, PlusCircle, Trash2, Share2, Lock, AlertTriangle, Receipt, Download, Building, PartyPopper, UtensilsCrossed, Calendar, Layers, Cloud, Ban } from 'lucide-react';
+import { TrendingUp, DollarSign, Smartphone, ChefHat, ShieldAlert, ArrowLeft, RefreshCw, PlusCircle, Trash2, Share2, Lock, AlertTriangle, Receipt, Download, Building, PartyPopper, UtensilsCrossed, Calendar, Layers, Cloud, Ban, KeyRound } from 'lucide-react';
 import {
   fetchAnalytics,
   addExpense,
@@ -17,6 +17,7 @@ import { HOTEL_INFO } from '../data/hotelData';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, STORAGE_KEYS } from '../config';
 import { verifyManagerPin, formatLock } from '../utils/pin';
 import { PairDeviceModal } from './PairDeviceModal';
+import { ChangePinModal } from './pos/ChangePinModal';
 import { CloudSyncModal } from './owner/CloudSyncModal';
 import { ShareReportModal } from './owner/ShareReportModal';
 import { ExpenseModal } from './owner/ExpenseModal';
@@ -33,6 +34,7 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [isPairOpen, setIsPairOpen] = useState<boolean>(false);
+  const [isChangePinOpen, setIsChangePinOpen] = useState<boolean>(false);
 
   // Filter States
   const [period, setPeriod] = useState<AnalyticsQueryOptions['period']>('today');
@@ -334,10 +336,11 @@ _Saved permanently in Hotel RJ Database_`;
 
             <button
               type="button"
-              onClick={() => setIsPairOpen(true)}
-              className="text-[11px] text-gold-400 hover:text-gold-300 underline underline-offset-2"
+              onClick={() => setIsChangePinOpen(true)}
+              className="text-xs text-gold-400 hover:text-gold-300 flex items-center justify-center gap-1.5 mx-auto font-medium transition py-1"
             >
-              Owner: pair this device / set PIN
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Change Manager PIN</span>
             </button>
 
             <div className="flex gap-3">
@@ -361,6 +364,7 @@ _Saved permanently in Hotel RJ Database_`;
             Note: Counter waiters cannot view business margins or void summaries without the PIN.
           </p>
         </div>
+        <ChangePinModal isOpen={isChangePinOpen} onClose={() => setIsChangePinOpen(false)} />
         <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
       </div>
     );
@@ -396,6 +400,17 @@ _Saved permanently in Hotel RJ Database_`;
 
         {/* Right Header Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Change PIN */}
+          <button
+            type="button"
+            onClick={() => setIsChangePinOpen(true)}
+            className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-gold-300 text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+            title="Change Master Manager PIN"
+          >
+            <KeyRound className="w-3.5 h-3.5 text-gold-400" />
+            <span className="hidden sm:inline">Change PIN</span>
+          </button>
+
           {/* Refresh */}
           <button
             onClick={loadData}
@@ -1216,6 +1231,7 @@ _Saved permanently in Hotel RJ Database_`;
           setIsPairOpen={setIsPairOpen}
         />
       )}
+      <ChangePinModal isOpen={isChangePinOpen} onClose={() => setIsChangePinOpen(false)} />
       <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { verifyManagerPin, formatLock } from '../utils/pin';
 import { PairDeviceModal } from './PairDeviceModal';
+import { ChangePinModal } from './pos/ChangePinModal';
 import {
   X,
   Search,
@@ -11,6 +12,7 @@ import {
   Edit2,
   Lock,
   Unlock,
+  KeyRound,
   Bed,
   Utensils,
   LayoutGrid,
@@ -57,6 +59,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [isPairOpen, setIsPairOpen] = useState(false);
+  const [isChangePinOpen, setIsChangePinOpen] = useState(false);
 
   // Data states
   const [loading, setLoading] = useState(false);
@@ -345,6 +348,15 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              onClick={() => setIsChangePinOpen(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95"
+              title="Change Manager PIN"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Change PIN</span>
+            </button>
+            <button
               onClick={loadAllData}
               disabled={loading}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
@@ -405,10 +417,16 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                 <Unlock className="w-4 h-4" />
                 Unlock Operations
               </button>
-              <button type="button" onClick={() => setIsPairOpen(true)} className="text-[11px] text-amber-400 hover:text-amber-300 underline underline-offset-2">
-                Owner: pair this device / set PIN
+              <button
+                type="button"
+                onClick={() => setIsChangePinOpen(true)}
+                className="text-xs text-amber-400 hover:text-amber-300 flex items-center justify-center gap-1.5 mx-auto font-medium transition py-1"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Change Manager PIN</span>
               </button>
             </form>
+            <ChangePinModal isOpen={isChangePinOpen} onClose={() => setIsChangePinOpen(false)} />
             <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
           </div>
         ) : (
@@ -942,6 +960,8 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
             editingTable={editingTable}
           />
         )}
+
+        <ChangePinModal isOpen={isChangePinOpen} onClose={() => setIsChangePinOpen(false)} />
       </div>
     </div>
   );

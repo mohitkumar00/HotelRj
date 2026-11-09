@@ -7,8 +7,8 @@
  * The legacy values are intentionally NOT shown anywhere in the UI any more.
  */
 import { STORAGE_KEYS, SUPABASE_URL } from '../config';
-import { readJson, writeJson } from './storage';
-import { getAccessToken, getSupabaseHeaders } from './deviceAuth';
+import { readJson, writeJson, readString } from './storage';
+import { getSupabaseHeaders } from './deviceAuth';
 
 interface PinRecord {
   salt: string;
@@ -69,18 +69,45 @@ function clearFailures(): void {
 
 // ---- shared storage ----
 async function fetchRemoteRecord(): Promise<PinRecord | null> {
-  if (!(await getAccessToken())) return null;
+  // 1. Check Electron local DB if running on Windows Desktop
+  try {
+    if (typeof window !== 'undefined' && (window as any).ElectronAPI?.getManagerPin) {
+      const rec = await (window as any).ElectronAPI.getManagerPin();
+      if (rec && rec.hash) return rec;
+    }
+  } catch {}
+
+  // 2. Check local Wi-Fi Counter sync server if connected on mobile
+  try {
+    const syncUrl = (readString(STORAGE_KEYS.syncUrl) || '').trim();
+    if (syncUrl) {
+      let cleanUrl = syncUrl;
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) cleanUrl = `http://${cleanUrl}`;
+      if (!cleanUrl.match(/:\d+$/)) cleanUrl = `${cleanUrl}:5050`;
+      const token = (readString(STORAGE_KEYS.syncToken) || '').trim();
+      const headers: Record<string, string> = {};
+      if (token) headers['X-Sync-Token'] = token;
+      const res = await fetch(`${cleanUrl}/api/settings/pin`, { headers, signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.pinRecord?.hash) return data.pinRecord;
+      }
+    }
+  } catch {}
+
+  // 3. Check Supabase cloud
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/app_settings?key=eq.manager_pin&select=value`, {
       headers: await getSupabaseHeaders(),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(4000),
     });
-    if (!res.ok) return null;
-    const rows = await res.json();
-    return rows?.[0]?.value || null;
-  } catch {
-    return null;
-  }
+    if (res.ok) {
+      const rows = await res.json();
+      if (rows?.[0]?.value?.hash) return rows[0].value;
+    }
+  } catch {}
+
+  return null;
 }
 
 export async function isPinConfigured(): Promise<boolean> {
@@ -118,23 +145,87 @@ export async function verifyManagerPin(pin: string): Promise<PinResult> {
     : { ok: false, reason: 'wrong', attemptsLeft: Math.max(0, MAX_FAILURES - s.failures) };
 }
 
-/** Sets/changes the shared manager PIN. Requires a paired device. */
+/**
+ * Changes the manager PIN by verifying the current PIN first.
+ * Does not require email, OTP, or cloud accounts — works 100% offline.
+ */
+export async function changeManagerPin(
+  currentPin: string,
+  newPin: string
+): Promise<{ ok: boolean; error?: string }> {
+  const v = await verifyManagerPin(currentPin);
+  if (!v.ok) {
+    return {
+      ok: false,
+      error:
+        v.reason === 'locked'
+          ? `Locked out due to too many failed attempts. Try again in ${formatLock(v.remainingMs || 0)}.`
+          : 'Current PIN is incorrect. (Default is 1234)',
+    };
+  }
+
+  if (!isValidPinFormat(newPin)) {
+    return { ok: false, error: 'New PIN must be 4 to 6 digits.' };
+  }
+
+  if (newPin === currentPin) {
+    return { ok: false, error: 'New PIN must be different from the current PIN.' };
+  }
+
+  return setManagerPin(newPin);
+}
+
+/** Sets/changes the manager PIN across local DB, Counter sync server, and cloud. */
 export async function setManagerPin(pin: string): Promise<{ ok: boolean; error?: string }> {
   if (!isValidPinFormat(pin)) return { ok: false, error: 'PIN must be 4 to 6 digits.' };
-  if (!(await getAccessToken())) return { ok: false, error: 'Pair this device first.' };
   const record = await hashPin(pin);
+
+  // 1. Save locally in localStorage for fast offline verification
+  writeJson(STORAGE_KEYS.pinHash, record);
+  clearFailures();
+
+  // 2. Save in Windows Desktop local database if running under Electron
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_settings`, {
+    if (typeof window !== 'undefined' && (window as any).ElectronAPI?.setManagerPin) {
+      await (window as any).ElectronAPI.setManagerPin(record);
+    }
+  } catch (err) {
+    console.warn('[PIN] Electron setManagerPin error:', err);
+  }
+
+  // 3. Sync to Counter POS Wi-Fi server if on mobile
+  try {
+    const syncUrl = (readString(STORAGE_KEYS.syncUrl) || '').trim();
+    if (syncUrl) {
+      let cleanUrl = syncUrl;
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) cleanUrl = `http://${cleanUrl}`;
+      if (!cleanUrl.match(/:\d+$/)) cleanUrl = `${cleanUrl}:5050`;
+      const token = (readString(STORAGE_KEYS.syncToken) || '').trim();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['X-Sync-Token'] = token;
+      await fetch(`${cleanUrl}/api/settings/pin`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ pinRecord: record }),
+        signal: AbortSignal.timeout(4000),
+      });
+    }
+  } catch (err) {
+    console.warn('[PIN] Local sync server set PIN error:', err);
+  }
+
+  // 4. Best-effort cloud backup to Supabase (non-blocking for offline use)
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/app_settings`, {
       method: 'POST',
       headers: { ...(await getSupabaseHeaders()), Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify({ key: 'manager_pin', value: record }),
+      signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return { ok: false, error: `Could not save PIN (HTTP ${res.status}). Apply the RLS migration first.` };
-  } catch (e: any) {
-    return { ok: false, error: e?.message || 'Network error.' };
+  } catch {
+    // Cloud sync is non-blocking
   }
-  writeJson(STORAGE_KEYS.pinHash, record);
-  clearFailures();
+
   return { ok: true };
 }
 
