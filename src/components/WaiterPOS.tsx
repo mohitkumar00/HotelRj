@@ -56,6 +56,26 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     return localStorage.getItem('hotel_rj_server_name') || 'Server 1';
   });
   const [isEditingServer, setIsEditingServer] = useState(false);
+  const [tempServerName, setTempServerName] = useState<string>(serverName);
+  const serverNameRef = useRef(serverName);
+  serverNameRef.current = serverName;
+  const activeTableRef = useRef(activeTable);
+  activeTableRef.current = activeTable;
+
+  // Stable client device ID for waiter hardware (deduplicates heartbeat presence on Counter POS)
+  const waiterClientIdRef = useRef<string>('');
+  if (!waiterClientIdRef.current) {
+    try {
+      let id = localStorage.getItem('hotel_rj_waiter_client_id');
+      if (!id) {
+        id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'dev_' + Math.random().toString(36).substring(2, 11);
+        localStorage.setItem('hotel_rj_waiter_client_id', id);
+      }
+      waiterClientIdRef.current = id;
+    } catch {
+      waiterClientIdRef.current = 'waiter_device';
+    }
+  }
 
   // Multi-Table State Store
   const [tables, setTables] = useState<{ [tableId: string]: TableOrder }>(() => {
@@ -132,6 +152,34 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   const [counterInputToken, setCounterInputToken] = useState<string>(() => localStorage.getItem('hotel_rj_sync_token') || '');
   const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
 
+  const commitServerName = useCallback((newName: string) => {
+    const trimmed = newName.trim() || 'Server 1';
+    setServerName(trimmed);
+    localStorage.setItem('hotel_rj_server_name', trimmed);
+    setIsEditingServer(false);
+
+    // Immediately notify counter of new name if connected
+    if (!isElectron && counterSyncUrl.trim() && isSyncConnected) {
+      let cleanUrl = counterSyncUrl.trim();
+      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) cleanUrl = `http://${cleanUrl}`;
+      if (!cleanUrl.match(/:\d+$/)) cleanUrl = `${cleanUrl}:5050`;
+      const currentToken = localStorage.getItem('hotel_rj_sync_token') || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentToken.trim()) headers['X-Sync-Token'] = currentToken.trim();
+      fetch(`${cleanUrl}/api/waiter/heartbeat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          serverName: trimmed,
+          activeTable: activeTableRef.current,
+          clientId: waiterClientIdRef.current,
+          deviceInfo: Capacitor.isNativePlatform() ? 'Android APK' : 'Mobile Web Browser',
+        }),
+        signal: AbortSignal.timeout(4000),
+      }).catch(() => {});
+    }
+  }, [isElectron, counterSyncUrl, isSyncConnected]);
+
   // Windows Installed Printers List (Bluetooth & USB)
   const [windowsPrinters, setWindowsPrinters] = useState<Array<{ name: string; displayName?: string; isDefault?: boolean }>>([]);
   const [selectedWindowsPrinter, setSelectedWindowsPrinter] = useState<string>(() => {
@@ -175,13 +223,18 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       cleanUrl = `${cleanUrl}:5050`;
     }
     try {
+      const currentToken = localStorage.getItem('hotel_rj_sync_token') || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentToken.trim()) headers['X-Sync-Token'] = currentToken.trim();
+
       const res = await fetch(`${cleanUrl}/api/tables`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           tables: currentTables,
-          serverName,
+          serverName: serverNameRef.current,
           activeTable,
+          clientId: waiterClientIdRef.current,
           deviceInfo: Capacitor.isNativePlatform() ? 'Android APK' : 'Mobile Web Browser',
         }),
         signal: AbortSignal.timeout(7000),
@@ -204,7 +257,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       Logger.warn('Sync', `Background push failed: ${err?.message || 'unreachable'}`);
       setIsSyncConnected(false);
     }
-  }, [isElectron, counterSyncUrl, serverName, activeTable]);
+  }, [isElectron, counterSyncUrl, activeTable]);
 
   // Full 2-way sync helper: Sends local tables and receives latest counter state
   const performManualSync = useCallback(async (customUrl?: string) => {
@@ -223,13 +276,18 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     Logger.info('Sync', `Sending 2-way sync request to ${cleanUrl} (timeout: 8s)...`);
 
     try {
+      const currentToken = localStorage.getItem('hotel_rj_sync_token') || '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (currentToken.trim()) headers['X-Sync-Token'] = currentToken.trim();
+
       const postRes = await fetch(`${cleanUrl}/api/tables`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           tables,
-          serverName,
+          serverName: serverNameRef.current,
           activeTable,
+          clientId: waiterClientIdRef.current,
           deviceInfo: Capacitor.isNativePlatform() ? 'Android APK' : 'Mobile Web Browser',
         }),
         signal: AbortSignal.timeout(8000),
@@ -360,12 +418,17 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
     const sendHeartbeat = async () => {
       try {
+        const currentToken = localStorage.getItem('hotel_rj_sync_token') || '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (currentToken.trim()) headers['X-Sync-Token'] = currentToken.trim();
+
         await fetch(`${cleanUrl}/api/waiter/heartbeat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
-            serverName,
-            activeTable,
+            serverName: serverNameRef.current,
+            activeTable: activeTableRef.current,
+            clientId: waiterClientIdRef.current,
             deviceInfo: Capacitor.isNativePlatform() ? 'Android APK' : 'Mobile Web Browser',
           }),
           signal: AbortSignal.timeout(5000),
@@ -378,7 +441,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     sendHeartbeat();
     const interval = setInterval(sendHeartbeat, 12000);
     return () => clearInterval(interval);
-  }, [isElectron, counterSyncUrl, isSyncConnected, serverName, activeTable]);
+  }, [isElectron, counterSyncUrl, isSyncConnected]);
 
   // Windows: Real-time listener for incoming orders from Waiter Android phones
   useEffect(() => {
@@ -436,7 +499,11 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
     const pollSync = async () => {
       try {
-        const res = await fetch(`${cleanUrl}/api/tables`, { signal: AbortSignal.timeout(5000) });
+        const currentToken = localStorage.getItem('hotel_rj_sync_token') || '';
+        const headers: Record<string, string> = {};
+        if (currentToken.trim()) headers['X-Sync-Token'] = currentToken.trim();
+
+        const res = await fetch(`${cleanUrl}/api/tables`, { headers, signal: AbortSignal.timeout(5000) });
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {
@@ -1561,12 +1628,12 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
                 <div className="flex items-center gap-1 mt-0.5">
                   <input
                     type="text"
-                    value={serverName}
-                    onChange={(e) => setServerName(e.target.value)}
-                    onBlur={() => {
-                      setIsEditingServer(false);
-                      localStorage.setItem('hotel_rj_server_name', serverName);
+                    value={tempServerName}
+                    onChange={(e) => setTempServerName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitServerName(tempServerName);
                     }}
+                    onBlur={() => commitServerName(tempServerName)}
                     autoFocus
                     className="text-[10px] bg-zinc-800 text-white px-1.5 py-0.5 rounded border border-gold-400 focus:outline-none w-24"
                   />
@@ -1574,7 +1641,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               ) : (
                 <button
                   type="button"
-                  onClick={() => setIsEditingServer(true)}
+                  onClick={() => {
+                    setTempServerName(serverName);
+                    setIsEditingServer(true);
+                  }}
                   className="text-[10px] text-gold-400 flex items-center gap-1 hover:underline"
                   title="Tap to change server name"
                 >

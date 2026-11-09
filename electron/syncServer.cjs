@@ -41,9 +41,9 @@ function loadOrCreateToken() {
 }
 
 function safeEqual(a, b) {
-  const x = Buffer.from(String(a || ''));
-  const y = Buffer.from(String(b || ''));
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
+  const x = Buffer.from(String(a || '').trim().toUpperCase());
+  const y = Buffer.from(String(b || '').trim().toUpperCase());
+  return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y);
 }
 
 function mergeTables(local, remote) {
@@ -129,6 +129,15 @@ class LocalSyncServer {
     const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(clientIp) || clientIp === '1';
     if (isLoopback && (!origin || origin === 'null' || origin.startsWith('file:'))) return true;
 
+    const tokenHeader = req.headers['x-sync-token'];
+
+    // 1. Proving possession of the correct secret immediately authorizes and clears any lockout!
+    if (safeEqual(tokenHeader, this.syncToken)) {
+      this.failedAuth.delete(clientIp);
+      return true;
+    }
+
+    // 2. Client is not authenticated with valid token. Check rate-limit lockout.
     const now = Date.now();
     const f = this.failedAuth.get(clientIp);
     if (f && f.until > now) {
@@ -137,27 +146,42 @@ class LocalSyncServer {
       return false;
     }
 
-    if (safeEqual(req.headers['x-sync-token'], this.syncToken)) {
-      this.failedAuth.delete(clientIp);
-      return true;
+    // 3. Track failed attempts.
+    // Increment only if an actual (incorrect) token was submitted (i.e. guessing wrong code),
+    // or if a client without any token is making mutating POST requests.
+    // Unauthenticated GET requests on initial page load won't lock out legitimate devices.
+    const hasAttemptedToken = tokenHeader !== undefined && tokenHeader !== null && String(tokenHeader).trim() !== '';
+    if (hasAttemptedToken || req.method === 'POST') {
+      const count = (f ? f.count : 0) + 1;
+      this.failedAuth.set(clientIp, { count, until: count >= 10 ? now + 5 * 60_000 : 0 });
     }
 
-    const count = (f ? f.count : 0) + 1;
-    this.failedAuth.set(clientIp, { count, until: count >= 10 ? now + 5 * 60_000 : 0 });
     logger.warn('SyncServer', `Rejected request without valid pairing code from ${clientIp}: ${pathname}`);
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Pairing code required', code: 'SYNC_TOKEN_REQUIRED' }));
     return false;
   }
 
-  recordWaiter(clientIp, serverName, activeTable = '', deviceInfo = '') {
+  recordWaiter(clientIp, serverName, activeTable = '', deviceInfo = '', clientId = '') {
     const cleanIp = String(clientIp || '').replace(/^.*:/, '') || '127.0.0.1';
-    const name = serverName || 'Waiter';
-    const id = `${name}@${cleanIp}`;
+    const name = String(serverName || '').trim() || 'Waiter';
+    const cleanClientId = String(clientId || '').trim();
+    // Unique device identifier: prefer explicit clientId, fallback to IP
+    const id = cleanClientId ? `client_${cleanClientId}` : `ip_${cleanIp}`;
     const now = Date.now();
+
+    // Deduplicate: If any existing waiter shares this IP or clientId under an older ID/name, remove it
+    for (const [existingId, w] of this.activeWaiters.entries()) {
+      if (existingId !== id) {
+        if (w.ip === cleanIp || (cleanClientId && w.clientId === cleanClientId)) {
+          this.activeWaiters.delete(existingId);
+        }
+      }
+    }
 
     this.activeWaiters.set(id, {
       id,
+      clientId: cleanClientId,
       name,
       ip: cleanIp,
       activeTable: activeTable || '-',
@@ -169,7 +193,7 @@ class LocalSyncServer {
 
     this.pruneWaiters();
     this.notifyWaitersUpdated();
-    logger.warn('SyncServer', `Waiter activity: "${name}" (${cleanIp}) on table "${activeTable || '-'}"`);
+    logger.warn('SyncServer', `Waiter activity: "${name}" (${cleanIp}${cleanClientId ? ` / ${cleanClientId.slice(0, 8)}` : ''}) on table "${activeTable || '-'}"`);
   }
 
   pruneWaiters() {
@@ -287,7 +311,7 @@ class LocalSyncServer {
         req.on('end', () => {
           try {
             const data = JSON.parse(body || '{}');
-            this.recordWaiter(clientIp, data.serverName, data.activeTable, data.deviceInfo);
+            this.recordWaiter(clientIp, data.serverName, data.activeTable, data.deviceInfo, data.clientId);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, connectedWaiters: this.getWaitersList().length }));
           } catch (e) {
@@ -320,7 +344,7 @@ class LocalSyncServer {
             const data = JSON.parse(body);
             if (data && data.tables) {
               if (data.serverName) {
-                this.recordWaiter(clientIp, data.serverName, data.activeTable, data.deviceInfo);
+                this.recordWaiter(clientIp, data.serverName, data.activeTable, data.deviceInfo, data.clientId);
               }
               if (data.activeTable && data.tables[data.activeTable]) {
                 data.tables[data.activeTable].updatedAt = Math.max(

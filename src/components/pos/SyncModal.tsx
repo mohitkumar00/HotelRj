@@ -216,8 +216,10 @@ export const SyncModal: React.FC<SyncModalProps> = ({
                 type="button"
                 onClick={() => {
                   localStorage.removeItem('hotel_rj_counter_sync_url');
+                  localStorage.removeItem('hotel_rj_sync_token');
                   setCounterSyncUrl('');
                   setCounterInputUrl('');
+                  setCounterInputToken('');
                   setIsSyncConnected(false);
                   setPrintSuccessMsg('Disconnected from Counter');
                   setTimeout(() => setPrintSuccessMsg(null), 2500);
