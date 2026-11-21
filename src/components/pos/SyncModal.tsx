@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, Wifi, ShieldAlert, Camera, CameraOff, CheckCircle2 } from 'lucide-react';
+import { X, Wifi, ShieldAlert, Camera, CameraOff, CheckCircle2, Smartphone, Globe } from 'lucide-react';
+import jsQR from 'jsqr';
 import type { SyncServerInfo } from './types';
 
 export interface SyncModalProps {
@@ -42,6 +43,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [qrType, setQrType] = useState<'app' | 'browser'>('app');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<any>(null);
@@ -73,7 +75,12 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
       if (trimmed.includes('://')) {
         const parsed = new URL(trimmed);
-        detectedHost = parsed.host || `${parsed.hostname}:${parsed.port || 5050}`;
+        detectedHost =
+          parsed.searchParams.get('server') ||
+          parsed.searchParams.get('host') ||
+          parsed.searchParams.get('ip') ||
+          parsed.host ||
+          `${parsed.hostname}:${parsed.port || 5050}`;
         detectedToken = parsed.searchParams.get('token') || '';
       } else if (trimmed.includes(':')) {
         detectedHost = trimmed;
@@ -107,47 +114,96 @@ export const SyncModal: React.FC<SyncModalProps> = ({
     setIsScanning(true);
 
     try {
+      // Trigger native Android runtime permission prompt if running inside Android APK
+      if (typeof window !== 'undefined' && (window as any).AndroidPrinter?.requestCameraPermission) {
+        (window as any).AndroidPrinter.requestCameraPermission();
+      }
+
       if (!navigator?.mediaDevices?.getUserMedia) {
         setCameraError('Camera access not supported on this device/browser');
         setIsScanning(false);
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       streamRef.current = stream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
+        videoRef.current.setAttribute('playsinline', 'true');
+        await videoRef.current.play().catch(() => {});
       }
 
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       const BarcodeDetectorAPI = (window as any).BarcodeDetector;
-      if (typeof BarcodeDetectorAPI !== 'undefined') {
-        const detector = new BarcodeDetectorAPI({ formats: ['qr_code'] });
-        scanIntervalRef.current = setInterval(async () => {
-          if (!videoRef.current || videoRef.current.readyState < 2) return;
+      const detector = typeof BarcodeDetectorAPI !== 'undefined' ? new BarcodeDetectorAPI({ formats: ['qr_code'] }) : null;
+
+      scanIntervalRef.current = setInterval(async () => {
+        if (!videoRef.current || videoRef.current.readyState < 2) return;
+        const video = videoRef.current;
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (w === 0 || h === 0) return;
+
+        // Try BarcodeDetector first if supported
+        if (detector) {
           try {
-            const codes = await detector.detect(videoRef.current);
+            const codes = await detector.detect(video);
             if (codes && codes.length > 0 && codes[0].rawValue) {
               handleScannedValue(codes[0].rawValue);
+              return;
             }
           } catch {}
-        }, 300);
-      } else {
-        setCameraError('Direct QR detector not available in this browser. Please enter IP & code below.');
-      }
+        }
+
+        // Rock-solid universal fallback: jsQR canvas scan
+        if (ctx) {
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(video, 0, 0, w, h);
+          try {
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            });
+            if (qrCode && qrCode.data) {
+              handleScannedValue(qrCode.data);
+            }
+          } catch {}
+        }
+      }, 180);
     } catch (err: any) {
-      setCameraError(err?.message || 'Camera permission denied or camera unavailable');
+      console.error('Camera scanner error:', err);
+      const isDenied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
+      setCameraError(
+        isDenied
+          ? 'Camera permission denied. Please grant Camera permission in phone App Settings.'
+          : (err?.message || 'Camera unavailable on this device')
+      );
       setIsScanning(false);
     }
   };
 
-  // Build the QR code connect URL with token embedded
-  const qrConnectUrl = `http://${syncInfo?.ip || '127.0.0.1'}:5050/?token=${encodeURIComponent(
+  // Build the QR code connect URLs:
+  // 1. Native Android App Deep Link: hotelrj://connect?server=IP:5050&token=TOKEN
+  const qrAppUrl = `hotelrj://connect?server=${encodeURIComponent(
+    `${syncInfo?.ip || '127.0.0.1'}:5050`
+  )}&token=${encodeURIComponent(syncInfo?.token || '')}`;
+
+  // 2. Web Browser Fallback URL: http://IP:5050/?token=TOKEN&sync=1
+  const qrBrowserUrl = `http://${syncInfo?.ip || '127.0.0.1'}:5050/?token=${encodeURIComponent(
     syncInfo?.token || ''
   )}&sync=1`;
+
+  const activeQrValue = qrType === 'app' ? qrAppUrl : qrBrowserUrl;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
@@ -196,26 +252,64 @@ export const SyncModal: React.FC<SyncModalProps> = ({
               )}
             </div>
 
+            {/* QR Mode Switcher: Android App vs Web Browser */}
+            <div className="bg-zinc-900 p-1 rounded-2xl border border-white/10 grid grid-cols-2 gap-1 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setQrType('app')}
+                className={`py-1.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                  qrType === 'app'
+                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow'
+                    : 'text-sand-400 hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>📱 Android App QR</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrType('browser')}
+                className={`py-1.5 px-2 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+                  qrType === 'browser'
+                    ? 'bg-gradient-to-r from-emerald-400 to-emerald-500 text-black shadow'
+                    : 'text-sand-400 hover:text-white'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>🌐 Web Browser QR</span>
+              </button>
+            </div>
+
             {/* QR Code with Embedded Auto-Connect Token */}
             <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white space-y-2 shadow-inner">
-              <QRCodeSVG value={qrConnectUrl} size={160} level="M" />
+              <QRCodeSVG value={activeQrValue} size={160} level="M" />
               <span className="text-[10px] font-bold text-zinc-800 font-mono text-center">
-                http://{syncInfo?.ip || '127.0.0.1'}:5050
+                {qrType === 'app'
+                  ? `hotelrj://connect?server=${syncInfo?.ip || '127.0.0.1'}:5050`
+                  : `http://${syncInfo?.ip || '127.0.0.1'}:5050`}
               </span>
-              <span className="text-[9px] font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300 text-center">
-                ⚡ Scan with Camera to Auto-Connect &amp; Open
+              <span
+                className={`text-[9.5px] font-bold px-2.5 py-0.5 rounded-full border text-center ${
+                  qrType === 'app'
+                    ? 'text-amber-900 bg-amber-100 border-amber-300'
+                    : 'text-emerald-900 bg-emerald-100 border-emerald-300'
+                }`}
+              >
+                {qrType === 'app'
+                  ? '⚡ Scans Directly into Hotel RJ Waiter App'
+                  : '⚡ Opens in Mobile Chrome Browser'}
               </span>
             </div>
 
             <div className="p-3 rounded-2xl bg-zinc-900 border border-white/10 text-[11px] text-sand-300 space-y-1.5">
               <div className="font-bold text-white">📲 Instructions for Waiters:</div>
               <ol className="list-decimal pl-4 space-y-1 text-sand-400">
-                <li>Connect phone to same hotel Wi-Fi (turn off Mobile Data 4G/5G).</li>
+                <li>Connect phone to same hotel Wi-Fi router.</li>
                 <li>
-                  <strong>Option A:</strong> Scan QR code with Phone Camera to open and auto-connect in Chrome.
+                  <strong>With Android App:</strong> Select <strong className="text-amber-400">"Android App QR"</strong> and scan with phone camera or inside Hotel RJ App.
                 </li>
                 <li>
-                  <strong>Option B:</strong> In Hotel RJ Waiter app, tap <strong className="text-white">Scan QR</strong> or enter IP <strong className="text-white font-mono">{syncInfo?.ip || '127.0.0.1'}</strong> &amp; Pairing Code <strong className="text-white font-mono">{syncInfo?.token}</strong>.
+                  <strong>Without App (Chrome):</strong> Select <strong className="text-emerald-400">"Web Browser QR"</strong> to open and order directly in phone browser.
                 </li>
               </ol>
             </div>

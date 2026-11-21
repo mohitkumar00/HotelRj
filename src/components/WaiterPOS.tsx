@@ -9,7 +9,7 @@ import {
 } from '../utils/thermalPrinter';
 import { Logger, LogEntry } from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
-import { Search, Plus, Minus, Printer, Check, X, User, ChevronUp, ShoppingBag, Edit3, Bug, RefreshCw, Wifi, WifiOff, Monitor, Users, PlusCircle, TrendingUp, Receipt, Sliders, AlertTriangle, Calendar } from 'lucide-react';
+import { Search, Plus, Minus, Printer, Check, X, User, ChevronUp, ShoppingBag, Edit3, Bug, RefreshCw, Wifi, WifiOff, Monitor, Users, PlusCircle, TrendingUp, Receipt, Sliders, AlertTriangle, Calendar, Smartphone } from 'lucide-react';
 import { parseItemPrice } from '../utils/priceUtils';
 import { OwnerInsights } from './OwnerInsights';
 import { HotelOperationsModal } from './HotelOperationsModal';
@@ -414,6 +414,63 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     } catch (e: any) {
       Logger.warn('Sync', `Could not parse URL auto-sync params: ${e?.message}`);
     }
+  }, [isElectron, performManualSync, counterSyncUrl]);
+
+  // Native Android Deep Link Auto-Pairing (hotelrj://connect?server=...&token=...)
+  useEffect(() => {
+    if (isElectron || typeof window === 'undefined') return;
+
+    const handleDeepLinkPayload = (server?: string, token?: string) => {
+      let credentialsChanged = false;
+      if (token && token.trim()) {
+        const cleanTok = token.trim().toUpperCase();
+        localStorage.setItem('hotel_rj_sync_token', cleanTok);
+        setCounterInputToken(cleanTok);
+        credentialsChanged = true;
+      }
+      if (server && server.trim()) {
+        const cleanH = server.trim();
+        localStorage.setItem('hotel_rj_counter_sync_url', cleanH);
+        setCounterSyncUrl(cleanH);
+        setCounterInputUrl(cleanH);
+        credentialsChanged = true;
+      }
+      if (credentialsChanged) {
+        const activeTarget = server || counterSyncUrl || window.location.host;
+        Logger.info('Sync', `Deep link auto-connect: ${activeTarget}`);
+        performManualSync(activeTarget);
+        setPrintSuccessMsg('⚡ Connected to Counter POS via Hotel RJ Deep Link!');
+        setTimeout(() => setPrintSuccessMsg(null), 3500);
+      }
+    };
+
+    // 1. Check if cold-started via deep link from native Android bridge
+    if ((window as any).AndroidPrinter?.getPendingDeepLink) {
+      try {
+        const raw = (window as any).AndroidPrinter.getPendingDeepLink();
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.server || parsed.token) {
+            handleDeepLinkPayload(parsed.server, parsed.token);
+          }
+        }
+      } catch (err: any) {
+        Logger.warn('Sync', `Error reading pending deep link: ${err?.message}`);
+      }
+    }
+
+    // 2. Listen for warm resume deep link events
+    const onDeepLinkEvent = (e: any) => {
+      const detail = e?.detail;
+      if (detail && (detail.server || detail.token)) {
+        handleDeepLinkPayload(detail.server, detail.token);
+      }
+    };
+    window.addEventListener('hotelrj_deeplink_sync', onDeepLinkEvent);
+
+    return () => {
+      window.removeEventListener('hotelrj_deeplink_sync', onDeepLinkEvent);
+    };
   }, [isElectron, performManualSync, counterSyncUrl]);
 
   // Windows: Query Sync Server Info on mount
@@ -1699,6 +1756,28 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
 
   return (
     <div className="min-h-screen bg-[#08090d] text-sand-50 select-none pb-28 font-sans">
+      {/* 0. SMART BANNER: OPEN IN INSTALLED ANDROID APP IF ACCESSED VIA MOBILE BROWSER */}
+      {!isElectron && typeof window !== 'undefined' && !((window as any).AndroidPrinter?.isNativeAvailable?.()) && (
+        <div className="bg-gradient-to-r from-amber-500/20 via-amber-600/15 to-emerald-500/20 border-b border-amber-500/30 px-3 py-1.5 flex items-center justify-between text-xs sticky top-0 z-50 backdrop-blur-md">
+          <div className="flex items-center gap-1.5 truncate">
+            <Smartphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-[11px] text-sand-200 truncate">
+              Have the Hotel RJ Waiter App?
+            </span>
+          </div>
+          <a
+            href={`intent://connect?server=${encodeURIComponent(
+              counterSyncUrl || (typeof window !== 'undefined' ? window.location.host : '')
+            )}&token=${encodeURIComponent(
+              counterInputToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('hotel_rj_sync_token') || '' : '')
+            )}#Intent;scheme=hotelrj;package=com.hotelrj.waiter;end`}
+            className="px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-black text-[10px] shrink-0 active:scale-95 shadow transition-all"
+          >
+            Open in App ↗
+          </a>
+        </div>
+      )}
+
       {/* 1. TOP WAITER HEADER BAR */}
       <header className="sticky top-0 z-40 bg-[#0d0f16]/95 backdrop-blur-md border-b border-white/10 px-3 py-2.5 shadow-xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
