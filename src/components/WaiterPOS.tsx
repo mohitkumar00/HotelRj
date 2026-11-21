@@ -190,6 +190,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   // Optional 5% GST Selection on Billing
   const [applyGst, setApplyGst] = useState<boolean>(true);
 
+  // Optional customer discount percentage per table (e.g. "10" for 10%)
+  const [tableDiscounts, setTableDiscounts] = useState<{ [tableId: string]: string }>({});
+
   // Live Debug Logs
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
@@ -860,6 +863,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           : new Date().toLocaleString(),
         items,
         subtotal: Number(bill.subtotal) || Number(bill.total) || 0,
+        discount: Number(bill.discount) || 0,
         gstRate: bill.tax ? 5 : 0,
         grandTotal: Number(bill.total) || 0,
         paymentMode:
@@ -1188,9 +1192,49 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }, 0);
   }, [currentItemsList]);
 
-  // GST is optional based on waiter's choice (5% or 0%)
-  const gstAmount = applyGst ? Math.round(subtotalPrice * 0.05) : 0;
-  const grandTotal = subtotalPrice + gstAmount;
+  // Optional Customer Discount calculation
+  const discountPercentStr = tableDiscounts[activeTable] ?? (currentOrder.discountPercent !== undefined && currentOrder.discountPercent > 0 ? String(currentOrder.discountPercent) : '');
+  const discountPercentNum = Math.min(100, Math.max(0, parseFloat(discountPercentStr) || 0));
+
+  const discountAmount = useMemo(() => {
+    if (discountPercentNum <= 0 || subtotalPrice <= 0) return 0;
+    return Math.round((subtotalPrice * discountPercentNum) / 100);
+  }, [subtotalPrice, discountPercentNum]);
+
+  const discountedSubtotal = Math.max(0, subtotalPrice - discountAmount);
+
+  // GST is optional based on waiter's choice (5% or 0%), applied on net discounted subtotal
+  const gstAmount = applyGst ? Math.round(discountedSubtotal * 0.05) : 0;
+  const grandTotal = discountedSubtotal + gstAmount;
+
+  const handleDiscountChange = (val: string) => {
+    if (val === '') {
+      setTableDiscounts((prev) => ({ ...prev, [activeTable]: '' }));
+      setTables((prev) => {
+        if (!prev[activeTable]) return prev;
+        const copy = { ...prev[activeTable] };
+        delete copy.discountPercent;
+        return { ...prev, [activeTable]: copy };
+      });
+      return;
+    }
+    const clean = val.replace(/[^0-9.]/g, '');
+    const num = parseFloat(clean);
+    if (!isNaN(num) && num > 100) return;
+    setTableDiscounts((prev) => ({ ...prev, [activeTable]: clean }));
+    const validNum = !isNaN(num) ? Math.min(100, Math.max(0, num)) : 0;
+    setTables((prev) => {
+      if (!prev[activeTable]) return prev;
+      return {
+        ...prev,
+        [activeTable]: {
+          ...prev[activeTable],
+          discountPercent: validNum,
+          updatedAt: Date.now(),
+        },
+      };
+    });
+  };
 
   // Distinguish between New Items to Fire vs Already Fired to Kitchen
   const newItemsToFire = useMemo(() => {
@@ -1308,6 +1352,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         notes: ci.notes,
       })),
       subtotal: subtotalPrice,
+      discount: discountAmount > 0 ? discountAmount : undefined,
+      discountPercent: discountPercentNum > 0 ? discountPercentNum : undefined,
       gstRate: applyGst ? 5 : 0,
       grandTotal,
       isTakeaway: isTakeawayActive,
@@ -1361,6 +1407,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }
 
     triggerHaptic(40);
+    setTableDiscounts((prev) => ({ ...prev, [activeTable]: '' }));
     setTables((prev) => ({
       ...prev,
       [activeTable]: {
@@ -1371,6 +1418,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
         kotNumber: (prev[activeTable]?.kotNumber || 1) + 1,
         items: {},
         generalNote: '',
+        discountPercent: undefined,
         updatedAt: Date.now(),
       },
     }));
@@ -1394,6 +1442,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     if (currentItemsList.length === 0) {
       if (confirm(`Mark ${activeTable} as Vacant?`)) {
         triggerHaptic(40);
+        setTableDiscounts((prev) => ({ ...prev, [activeTable]: '' }));
         setTables((prev) => ({
           ...prev,
           [activeTable]: {
@@ -1404,6 +1453,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
             kotNumber: (prev[activeTable]?.kotNumber || 1) + 1,
             items: {},
             generalNote: '',
+            discountPercent: undefined,
             updatedAt: Date.now(),
           },
         }));
@@ -1489,6 +1539,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           dietary: ci.item.dietary,
         })),
         subtotal: subtotalPrice,
+        discount: discountAmount > 0 ? discountAmount : 0,
         tax: applyGst ? gstAmount : 0,
         total: grandTotal,
         paymentMethod: settlePaymentMethod,
@@ -1502,6 +1553,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       await settleBill(payload);
 
       triggerHaptic(50);
+      setTableDiscounts((prev) => ({ ...prev, [activeTable]: '' }));
       setTables((prev) => ({
         ...prev,
         [activeTable]: {
@@ -1512,6 +1564,7 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           kotNumber: (prev[activeTable]?.kotNumber || 1) + 1,
           items: {},
           generalNote: '',
+          discountPercent: undefined,
           updatedAt: Date.now(),
         },
       }));
@@ -1548,9 +1601,10 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
       .join('\n');
 
     const takeawayHeader = isTakeawayActive ? '\n*** TAKEAWAY / PARCEL ORDER ***\n' : '\n';
+    const discountLine = discountAmount > 0 ? `*Discount (${discountPercentNum}%):* -₹${discountAmount}\n` : '';
     const gstLine = applyGst ? `*GST (5%):* ₹${gstAmount}\n` : '';
 
-    const text = `*HOTEL RJ - ${activeTable.toUpperCase()}*${takeawayHeader}GSTIN: 20BGPPJ2962J1ZA\nServer: ${serverName}\nTime: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n--------------------\n${itemsListStr}\n--------------------\n*Subtotal:* ₹${subtotalPrice}\n${gstLine}*Total Bill:* ₹${grandTotal}\n_Where Comfort Meets Great Taste_`;
+    const text = `*HOTEL RJ - ${activeTable.toUpperCase()}*${takeawayHeader}GSTIN: 20BGPPJ2962J1ZA\nServer: ${serverName}\nTime: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n--------------------\n${itemsListStr}\n--------------------\n*Subtotal:* ₹${subtotalPrice}\n${discountLine}${gstLine}*Total Bill:* ₹${grandTotal}\n_Where Comfort Meets Great Taste_`;
 
     window.open(`https://wa.me/917004865824?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -2373,6 +2427,9 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           alreadyFiredItems={alreadyFiredItems}
           applyGst={applyGst}
           setApplyGst={setApplyGst}
+          discountPercent={discountPercentStr}
+          onDiscountChange={handleDiscountChange}
+          discountAmount={discountAmount}
           totalItemsCount={totalItemsCount}
           subtotalPrice={subtotalPrice}
           gstAmount={gstAmount}
@@ -2409,6 +2466,8 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
           activeTable={activeTable}
           currentItemsList={currentItemsList}
           subtotalPrice={subtotalPrice}
+          discountAmount={discountAmount}
+          discountPercent={discountPercentStr}
           setIsSettleModalOpen={setIsSettleModalOpen}
           grandTotal={grandTotal}
           applyGst={applyGst}

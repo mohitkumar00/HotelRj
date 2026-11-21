@@ -1,5 +1,5 @@
 import React from 'react';
-import { Minus, Printer, FileText, Check, MessageCircle, X, Sparkles, Edit3, PlusCircle, CheckCircle, Trash2 } from 'lucide-react';
+import { Minus, Printer, FileText, Check, MessageCircle, X, Sparkles, Edit3, PlusCircle, CheckCircle, Trash2, Percent } from 'lucide-react';
 import { parseItemPrice } from '../../utils/priceUtils';
 import { TableOrder, WaiterItemRecord } from '../../utils/tableMerge';
 
@@ -17,6 +17,9 @@ export interface OrderDrawerProps {
   alreadyFiredItems: { id: string; name: string; quantity: number; price: number; notes: string | undefined; }[];
   applyGst: boolean;
   setApplyGst: React.Dispatch<React.SetStateAction<boolean>>;
+  discountPercent: string;
+  onDiscountChange: (val: string) => void;
+  discountAmount: number;
   totalItemsCount: number;
   subtotalPrice: number;
   gstAmount: number;
@@ -41,6 +44,9 @@ export const OrderDrawer: React.FC<OrderDrawerProps> = ({
   alreadyFiredItems,
   applyGst,
   setApplyGst,
+  discountPercent,
+  onDiscountChange,
+  discountAmount,
   totalItemsCount,
   subtotalPrice,
   gstAmount,
@@ -264,12 +270,90 @@ export const OrderDrawer: React.FC<OrderDrawerProps> = ({
               </div>
             </div>
 
+            {/* Optional Customer Discount Input Box */}
+            <div className="p-3.5 rounded-2xl bg-[#131622] border border-white/10 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-sand-200">
+                  <Percent className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Customer Discount (Optional)</span>
+                </div>
+                {discountAmount > 0 && (
+                  <span className="text-[10px] font-bold font-mono text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    -₹{discountAmount} OFF
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Discount % (e.g. 10)"
+                    value={discountPercent}
+                    onChange={(e) => onDiscountChange(e.target.value)}
+                    className="w-full pl-3 pr-8 py-2 rounded-xl bg-black/40 border border-white/15 focus:border-amber-400 text-xs font-semibold text-white placeholder-stone-500 outline-none transition-all"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-400">
+                    %
+                  </span>
+                </div>
+
+                {/* Quick % Preset Buttons */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {[5, 10, 15, 20].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => onDiscountChange(discountPercent === String(pct) ? '' : String(pct))}
+                      className={`px-2 py-2 rounded-xl text-[10px] font-bold transition-all active:scale-95 ${
+                        discountPercent === String(pct)
+                          ? 'bg-amber-400 text-black shadow font-black'
+                          : 'bg-white/5 hover:bg-white/10 text-sand-300 border border-white/10'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                  {discountPercent && (
+                    <button
+                      type="button"
+                      onClick={() => onDiscountChange('')}
+                      className="p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition-all active:scale-95"
+                      title="Clear discount"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {discountAmount > 0 && (
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/5">
+                  <span className="text-sand-400">Applied Discount ({discountPercent}%):</span>
+                  <span className="font-mono text-emerald-400 font-bold">-₹{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
             {/* Bill Total Summary */}
             <div className="p-3.5 rounded-2xl bg-[#131622] border border-white/10 space-y-1.5 text-xs">
               <div className="flex items-center justify-between text-sand-300">
                 <span>Subtotal ({totalItemsCount} items):</span>
                 <span className="font-mono">₹{subtotalPrice.toFixed(2)}</span>
               </div>
+              {discountAmount > 0 && (
+                <div className="flex items-center justify-between text-emerald-400 font-medium">
+                  <span>Discount ({discountPercent}%):</span>
+                  <span className="font-mono">-₹{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {discountAmount > 0 && (
+                <div className="flex items-center justify-between text-sand-400 text-[11px]">
+                  <span>Net Amount:</span>
+                  <span className="font-mono text-white">₹{(subtotalPrice - discountAmount).toFixed(2)}</span>
+                </div>
+              )}
               {applyGst ? (
                 <div className="flex items-center justify-between text-sand-300">
                   <span>GST (5%):</span>

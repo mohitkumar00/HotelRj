@@ -293,66 +293,85 @@ export const BanquetCalendarModal: React.FC<BanquetCalendarModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-6xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Top Header Bar */}
-        <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/60">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+        <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-zinc-800 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-zinc-900/80">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Back Button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (viewMode === 'add') {
+                  setViewMode('calendar');
+                } else {
+                  onClose();
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-sand-200 hover:text-white border border-zinc-700 font-bold text-xs flex items-center gap-1 shrink-0 active:scale-95 transition-all shadow-sm"
+              title="Back to POS"
+            >
+              <ChevronLeft className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Back</span>
+            </button>
+
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
               <CalendarIcon className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-white">Banquet & Lawn Event Calendar</h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  Anti-Duplicate Guard Active
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-black text-white truncate">Banquet &amp; Lawn Calendar</h2>
+                <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                  Anti-Duplicate Guard
                 </span>
               </div>
-              <p className="text-xs text-zinc-400">
-                Book weddings, birthdays & parties months in advance without double-booking risk
+              <p className="text-[11px] text-zinc-400 truncate hidden sm:block">
+                Book weddings, birthdays &amp; parties without double-booking risk
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0 justify-between md:justify-end">
             {/* View Mode Tabs */}
-            <div className="bg-zinc-900 p-1 rounded-xl border border-zinc-800 flex items-center gap-1">
+            <div className="bg-zinc-900 p-1 rounded-xl border border-zinc-800 flex items-center gap-1 shrink-0">
               <button
                 type="button"
                 onClick={() => setViewMode('calendar')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   viewMode === 'calendar'
                     ? 'bg-amber-500 text-black shadow'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                📅 Calendar View
+                📅 Calendar
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   viewMode === 'list'
                     ? 'bg-amber-500 text-black shadow'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                📋 Bookings List ({upcomingBookings.length})
+                📋 Bookings ({upcomingBookings.length})
               </button>
             </div>
 
+            {/* Add Booking Button - Fully Aligned and never clipped */}
             <button
               type="button"
               onClick={() => handleOpenAddForDate(selectedDateStr)}
-              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4" />
-              <span>Book Event</span>
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>+ Add Booking</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
+              className="p-1.5 sm:p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors shrink-0"
+              title="Close Calendar"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
         </div>

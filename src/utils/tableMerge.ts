@@ -15,6 +15,7 @@ export interface TableOrder {
   kotNumber: number;
   items: { [itemId: string]: WaiterItemRecord };
   generalNote?: string;
+  discountPercent?: number;
   updatedAt?: number;
 }
 

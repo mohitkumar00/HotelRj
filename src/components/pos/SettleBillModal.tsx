@@ -6,6 +6,8 @@ export interface SettleBillModalProps {
   activeTable: string;
   currentItemsList: WaiterItemRecord[];
   subtotalPrice: number;
+  discountAmount?: number;
+  discountPercent?: string;
   setIsSettleModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   grandTotal: number;
   applyGst: boolean;
@@ -35,6 +37,8 @@ export const SettleBillModal: React.FC<SettleBillModalProps> = ({
   activeTable,
   currentItemsList,
   subtotalPrice,
+  discountAmount,
+  discountPercent,
   setIsSettleModalOpen,
   grandTotal,
   applyGst,
@@ -81,10 +85,20 @@ export const SettleBillModal: React.FC<SettleBillModalProps> = ({
       </div>
 
       {/* Grand Total Display */}
-      <div className="p-4 rounded-2xl bg-stone-950 border border-gold-500/30 text-center">
+      <div className="p-4 rounded-2xl bg-stone-950 border border-gold-500/30 text-center space-y-1">
         <span className="text-xs font-semibold uppercase tracking-wider text-stone-400">Total Payable Amount</span>
-        <div className="text-3xl font-black text-gold-300 font-mono mt-1">₹{grandTotal}</div>
-        {applyGst && <span className="text-[10px] text-stone-400">Includes 5% GST (₹{gstAmount})</span>}
+        <div className="text-3xl font-black text-gold-300 font-mono mt-0.5">₹{grandTotal}</div>
+        <div className="flex items-center justify-center gap-2 text-[10.5px] text-stone-400 flex-wrap">
+          <span>Subtotal: ₹{subtotalPrice}</span>
+          {discountAmount && discountAmount > 0 ? (
+            <span className="text-emerald-400 font-semibold">• Disc: -₹{discountAmount} ({discountPercent}%)</span>
+          ) : null}
+          {applyGst ? (
+            <span className="text-amber-400">• GST: ₹{gstAmount} (5%)</span>
+          ) : (
+            <span>• No GST</span>
+          )}
+        </div>
       </div>
 
       {/* Department Selection */}

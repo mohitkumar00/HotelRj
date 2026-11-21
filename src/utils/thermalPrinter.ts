@@ -32,6 +32,7 @@ export interface BillPrintData {
   subtotal: number;
   gstRate?: number; // default 5%
   discount?: number;
+  discountPercent?: number;
   grandTotal: number;
   paymentMode?: string;
   isTakeaway?: boolean;
@@ -432,7 +433,9 @@ export function generateBillHtml(data: BillPrintData): string {
     })
     .join('');
 
-  const gstAmt = data.gstRate ? (data.subtotal * data.gstRate) / 100 : 0;
+  const discountAmt = data.discount && data.discount > 0 ? data.discount : 0;
+  const taxableAmt = Math.max(0, data.subtotal - discountAmt);
+  const gstAmt = data.gstRate ? (taxableAmt * data.gstRate) / 100 : 0;
 
   return `
     <div style="text-align: center; font-weight: bold; font-size: 16px;">HOTEL RJ</div>
@@ -464,6 +467,15 @@ export function generateBillHtml(data: BillPrintData): string {
       <span>Subtotal:</span>
       <span>₹${data.subtotal.toFixed(2)}</span>
     </div>
+    ${
+      discountAmt > 0
+        ? `
+    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #16a34a; font-weight: 600;">
+      <span>Discount ${data.discountPercent ? `(${data.discountPercent}%)` : ''}:</span>
+      <span>-₹${discountAmt.toFixed(2)}</span>
+    </div>`
+        : ''
+    }
     ${
       data.gstRate
         ? `
@@ -608,12 +620,14 @@ function generateBillEscPos(data: BillPrintData): Uint8Array {
 
   s += '--------------------------------\n';
   s += line32('Subtotal:', `Rs.${data.subtotal.toFixed(2)}`);
-  if (data.gstRate && data.gstRate > 0) {
-    const gstAmt = (data.subtotal * data.gstRate) / 100;
-    s += line32(`GST (${data.gstRate}%):`, `Rs.${gstAmt.toFixed(2)}`);
-  }
   if (data.discount && data.discount > 0) {
-    s += line32('Discount:', `-Rs.${data.discount.toFixed(2)}`);
+    const discLabel = data.discountPercent ? `Discount (${data.discountPercent}%):` : 'Discount:';
+    s += line32(discLabel, `-Rs.${data.discount.toFixed(2)}`);
+  }
+  if (data.gstRate && data.gstRate > 0) {
+    const taxableAmt = Math.max(0, data.subtotal - (data.discount || 0));
+    const gstAmt = (taxableAmt * data.gstRate) / 100;
+    s += line32(`GST (${data.gstRate}%):`, `Rs.${gstAmt.toFixed(2)}`);
   }
   s += '================================\n';
   s += CMD.BOLD_ON;
