@@ -366,6 +366,53 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
     }
   }, [tables, isElectron, counterSyncUrl, pushTablesToCounter]);
 
+  // Waiter Phone (Web / Android): Auto-pair from URL query parameters (e.g. from desktop QR code scan)
+  useEffect(() => {
+    if (isElectron || typeof window === 'undefined') return;
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlToken = searchParams.get('token');
+      const shouldSync = searchParams.get('sync') === '1' || searchParams.get('sync') === 'true';
+      let targetHost = searchParams.get('host') || searchParams.get('ip') || '';
+
+      if (!targetHost && window.location.port === '5050') {
+        targetHost = window.location.host;
+      }
+
+      let credentialsChanged = false;
+      if (urlToken && urlToken.trim()) {
+        const cleanTok = urlToken.trim().toUpperCase();
+        localStorage.setItem('hotel_rj_sync_token', cleanTok);
+        setCounterInputToken(cleanTok);
+        credentialsChanged = true;
+      }
+
+      if (targetHost && targetHost.trim()) {
+        const cleanH = targetHost.trim();
+        localStorage.setItem('hotel_rj_counter_sync_url', cleanH);
+        setCounterSyncUrl(cleanH);
+        setCounterInputUrl(cleanH);
+        credentialsChanged = true;
+      }
+
+      if (credentialsChanged || shouldSync) {
+        const activeTarget = targetHost || counterSyncUrl || window.location.host;
+        Logger.info('Sync', `Auto-pairing from QR code: target=${activeTarget}`);
+        performManualSync(activeTarget);
+        setPrintSuccessMsg('⚡ Auto-connected to Counter PC via QR code!');
+        setTimeout(() => setPrintSuccessMsg(null), 3500);
+
+        // Clean query parameters from URL without reloading
+        try {
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch {}
+      }
+    } catch (e: any) {
+      Logger.warn('Sync', `Could not parse URL auto-sync params: ${e?.message}`);
+    }
+  }, [isElectron, performManualSync, counterSyncUrl]);
+
   // Windows: Query Sync Server Info on mount
   useEffect(() => {
     if (isElectron && (window as any).ElectronAPI?.getSyncInfo) {

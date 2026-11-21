@@ -120,24 +120,31 @@ class LocalSyncServer {
   }
 
   /** Returns true if the request may proceed. Writes the error response itself when it may not. */
-  authorize(req, res, clientIp, pathname) {
-    // Connection test endpoint stays open (leaks only app name + LAN IP).
+  authorize(req, res, clientIp, pathname, url = null) {
+    // 1. Connection test endpoint stays open (leaks only app name + LAN IP).
     if (pathname === '/api/status') return true;
 
-    // Same-machine requests from the Counter app itself (no web Origin) are trusted.
+    // 2. Allow static web app bundle files (HTML, JS, CSS, images, icons, fonts)
+    // so mobile phone browsers on the local Wi-Fi can load the Waiter POS without requiring pre-installed APK
+    if (req.method === 'GET' && !pathname.startsWith('/api')) return true;
+
+    // 3. Same-machine requests from the Counter app itself (no web Origin) are trusted.
     const origin = req.headers.origin;
     const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(clientIp) || clientIp === '1';
     if (isLoopback && (!origin || origin === 'null' || origin.startsWith('file:'))) return true;
 
+    // 4. Token can be in X-Sync-Token header OR query parameter (?token=...)
     const tokenHeader = req.headers['x-sync-token'];
+    const tokenQuery = url && url.searchParams ? url.searchParams.get('token') : null;
+    const candidateToken = tokenHeader || tokenQuery;
 
-    // 1. Proving possession of the correct secret immediately authorizes and clears any lockout!
-    if (safeEqual(tokenHeader, this.syncToken)) {
+    // Proving possession of the correct secret immediately authorizes and clears any lockout!
+    if (safeEqual(candidateToken, this.syncToken)) {
       this.failedAuth.delete(clientIp);
       return true;
     }
 
-    // 2. Client is not authenticated with valid token. Check rate-limit lockout.
+    // 5. Client is not authenticated with valid token. Check rate-limit lockout.
     const now = Date.now();
     const f = this.failedAuth.get(clientIp);
     if (f && f.until > now) {
@@ -146,11 +153,12 @@ class LocalSyncServer {
       return false;
     }
 
-    // 3. Track failed attempts.
+    // 6. Track failed attempts.
     // Increment only if an actual (incorrect) token was submitted (i.e. guessing wrong code),
     // or if a client without any token is making mutating POST requests.
     // Unauthenticated GET requests on initial page load won't lock out legitimate devices.
-    const hasAttemptedToken = tokenHeader !== undefined && tokenHeader !== null && String(tokenHeader).trim() !== '';
+    const hasAttemptedToken = (tokenHeader !== undefined && tokenHeader !== null && String(tokenHeader).trim() !== '') ||
+                              (tokenQuery !== undefined && tokenQuery !== null && String(tokenQuery).trim() !== '');
     if (hasAttemptedToken || req.method === 'POST') {
       const count = (f ? f.count : 0) + 1;
       this.failedAuth.set(clientIp, { count, until: count >= 10 ? now + 5 * 60_000 : 0 });
@@ -281,7 +289,7 @@ class LocalSyncServer {
       }
 
       try {
-        if (!this.authorize(req, res, clientIp, url.pathname)) return;
+        if (!this.authorize(req, res, clientIp, url.pathname, url)) return;
 
       if (req.method === 'GET' && url.pathname === '/api/status') {
         logger.warn('SyncServer', `Ping /api/status from ${clientIp}`);
