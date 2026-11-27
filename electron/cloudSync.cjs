@@ -588,6 +588,146 @@ class SupabaseCloudSync {
         logger.warn('CloudSync', `Error pulling settled bills: ${billErr.message}`);
       }
 
+      // 7. Pull Staff Directory, Attendance, Advances & Payroll
+      await this._pullMergeCollection(url, headers, {
+        table: 'staff_members',
+        query: 'select=*&order=name.asc',
+        dataKey: 'staffMembers',
+        mapRow: (r) => ({
+          id: r.id,
+          name: r.name,
+          phone: r.phone || '',
+          emergencyContact: r.emergency_contact || '',
+          role: r.role || 'Waiter',
+          department: r.department || 'restaurant',
+          shift: r.shift || 'full_day',
+          payType: r.pay_type === 'daily' ? 'daily' : 'monthly',
+          baseSalary: Number(r.base_salary) || 0,
+          overtimeRate: Number(r.overtime_rate) || 0,
+          joinDate: r.join_date || '',
+          idProofNote: r.id_proof_note || '',
+          showInPos: r.show_in_pos !== false,
+          status: r.status || 'active',
+          notes: r.notes || '',
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          cloudSynced: true,
+        }),
+      });
+
+      await this._pullMergeCollection(url, headers, {
+        table: 'staff_attendance',
+        query: 'select=*&order=date_str.desc&limit=3000',
+        dataKey: 'staffAttendance',
+        mapRow: (r) => ({
+          id: r.id,
+          staffId: r.staff_id,
+          dateStr: r.date_str,
+          status: r.status || 'present',
+          checkIn: r.check_in || '',
+          checkOut: r.check_out || '',
+          overtimeHours: Number(r.overtime_hours) || 0,
+          notes: r.notes || '',
+          markedBy: r.marked_by || 'Manager',
+          updatedAt: r.updated_at,
+          cloudSynced: true,
+        }),
+      });
+
+      await this._pullMergeCollection(url, headers, {
+        table: 'staff_advances',
+        query: 'select=*&order=date_str.desc&limit=1000',
+        dataKey: 'staffAdvances',
+        mapRow: (r) => ({
+          id: r.id,
+          staffId: r.staff_id,
+          dateStr: r.date_str,
+          entryType: r.entry_type || 'advance',
+          amount: Number(r.amount) || 0,
+          paymentMode: r.payment_mode || 'Cash',
+          notes: r.notes || '',
+          linkedExpenseId: r.linked_expense_id || null,
+          recordedBy: r.recorded_by || 'Manager',
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          cloudSynced: true,
+        }),
+      });
+
+      await this._pullMergeCollection(url, headers, {
+        table: 'staff_payroll',
+        query: 'select=*&order=month_str.desc&limit=500',
+        dataKey: 'staffPayroll',
+        mapRow: (r) => ({
+          id: r.id,
+          staffId: r.staff_id,
+          monthStr: r.month_str,
+          payType: r.pay_type === 'daily' ? 'daily' : 'monthly',
+          baseSalary: Number(r.base_salary) || 0,
+          daysInMonth: Number(r.days_in_month) || 30,
+          presentDays: Number(r.present_days) || 0,
+          halfDays: Number(r.half_days) || 0,
+          paidLeavesAndOffs: Number(r.paid_leaves_and_offs) || 0,
+          absentDays: Number(r.absent_days) || 0,
+          overtimeHours: Number(r.overtime_hours) || 0,
+          earnedBasePay: Number(r.earned_base_pay) || 0,
+          overtimePay: Number(r.overtime_pay) || 0,
+          bonuses: Number(r.bonuses) || 0,
+          advancesDeducted: Number(r.advances_deducted) || 0,
+          otherDeductions: Number(r.other_deductions) || 0,
+          netPayable: Number(r.net_payable) || 0,
+          status: r.status || 'draft',
+          paymentMode: r.payment_mode || 'Cash',
+          paidAt: r.paid_at || null,
+          paidBy: r.paid_by || null,
+          linkedExpenseId: r.linked_expense_id || null,
+          notes: r.notes || '',
+          updatedAt: r.updated_at,
+          cloudSynced: true,
+        }),
+      });
+
+      await this._pullMergeCollection(url, headers, {
+        table: 'room_stays',
+        query: 'select=*&order=check_in_at.desc&limit=500',
+        dataKey: 'roomStays',
+        mapRow: (r) => ({
+          id: r.id,
+          roomId: r.room_id,
+          roomName: r.room_name || r.room_id,
+          stayType: r.stay_type === 'short_stay' ? 'short_stay' : 'nightly',
+          guestName: r.guest_name || 'Guest',
+          guestPhone: r.guest_phone || '',
+          numGuests: Number(r.num_guests) || 1,
+          idProofNote: r.id_proof_note || '',
+          checkInAt: r.check_in_at,
+          checkInDate: r.check_in_date,
+          expectedCheckOutDate: r.expected_check_out_date || '',
+          checkOutAt: r.check_out_at || null,
+          checkOutDate: r.check_out_date || null,
+          nightlyRate: Number(r.nightly_rate) || 0,
+          nights: Number(r.nights) || 1,
+          customStayPrice: Number(r.custom_stay_price) || 0,
+          extraCharges: Array.isArray(r.extra_charges) ? r.extra_charges : [],
+          advancePaid: Number(r.advance_paid) || 0,
+          advancePaymentMode: r.advance_payment_mode || 'Cash',
+          discount: Number(r.discount) || 0,
+          gstPercent: Number(r.gst_percent) || 0,
+          taxAmount: Number(r.tax_amount) || 0,
+          totalAmount: Number(r.total_amount) || 0,
+          status: r.status || 'active',
+          billId: r.bill_id || null,
+          billNumber: r.bill_number ? Number(r.bill_number) : null,
+          paymentMethod: r.payment_method || null,
+          notes: r.notes || '',
+          createdBy: r.created_by || 'Manager',
+          settledBy: r.settled_by || null,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          cloudSynced: true,
+        }),
+      });
+
       // Persist local database with pulled data
       db.persist();
 
@@ -868,11 +1008,207 @@ class SupabaseCloudSync {
       }
     }
 
+    // 8. Sync Staff Directory, Attendance, Advances & Payroll
+    await this._pushCollection(url, headers, {
+      table: 'staff_members',
+      dataKey: 'staffMembers',
+      mapRow: (s) => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone || '',
+        emergency_contact: s.emergencyContact || null,
+        role: s.role || 'Waiter',
+        department: s.department || 'restaurant',
+        shift: s.shift || 'full_day',
+        pay_type: s.payType === 'daily' ? 'daily' : 'monthly',
+        base_salary: Number(s.baseSalary) || 0,
+        overtime_rate: Number(s.overtimeRate) || 0,
+        join_date: s.joinDate || null,
+        id_proof_note: s.idProofNote || null,
+        show_in_pos: s.showInPos !== false,
+        status: s.status || 'active',
+        notes: s.notes || null,
+        created_at: s.createdAt || new Date().toISOString(),
+        updated_at: s.updatedAt || new Date().toISOString(),
+      }),
+    });
+
+    await this._pushCollection(url, headers, {
+      table: 'staff_attendance',
+      dataKey: 'staffAttendance',
+      mapRow: (a) => ({
+        id: a.id,
+        staff_id: a.staffId,
+        date_str: a.dateStr,
+        status: a.status || 'present',
+        check_in: a.checkIn || null,
+        check_out: a.checkOut || null,
+        overtime_hours: Number(a.overtimeHours) || 0,
+        notes: a.notes || null,
+        marked_by: a.markedBy || 'Manager',
+        updated_at: a.updatedAt || new Date().toISOString(),
+      }),
+    });
+
+    await this._pushCollection(url, headers, {
+      table: 'staff_advances',
+      dataKey: 'staffAdvances',
+      mapRow: (adv) => ({
+        id: adv.id,
+        staff_id: adv.staffId,
+        date_str: adv.dateStr,
+        entry_type: adv.entryType || 'advance',
+        amount: Number(adv.amount) || 0,
+        payment_mode: adv.paymentMode || 'Cash',
+        notes: adv.notes || null,
+        linked_expense_id: adv.linkedExpenseId || null,
+        recorded_by: adv.recordedBy || 'Manager',
+        created_at: adv.createdAt || new Date().toISOString(),
+        updated_at: adv.updatedAt || new Date().toISOString(),
+      }),
+    });
+
+    await this._pushCollection(url, headers, {
+      table: 'staff_payroll',
+      dataKey: 'staffPayroll',
+      mapRow: (p) => ({
+        id: p.id,
+        staff_id: p.staffId,
+        month_str: p.monthStr,
+        pay_type: p.payType === 'daily' ? 'daily' : 'monthly',
+        base_salary: Number(p.baseSalary) || 0,
+        days_in_month: Number(p.daysInMonth) || 30,
+        present_days: Number(p.presentDays) || 0,
+        half_days: Number(p.halfDays) || 0,
+        paid_leaves_and_offs: Number(p.paidLeavesAndOffs) || 0,
+        absent_days: Number(p.absentDays) || 0,
+        overtime_hours: Number(p.overtimeHours) || 0,
+        earned_base_pay: Number(p.earnedBasePay) || 0,
+        overtime_pay: Number(p.overtimePay) || 0,
+        bonuses: Number(p.bonuses) || 0,
+        advances_deducted: Number(p.advancesDeducted) || 0,
+        other_deductions: Number(p.otherDeductions) || 0,
+        net_payable: Number(p.netPayable) || 0,
+        status: p.status || 'draft',
+        payment_mode: p.paymentMode || null,
+        paid_at: p.paidAt || null,
+        paid_by: p.paidBy || null,
+        linked_expense_id: p.linkedExpenseId || null,
+        notes: p.notes || null,
+        updated_at: p.updatedAt || new Date().toISOString(),
+      }),
+    });
+
+    // 9. Sync Room Stays
+    await this._pushCollection(url, headers, {
+      table: 'room_stays',
+      dataKey: 'roomStays',
+      mapRow: (s) => ({
+        id: s.id,
+        room_id: s.roomId,
+        room_name: s.roomName || s.roomId,
+        stay_type: s.stayType === 'short_stay' ? 'short_stay' : 'nightly',
+        guest_name: s.guestName,
+        guest_phone: s.guestPhone || null,
+        num_guests: Number(s.numGuests) || 1,
+        id_proof_note: s.idProofNote || null,
+        check_in_at: s.checkInAt || new Date().toISOString(),
+        check_in_date: s.checkInDate,
+        expected_check_out_date: s.expectedCheckOutDate || null,
+        check_out_at: s.checkOutAt || null,
+        check_out_date: s.checkOutDate || null,
+        nightly_rate: Number(s.nightlyRate) || 0,
+        nights: Number(s.nights) || 1,
+        custom_stay_price: Number(s.customStayPrice) || 0,
+        extra_charges: Array.isArray(s.extraCharges) ? s.extraCharges : [],
+        advance_paid: Number(s.advancePaid) || 0,
+        advance_payment_mode: s.advancePaymentMode || 'Cash',
+        discount: Number(s.discount) || 0,
+        gst_percent: Number(s.gstPercent) || 0,
+        tax_amount: Number(s.taxAmount) || 0,
+        total_amount: Number(s.totalAmount) || 0,
+        status: s.status || 'active',
+        bill_id: s.billId || null,
+        bill_number: s.billNumber || null,
+        payment_method: s.paymentMethod || null,
+        notes: s.notes || null,
+        created_by: s.createdBy || 'Manager',
+        settled_by: s.settledBy || null,
+        created_at: s.createdAt || new Date().toISOString(),
+        updated_at: s.updatedAt || new Date().toISOString(),
+      }),
+    });
+
     db.persist();
 
     return {
       syncedBills: syncedBillsCount,
     };
+  }
+
+  // -------------------------------------------------------------
+  // Generic Pull/Push Helpers for New Collections
+  // -------------------------------------------------------------
+  async _pullMergeCollection(url, headers, { table, query, dataKey, mapRow }) {
+    try {
+      const res = await fetch(`${url}/rest/v1/${table}?${query}`, { headers });
+      if (!res.ok) return;
+      const rows = await res.json();
+      if (!Array.isArray(rows)) return;
+
+      const existingList = db.data[dataKey] || [];
+      const localMap = new Map(existingList.map((item) => [item.id, item]));
+      const cloudMap = new Map();
+
+      for (const r of rows) {
+        if (db.isPendingDeletion(table, r.id)) continue;
+        const mapped = mapRow(r);
+        const local = localMap.get(mapped.id);
+        if (local && local.isLocalNew) {
+          const localTime = new Date(local.updatedAt || 0).getTime();
+          const cloudTime = new Date(mapped.updatedAt || 0).getTime();
+          if (localTime > cloudTime) {
+            cloudMap.set(mapped.id, local);
+            continue;
+          }
+        }
+        cloudMap.set(mapped.id, mapped);
+      }
+
+      const merged = Array.from(cloudMap.values());
+      for (const localItem of existingList) {
+        if (db.isPendingDeletion(table, localItem.id)) continue;
+        if (!cloudMap.has(localItem.id) && localItem.isLocalNew) {
+          merged.push(localItem);
+        }
+      }
+      db.data[dataKey] = merged;
+      logger.warn('CloudSync', `Pulled & merged ${rows.length} ${table} from Supabase Cloud`);
+    } catch (err) {
+      logger.warn('CloudSync', `Error pulling ${table} from Cloud: ${err.message}`);
+    }
+  }
+
+  async _pushCollection(url, headers, { table, dataKey, mapRow }) {
+    const items = (db.data[dataKey] || []).filter((item) => !db.isPendingDeletion(table, item.id));
+    if (items.length === 0) return;
+    const batchSize = 100;
+    for (let i = 0; i < items.length; i += batchSize) {
+      const slice = items.slice(i, i + batchSize);
+      const res = await fetch(`${url}/rest/v1/${table}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(slice.map(mapRow)),
+      });
+      if (res.ok) {
+        for (const item of slice) {
+          item.cloudSynced = true;
+          item.isLocalNew = false;
+        }
+      } else {
+        console.warn(`[CloudSync] ${table} sync warning:`, res.statusText);
+      }
+    }
   }
 
   // -------------------------------------------------------------

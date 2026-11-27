@@ -2,6 +2,8 @@
 
 This document is the definitive technical blueprint and feature manual for the **Hotel RJ** platform. It details the multi-device architecture, data schemas, synchronization protocols, security model, and functional capabilities across the Web, Android POS, and Windows Counter POS platforms.
 
+> **Related Specifications:** See [Product Requirements Document (PRD)](./PRD.md) and [System Requirements & Technical Design (SRD)](./SRD.md) for detailed product workflows, payroll formulas, and upcoming implementation specs.
+
 ---
 
 ## 1. System Architecture & Multi-Device Topology
@@ -177,6 +179,63 @@ erDiagram
         jsonb value
         timestamptz updated_at
     }
+
+    STAFF_MEMBERS ||--o{ STAFF_ATTENDANCE : records
+    STAFF_MEMBERS ||--o{ STAFF_ADVANCES : takes
+    STAFF_MEMBERS ||--o{ STAFF_PAYROLL : settles
+    STAFF_MEMBERS {
+        text id PK
+        text name
+        text phone
+        text role
+        text department
+        text shift
+        text pay_type "monthly | daily"
+        numeric base_salary
+        numeric overtime_rate
+        date join_date
+        boolean show_in_pos
+        text status "active | on_leave | inactive"
+        timestamptz updated_at
+    }
+
+    STAFF_ATTENDANCE {
+        text id PK
+        text staff_id FK
+        text date_str
+        text status "present | half_day | absent | paid_leave | week_off"
+        text check_in
+        text check_out
+        numeric overtime_hours
+        text marked_by
+        timestamptz updated_at
+    }
+
+    STAFF_ADVANCES {
+        text id PK
+        text staff_id FK
+        text date_str
+        text entry_type "advance | deduction | bonus"
+        numeric amount
+        text payment_mode
+        text linked_expense_id
+        text recorded_by
+        timestamptz updated_at
+    }
+
+    STAFF_PAYROLL {
+        text id PK
+        text staff_id FK
+        text month_str
+        numeric earned_base_pay
+        numeric overtime_pay
+        numeric bonuses
+        numeric advances_deducted
+        numeric net_payable
+        text status "draft | paid"
+        text linked_expense_id
+        timestamptz paid_at
+    }
 ```
 
 ### Table Specifications
@@ -227,7 +286,14 @@ Daily petty cash expenditures (daily kharcha) paid from the cash drawer.
 #### 7. `paired_devices` & `app_settings`
 Security infrastructure for hardware authorization.
 - `paired_devices`: Registry of approved waiter phones and Counter POS laptops tied to owner Supabase authentication sessions.
-- `app_settings`: Key-value store holding the argon2/bcrypt hash of the owner's manager PIN.
+- `app_settings`: Key-value store holding the PBKDF2-SHA256 hash of the owner's manager PIN.
+
+#### 8. `staff_members`, `staff_attendance`, `staff_advances` & `staff_payroll` *(Planned — see [PRD](./PRD.md) & [SRD](./SRD.md))*
+Staff directory, daily muster roll, advances (*kharchi*), and monthly payroll snapshots.
+- `staff_members`: Employee profiles, roles, departments, pay type (`monthly` | `daily`), base salary, overtime rate, and `show_in_pos` flag for `WaiterPOS` quick-selection.
+- `staff_attendance`: Daily attendance (`present`, `half_day`, `absent`, `paid_leave`, `week_off`), optional check-in/out times, and overtime hours.
+- `staff_advances`: Mid-month cash advances, deductions, and bonuses with optional `linked_expense_id` link into `expenses`.
+- `staff_payroll`: Monthly payroll calculation snapshots (prorated by actual calendar days in month) with `draft` / `paid` locking and `linked_expense_id` expense tracking.
 
 ---
 
@@ -372,10 +438,11 @@ flowchart LR
 - **Split Payment Support**: Allows guests to split invoices across multiple modes (e.g., ₹500 in Cash + ₹1,200 via PhonePe/GPay UPI).
 - **Auto-Calculated CGST & SGST**: Automatically formats GST breaks, customer FSSAI details, and restaurant address headers.
 
-### Feature 4: Hotel Operations & Room Folio Billing
-- **Interactive Room Grid**: Real-time room status tracker for 10 guest rooms (Deluxe, Super Deluxe Executive, and Family Suites).
-- **Room Folio Transfer**: Restaurant and room-service food orders can be transferred directly to a guest's room folio, unifying lodging and dining onto a single checkout invoice.
-- **Housekeeping Turnaround**: Updates rooms to `'dirty'` upon checkout, signaling cleaning staff, and transitions back to `'available'` once inspected.
+### Feature 4: Hotel Operations, Room Check-In & Stay Billing
+- **Interactive Room Grid**: Real-time room status tracker for guest rooms (Deluxe, Super Deluxe Executive, and Family Suites) inside `HotelOperationsModal`.
+- **Guest Check-In & Short-Stay Custom Pricing**: Supports full **Nightly** stays as well as **Short Stay (2–3 hrs / Custom Price)** day-use bookings, recording guest details, negotiated tariff, advances, and extra room charges in `room_stays`.
+- **Checkout Bill Generation & Revenue Tracking**: Generates itemized Room Checkout bills (default 0% GST, optional GST toggle) saved directly to `bills` (`department: 'rooms'`) for `OwnerInsights`, with 58mm thermal printing and WhatsApp receipt sharing—kept cleanly separate from Restaurant dining bills.
+- **Housekeeping Turnaround**: Automatically transitions rooms to `'dirty'` upon checkout, signaling cleaning staff, and back to `'available'` once inspected.
 
 ### Feature 5: Owner Insights & Anti-Theft Audit Trail
 - **Multi-Department Granularity**: Separate revenue reporting for Restaurant Dining, Hotel Lodging, and Banquet Hall events.
@@ -386,6 +453,13 @@ flowchart LR
 ### Feature 6: Network Fallbacks & Offline Resilience
 - **Smart Protocol Routing**: Waiter phones prefer high-speed Wi-Fi HTTP (`http://192.168.1.X:5050`). If Wi-Fi drops, requests automatically re-route through Supabase Cloud REST over 4G/5G cellular data.
 - **DHCP Drift Protection**: Waiter POS UI highlights Counter IP connection changes and guides waiters with one-click reconnects.
+
+### Feature 7: Staff Management, Attendance & Payroll *(Specified in PRD/SRD v2.0)*
+- **Manager-PIN Protected**: Staff directory, attendance, advances, and salaries are gated behind `verifyManagerPin` (with architecture ready for an optional separate Owner PIN later).
+- **Daily Muster Roll & Monthly Grid**: Fast bulk attendance marking (`Mark Remaining Present`), optional check-in/out times and overtime hours, plus a color-coded monthly calendar matrix.
+- **Advances & Expense Sync**: Tracks mid-month advances (*kharchi*), deductions, and bonuses with over-advance alerts and an opt-in (default ON) toggle to record payouts in `expenses` for accurate `OwnerInsights` net profit.
+- **Monthly Payroll & Payslips**: Prorates monthly salaries by actual calendar days in the month (including paid week-offs/leaves and half-days) alongside daily-wage calculations, locks paid months, and supports 58mm thermal slips and WhatsApp payslip sharing.
+- **Waiter POS Quick-Pick**: Active dining staff appear in a quick-pick selector when setting the Waiter POS server name (with custom name fallback).
 
 ---
 

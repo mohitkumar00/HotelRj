@@ -959,6 +959,185 @@ class LocalSyncServer {
         return;
       }
 
+      // -------------------------------------------------------------
+      // Staff Directory, Attendance, Advances & Payroll REST API
+      // -------------------------------------------------------------
+      if (req.method === 'GET' && url.pathname === '/api/staff') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, staff: db.getStaffMembers() }));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/staff') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.saveStaffMember(data.staff || data);
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/staff/delete') {
+        return this._readJsonBody(req, res, async (data) => {
+          const id = data.id || data.staffId || url.searchParams.get('id');
+          const result = db.deleteStaffMember(id);
+          if (result.success && cloudSync.isConfigured()) {
+            const dRes = await cloudSync.deleteFromCloud('staff_members', 'id', id).catch(() => null);
+            if (dRes && dRes.success) db.removePendingDeletion('staff_members', id);
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/staff/attendance') {
+        const monthStr = url.searchParams.get('month') || undefined;
+        const dateStr = url.searchParams.get('date') || undefined;
+        const staffId = url.searchParams.get('staffId') || undefined;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, attendance: db.getStaffAttendance({ monthStr, dateStr, staffId }) }));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/staff/attendance') {
+        return this._readJsonBody(req, res, async (data) => {
+          const payload = data.records || data.record || data;
+          const result = db.saveStaffAttendance(payload);
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/staff/advances') {
+        const monthStr = url.searchParams.get('month') || undefined;
+        const staffId = url.searchParams.get('staffId') || undefined;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, advances: db.getStaffAdvances({ monthStr, staffId }) }));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/staff/advances') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.saveStaffAdvance(data.advance || data, { recordInExpenses: data.recordInExpenses });
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if ((req.method === 'DELETE' || req.method === 'POST') && url.pathname === '/api/staff/advances/delete') {
+        return this._readJsonBody(req, res, async (data) => {
+          const id = data.id || url.searchParams.get('id');
+          const result = db.deleteStaffAdvance(id, {
+            deleteLinkedExpense: data.deleteLinkedExpense,
+            deletedBy: data.deletedBy,
+            reason: data.reason,
+          });
+          if (result.success && cloudSync.isConfigured()) {
+            const dRes = await cloudSync.deleteFromCloud('staff_advances', 'id', id).catch(() => null);
+            if (dRes && dRes.success) db.removePendingDeletion('staff_advances', id);
+            if (result.deletedExpenseId) {
+              const eRes = await cloudSync.deleteFromCloud('expenses', 'id', result.deletedExpenseId).catch(() => null);
+              if (eRes && eRes.success) db.removePendingDeletion('expenses', result.deletedExpenseId);
+            }
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/staff/payroll') {
+        const monthStr = url.searchParams.get('month') || undefined;
+        const staffId = url.searchParams.get('staffId') || undefined;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, payroll: db.getStaffPayroll({ monthStr, staffId }) }));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/staff/payroll/settle') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.settleStaffPayroll(data.payroll || data, {
+            recordInExpenses: data.recordInExpenses,
+            paidDateStr: data.paidDateStr,
+          });
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/staff/payroll/unlock') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.unlockStaffPayroll(data.id, {
+            reason: data.reason,
+            unlockedBy: data.unlockedBy,
+            deleteLinkedExpense: data.deleteLinkedExpense,
+          });
+          if (result.success && cloudSync.isConfigured()) {
+            if (result.deletedExpenseId) {
+              const eRes = await cloudSync.deleteFromCloud('expenses', 'id', result.deletedExpenseId).catch(() => null);
+              if (eRes && eRes.success) db.removePendingDeletion('expenses', result.deletedExpenseId);
+            }
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      // -------------------------------------------------------------
+      // Room Stays & Checkout Billing REST API
+      // -------------------------------------------------------------
+      if (req.method === 'GET' && url.pathname === '/api/room-stays') {
+        const status = url.searchParams.get('status') || undefined;
+        const roomId = url.searchParams.get('roomId') || undefined;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, stays: db.getRoomStays({ status, roomId }) }));
+        return;
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/room-stays/check-in') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.checkInRoomStay(data.stay || data);
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/room-stays/save') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.saveRoomStay(data.stay || data);
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/room-stays/checkout') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.checkoutRoomStay(data);
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/room-stays/cancel') {
+        return this._readJsonBody(req, res, async (data) => {
+          const result = db.cancelRoomStay(data.stayId || data.id, data.reason);
+          if (result.success && cloudSync.isConfigured()) {
+            await cloudSync.pushToCloud().catch(() => {});
+          }
+          return { status: result.success ? 200 : 400, body: result };
+        });
+      }
+
       // Serve static Waiter POS web app files for mobile phone browsers (Zero APK install)
       if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
         const mimeTypes = {
@@ -1014,6 +1193,22 @@ class LocalSyncServer {
 
     this.server.listen(this.port, '0.0.0.0', () => {
       console.log(`Hotel RJ Counter Sync Server running at http://${this.localIp}:${this.port}`);
+    });
+  }
+
+  _readJsonBody(req, res, handler) {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body || '{}');
+        const { status, body: respBody } = await handler(data);
+        res.writeHead(status || 200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(respBody));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
     });
   }
 

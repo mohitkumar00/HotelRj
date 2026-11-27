@@ -553,6 +553,132 @@ ipcMain.handle('delete-banquet-booking', async (event, id) => {
 });
 
 // -------------------------------------------------------------
+// Staff Directory, Attendance, Advances & Payroll IPC Handlers
+// -------------------------------------------------------------
+ipcMain.handle('get-staff', async () => db.getStaffMembers());
+
+ipcMain.handle('save-staff', async (event, member) => {
+  const result = db.saveStaffMember(member);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing staff member: ' + e.message));
+  }
+  return result;
+});
+
+ipcMain.handle('delete-staff', async (event, id) => {
+  const result = db.deleteStaffMember(id);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    try {
+      const dRes = await cloudSync.deleteFromCloud('staff_members', 'id', id);
+      if (dRes && dRes.success) db.removePendingDeletion('staff_members', id);
+    } catch (e) {
+      logger.warn('CloudSync', 'Error deleting staff member from cloud: ' + e.message);
+    }
+  }
+  return result;
+});
+
+ipcMain.handle('get-staff-attendance', async (event, query) => db.getStaffAttendance(query));
+
+ipcMain.handle('save-staff-attendance', async (event, payload) => {
+  const result = db.saveStaffAttendance(payload);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing staff attendance: ' + e.message));
+  }
+  return result;
+});
+
+ipcMain.handle('get-staff-advances', async (event, query) => db.getStaffAdvances(query));
+
+ipcMain.handle('save-staff-advance', async (event, { entry, options }) => {
+  const result = db.saveStaffAdvance(entry, options);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing staff advance: ' + e.message));
+  }
+  return result;
+});
+
+ipcMain.handle('delete-staff-advance', async (event, { id, options }) => {
+  const result = db.deleteStaffAdvance(id, options);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    try {
+      const dRes = await cloudSync.deleteFromCloud('staff_advances', 'id', id);
+      if (dRes && dRes.success) db.removePendingDeletion('staff_advances', id);
+      if (result.deletedExpenseId) {
+        const eRes = await cloudSync.deleteFromCloud('expenses', 'id', result.deletedExpenseId);
+        if (eRes && eRes.success) db.removePendingDeletion('expenses', result.deletedExpenseId);
+      }
+    } catch (e) {
+      logger.warn('CloudSync', 'Error deleting staff advance from cloud: ' + e.message);
+    }
+  }
+  return result;
+});
+
+ipcMain.handle('get-staff-payroll', async (event, query) => db.getStaffPayroll(query));
+
+ipcMain.handle('settle-staff-payroll', async (event, { record, options }) => {
+  const result = db.settleStaffPayroll(record, options);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing staff payroll: ' + e.message));
+  }
+  return result;
+});
+
+ipcMain.handle('unlock-staff-payroll', async (event, { id, options }) => {
+  const result = db.unlockStaffPayroll(id, options);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    try {
+      if (result.deletedExpenseId) {
+        const eRes = await cloudSync.deleteFromCloud('expenses', 'id', result.deletedExpenseId);
+        if (eRes && eRes.success) db.removePendingDeletion('expenses', result.deletedExpenseId);
+      }
+      await cloudSync.pushToCloud();
+    } catch (e) {
+      logger.warn('CloudSync', 'Error syncing unlocked staff payroll: ' + e.message);
+    }
+  }
+  return result;
+});
+
+// -------------------------------------------------------------
+// Room Stays & Checkout Billing IPC Handlers
+// -------------------------------------------------------------
+ipcMain.handle('get-room-stays', async (event, query) => db.getRoomStays(query));
+
+ipcMain.handle('check-in-room-stay', async (event, stayData) => {
+  const result = db.checkInRoomStay(stayData);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing room check-in: ' + e.message));
+  }
+  return result;
+});
+
+ipcMain.handle('save-room-stay', async (event, stayData) => {
+  const result = db.saveRoomStay(stayData);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing room stay: ' + e.message));
+  }
+  return result;
+});
+
+ipcMain.handle('checkout-room-stay', async (event, payload) => {
+  const result = db.checkoutRoomStay(payload);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing room checkout: ' + e.message));
+  }
+  return result;
+});
+
+ipcMain.handle('cancel-room-stay', async (event, { stayId, reason }) => {
+  const result = db.cancelRoomStay(stayId, reason);
+  if (result.success && cloudSync && cloudSync.isConfigured()) {
+    cloudSync.pushToCloud().catch((e) => logger.warn('CloudSync', 'Error syncing room stay cancel: ' + e.message));
+  }
+  return result;
+});
+
+// -------------------------------------------------------------
 // Supabase Cloud Sync IPC Handlers
 // -------------------------------------------------------------
 ipcMain.handle('get-cloud-config', async () => {

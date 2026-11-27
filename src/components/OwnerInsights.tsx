@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, DollarSign, Smartphone, ChefHat, ShieldAlert, ArrowLeft, RefreshCw, PlusCircle, Trash2, Share2, Lock, AlertTriangle, Receipt, Download, Building, PartyPopper, UtensilsCrossed, Calendar, Layers, Cloud, Ban, KeyRound } from 'lucide-react';
+import { TrendingUp, DollarSign, Smartphone, ChefHat, ShieldAlert, ArrowLeft, RefreshCw, PlusCircle, Trash2, Share2, Lock, AlertTriangle, Receipt, Download, Building, PartyPopper, UtensilsCrossed, Calendar, Layers, Cloud, Ban, KeyRound, Users } from 'lucide-react';
 import {
   fetchAnalytics,
   addExpense,
@@ -21,6 +21,7 @@ import { ChangePinModal } from './pos/ChangePinModal';
 import { CloudSyncModal } from './owner/CloudSyncModal';
 import { ShareReportModal } from './owner/ShareReportModal';
 import { ExpenseModal } from './owner/ExpenseModal';
+import { StaffManagementModal } from './staff/StaffManagementModal';
 
 interface OwnerInsightsProps {
   onBack: () => void;
@@ -35,6 +36,7 @@ export const OwnerInsights: React.FC<OwnerInsightsProps> = ({ onBack }) => {
   const [pinError, setPinError] = useState<string | null>(null);
   const [isPairOpen, setIsPairOpen] = useState<boolean>(false);
   const [isChangePinOpen, setIsChangePinOpen] = useState<boolean>(false);
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState<boolean>(false);
 
   // Filter States
   const [period, setPeriod] = useState<AnalyticsQueryOptions['period']>('today');
@@ -400,6 +402,17 @@ _Saved permanently in Hotel RJ Database_`;
 
         {/* Right Header Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Staff & Payroll */}
+          <button
+            type="button"
+            onClick={() => setIsStaffModalOpen(true)}
+            className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+            title="Manage Staff Directory, Attendance, Advances & Payroll"
+          >
+            <Users className="w-3.5 h-3.5 text-amber-400" />
+            <span>Staff & Payroll</span>
+          </button>
+
           {/* Change PIN */}
           <button
             type="button"
@@ -1233,6 +1246,13 @@ _Saved permanently in Hotel RJ Database_`;
       )}
       <ChangePinModal isOpen={isChangePinOpen} onClose={() => setIsChangePinOpen(false)} />
       <PairDeviceModal isOpen={isPairOpen} onClose={() => setIsPairOpen(false)} />
+      <StaffManagementModal
+        isOpen={isStaffModalOpen}
+        onClose={() => setIsStaffModalOpen(false)}
+        initialTab="payroll"
+        skipPinGate={isAuthenticated}
+        onDataChanged={loadData}
+      />
     </div>
   );
 };

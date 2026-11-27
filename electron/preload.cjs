@@ -78,6 +78,26 @@ contextBridge.exposeInMainWorld('ElectronAPI', {
   saveBanquetBooking: (booking) => ipcRenderer.invoke('save-banquet-booking', booking),
   deleteBanquetBooking: (id) => ipcRenderer.invoke('delete-banquet-booking', id),
 
+  // Staff Directory, Attendance, Advances & Payroll
+  getStaff: () => ipcRenderer.invoke('get-staff'),
+  saveStaff: (member) => ipcRenderer.invoke('save-staff', member),
+  deleteStaff: (id) => ipcRenderer.invoke('delete-staff', id),
+  getStaffAttendance: (query) => ipcRenderer.invoke('get-staff-attendance', query),
+  saveStaffAttendance: (payload) => ipcRenderer.invoke('save-staff-attendance', payload),
+  getStaffAdvances: (query) => ipcRenderer.invoke('get-staff-advances', query),
+  saveStaffAdvance: (entry, options) => ipcRenderer.invoke('save-staff-advance', { entry, options }),
+  deleteStaffAdvance: (id, options) => ipcRenderer.invoke('delete-staff-advance', { id, options }),
+  getStaffPayroll: (query) => ipcRenderer.invoke('get-staff-payroll', query),
+  settleStaffPayroll: (record, options) => ipcRenderer.invoke('settle-staff-payroll', { record, options }),
+  unlockStaffPayroll: (id, options) => ipcRenderer.invoke('unlock-staff-payroll', { id, options }),
+
+  // Room Stays & Checkout Billing
+  getRoomStays: (query) => ipcRenderer.invoke('get-room-stays', query),
+  checkInRoomStay: (stayData) => ipcRenderer.invoke('check-in-room-stay', stayData),
+  saveRoomStay: (stayData) => ipcRenderer.invoke('save-room-stay', stayData),
+  checkoutRoomStay: (payload) => ipcRenderer.invoke('checkout-room-stay', payload),
+  cancelRoomStay: (stayId, reason) => ipcRenderer.invoke('cancel-room-stay', { stayId, reason }),
+
   // Supabase Cloud Sync
   getCloudConfig: () => ipcRenderer.invoke('get-cloud-config'),
   saveCloudConfig: (config) => ipcRenderer.invoke('save-cloud-config', config),

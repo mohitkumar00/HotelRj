@@ -15,6 +15,8 @@ import { OwnerInsights } from './OwnerInsights';
 import { HotelOperationsModal } from './HotelOperationsModal';
 import { BanquetCalendarModal } from './BanquetCalendarModal';
 import { fetchMenuApi, fetchTablesConfigApi, fetchRoomsApi } from '../utils/hotelDataApi';
+import { fetchStaffApi } from '../utils/staffApi';
+import type { StaffMember } from '../types/staff';
 import { DEFAULT_ROOMS } from '../data/defaultHotelConfig';
 import { HotelRoomRecord } from '../types';
 import {
@@ -58,10 +60,21 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
   });
   const [isEditingServer, setIsEditingServer] = useState(false);
   const [tempServerName, setTempServerName] = useState<string>(serverName);
+  const [posStaffList, setPosStaffList] = useState<StaffMember[]>([]);
   const serverNameRef = useRef(serverName);
   serverNameRef.current = serverName;
   const activeTableRef = useRef(activeTable);
   activeTableRef.current = activeTable;
+
+  useEffect(() => {
+    fetchStaffApi()
+      .then((list) => {
+        if (Array.isArray(list)) {
+          setPosStaffList(list.filter((s) => s.status === 'active' && s.showInPos));
+        }
+      })
+      .catch(() => {});
+  }, [isEditingServer]);
 
   // Stable client device ID for waiter hardware (deduplicates heartbeat presence on Counter POS)
   const waiterClientIdRef = useRef<string>('');
@@ -1807,18 +1820,48 @@ export const WaiterPOS: React.FC<WaiterPOSProps> = ({ onSwitchToGuestMenu }) => 
               </div>
               {/* Server Name Tag */}
               {isEditingServer ? (
-                <div className="flex items-center gap-1 mt-0.5">
-                  <input
-                    type="text"
-                    value={tempServerName}
-                    onChange={(e) => setTempServerName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') commitServerName(tempServerName);
-                    }}
-                    onBlur={() => commitServerName(tempServerName)}
-                    autoFocus
-                    className="text-[10px] bg-zinc-800 text-white px-1.5 py-0.5 rounded border border-gold-400 focus:outline-none w-24"
-                  />
+                <div className="relative mt-0.5">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={tempServerName}
+                      onChange={(e) => setTempServerName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitServerName(tempServerName);
+                        if (e.key === 'Escape') setIsEditingServer(false);
+                      }}
+                      autoFocus
+                      className="text-[10px] bg-zinc-800 text-white px-1.5 py-0.5 rounded border border-gold-400 focus:outline-none w-24"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => commitServerName(tempServerName)}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-gold-500 text-black font-bold"
+                    >
+                      OK
+                    </button>
+                  </div>
+                  {posStaffList.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1 z-50 w-44 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl p-1.5 space-y-1 max-h-48 overflow-y-auto">
+                      <div className="text-[9px] uppercase tracking-wider text-zinc-400 px-1.5 py-0.5 font-bold">
+                        Active Staff
+                      </div>
+                      {posStaffList.map((staff) => (
+                        <button
+                          key={staff.id}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => commitServerName(staff.name)}
+                          className={`w-full text-left px-2 py-1 rounded-lg text-[11px] flex items-center justify-between hover:bg-zinc-800 ${
+                            serverName === staff.name ? 'text-gold-300 font-bold bg-zinc-800/70' : 'text-zinc-200'
+                          }`}
+                        >
+                          <span className="truncate">{staff.name}</span>
+                          <span className="text-[9px] text-zinc-400 ml-1 shrink-0">{staff.role}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <button

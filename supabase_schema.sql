@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS title TEXT;
 CREATE INDEX IF NOT EXISTS idx_expenses_date_str ON expenses(date_str);
 
 -- 4. LIVE MENU ITEMS TABLE (Dishes, Pricing & Kitchen 86 Sold-Out Status)
@@ -162,6 +163,126 @@ ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tables_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE banquet_bookings ENABLE ROW LEVEL SECURITY;
+
+-- 6c. STAFF DIRECTORY, ATTENDANCE, ADVANCES & PAYROLL
+CREATE TABLE IF NOT EXISTS staff_members (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  emergency_contact TEXT,
+  role TEXT NOT NULL DEFAULT 'Waiter',
+  department TEXT NOT NULL DEFAULT 'restaurant',
+  shift TEXT NOT NULL DEFAULT 'full_day',
+  pay_type TEXT NOT NULL DEFAULT 'monthly',
+  base_salary NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  overtime_rate NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  join_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  id_proof_note TEXT,
+  show_in_pos BOOLEAN NOT NULL DEFAULT true,
+  status TEXT NOT NULL DEFAULT 'active',
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS staff_attendance (
+  id TEXT PRIMARY KEY,
+  staff_id TEXT NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
+  date_str TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'present',
+  check_in TEXT,
+  check_out TEXT,
+  overtime_hours NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  notes TEXT,
+  marked_by TEXT DEFAULT 'Manager',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (staff_id, date_str)
+);
+
+CREATE TABLE IF NOT EXISTS staff_advances (
+  id TEXT PRIMARY KEY,
+  staff_id TEXT NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
+  date_str TEXT NOT NULL,
+  entry_type TEXT NOT NULL DEFAULT 'advance',
+  amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  payment_mode TEXT NOT NULL DEFAULT 'Cash',
+  notes TEXT,
+  linked_expense_id TEXT,
+  recorded_by TEXT DEFAULT 'Manager',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS staff_payroll (
+  id TEXT PRIMARY KEY,
+  staff_id TEXT NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
+  month_str TEXT NOT NULL,
+  pay_type TEXT NOT NULL DEFAULT 'monthly',
+  base_salary NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  days_in_month INTEGER NOT NULL DEFAULT 30,
+  present_days NUMERIC(5, 1) NOT NULL DEFAULT 0,
+  half_days NUMERIC(5, 1) NOT NULL DEFAULT 0,
+  paid_leaves_and_offs NUMERIC(5, 1) NOT NULL DEFAULT 0,
+  absent_days NUMERIC(5, 1) NOT NULL DEFAULT 0,
+  overtime_hours NUMERIC(6, 2) NOT NULL DEFAULT 0,
+  earned_base_pay NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  overtime_pay NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  bonuses NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  advances_deducted NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  other_deductions NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  net_payable NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'draft',
+  payment_mode TEXT,
+  paid_at TIMESTAMPTZ,
+  paid_by TEXT,
+  linked_expense_id TEXT,
+  notes TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (staff_id, month_str)
+);
+
+ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_advances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_payroll ENABLE ROW LEVEL SECURITY;
+
+-- 6d. ROOM STAYS & CHECKOUT BILLING
+CREATE TABLE IF NOT EXISTS room_stays (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  room_name TEXT NOT NULL,
+  stay_type TEXT NOT NULL DEFAULT 'nightly',
+  guest_name TEXT NOT NULL,
+  guest_phone TEXT,
+  num_guests INTEGER NOT NULL DEFAULT 1,
+  id_proof_note TEXT,
+  check_in_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  check_in_date TEXT NOT NULL,
+  expected_check_out_date TEXT,
+  check_out_at TIMESTAMPTZ,
+  check_out_date TEXT,
+  nightly_rate NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  nights INTEGER NOT NULL DEFAULT 1,
+  custom_stay_price NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  extra_charges JSONB NOT NULL DEFAULT '[]'::jsonb,
+  advance_paid NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  advance_payment_mode TEXT DEFAULT 'Cash',
+  discount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  gst_percent NUMERIC(5, 2) NOT NULL DEFAULT 0,
+  tax_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',
+  bill_id TEXT,
+  bill_number BIGINT,
+  payment_method TEXT,
+  notes TEXT,
+  created_by TEXT DEFAULT 'Manager',
+  settled_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE room_stays ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS banquet_bookings_all ON banquet_bookings;
 CREATE POLICY banquet_bookings_all ON banquet_bookings

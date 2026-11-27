@@ -301,6 +301,35 @@ export const BluetoothPrinter = {
   },
 
   /**
+   * Print any 58mm HTML slip (e.g., Staff Salary Slip) via Electron / Android PrintManager / Browser
+   */
+  async printRawHtmlReceipt(html: string, jobName = 'HotelRJ_Slip'): Promise<{ success: boolean; method: string; error?: string }> {
+    const electronAPI = (window as any).ElectronAPI;
+    if (electronAPI?.isElectron && electronAPI.printThermal) {
+      const selectedDevice = localStorage.getItem('hotel_rj_windows_printer') || '';
+      try {
+        const res = await electronAPI.printThermal(html, selectedDevice);
+        if (res.success) return { success: true, method: res.method };
+      } catch (err: any) {
+        Logger.warn('Printer', `Windows raw HTML print warning: ${err?.message}`);
+      }
+    }
+
+    const androidPrinter = (window as any).AndroidPrinter;
+    if (androidPrinter?.printHtml) {
+      try {
+        androidPrinter.printHtml(html, jobName);
+        return { success: true, method: 'Android System Print Spooler' };
+      } catch (err: any) {
+        Logger.warn('Printer', `Android raw HTML print failed: ${err?.message}`);
+      }
+    }
+
+    printViaAndroidSpooler(html);
+    return { success: true, method: 'Browser Print' };
+  },
+
+  /**
    * Helper to send raw ESC/POS bytes over Bluetooth characteristic in chunks
    */
   async sendBytes(bytes: Uint8Array): Promise<boolean> {

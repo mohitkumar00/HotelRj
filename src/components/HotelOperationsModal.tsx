@@ -19,6 +19,10 @@ import {
   RefreshCw,
   Sliders,
   Check,
+  Users,
+  History,
+  UserPlus,
+  Receipt,
 } from 'lucide-react';
 import { MenuCategory, MenuItem, HotelRoomRecord, TableConfigItem, DietaryType } from '../types';
 import {
@@ -37,6 +41,18 @@ import {
 import { EditTableModal } from './ops/EditTableModal';
 import { EditRoomModal } from './ops/EditRoomModal';
 import { EditDishModal } from './ops/EditDishModal';
+import { RoomCheckInModal } from './ops/RoomCheckInModal';
+import { RoomCheckoutModal } from './ops/RoomCheckoutModal';
+import { RoomStayHistoryModal } from './ops/RoomStayHistoryModal';
+import { StaffManagementModal } from './staff/StaffManagementModal';
+import { RoomStayRecord } from '../types/roomStay';
+import {
+  checkInRoomStayApi,
+  checkoutRoomStayApi,
+  fetchRoomStaysApi,
+  saveRoomStayApi,
+} from '../utils/roomStayApi';
+import { localDateString } from '../utils/dates';
 
 interface HotelOperationsModalProps {
   isOpen: boolean;
@@ -60,6 +76,7 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   const [pinError, setPinError] = useState<string | null>(null);
   const [isPairOpen, setIsPairOpen] = useState(false);
   const [isChangePinOpen, setIsChangePinOpen] = useState(false);
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
 
   // Data states
   const [loading, setLoading] = useState(false);
@@ -89,6 +106,10 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   const [rooms, setRooms] = useState<HotelRoomRecord[]>([]);
   const [roomFilter, setRoomFilter] = useState<'all' | 'available' | 'occupied' | 'dirty' | 'maintenance'>('all');
   const [editingRoom, setEditingRoom] = useState<(HotelRoomRecord & { originalId?: string }) | null>(null);
+  const [roomStays, setRoomStays] = useState<RoomStayRecord[]>([]);
+  const [checkInRoomTarget, setCheckInRoomTarget] = useState<HotelRoomRecord | null>(null);
+  const [checkoutTarget, setCheckoutTarget] = useState<{ stay: RoomStayRecord; mode: 'manage' | 'checkout' } | null>(null);
+  const [isStayHistoryOpen, setIsStayHistoryOpen] = useState(false);
 
   // Tables state
   const [tablesConfig, setTablesConfig] = useState<TableConfigItem[]>([]);
@@ -99,14 +120,16 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [menu, rList, tList] = await Promise.all([
+      const [menu, rList, tList, staysList] = await Promise.all([
         fetchMenuApi(),
         fetchRoomsApi(),
         fetchTablesConfigApi(),
+        fetchRoomStaysApi(),
       ]);
       setMenuCategories(menu);
       setRooms(rList);
       setTablesConfig(tList);
+      setRoomStays(staysList);
     } catch (err) {
       console.warn('Failed to load hotel operations data:', err);
     } finally {
@@ -483,6 +506,14 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStaffModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 transition"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Staff Attendance</span>
+                </button>
                 {activeTab === 'dishes' && (
                   <button
                     onClick={() =>
@@ -766,19 +797,48 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                     ))}
                   </div>
 
-                  <span className="text-xs text-slate-400 hidden sm:inline">
-                    Tap a status pill to update room housekeeping in 1 click
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsStayHistoryOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 transition"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>Stay History</span>
+                  </button>
                 </div>
 
                 {/* Rooms Grid */}
                 <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {filteredRooms.map((room) => {
+                    const activeStay = roomStays.find(
+                      (s) => s.status === 'active' && s.roomId.toLowerCase() === room.id.toLowerCase()
+                    );
                     const statusColors = {
                       available: 'border-emerald-500/40 bg-emerald-950/10 text-emerald-400',
                       occupied: 'border-rose-500/40 bg-rose-950/10 text-rose-400',
                       dirty: 'border-amber-500/40 bg-amber-950/10 text-amber-400',
                       maintenance: 'border-slate-600 bg-slate-800/40 text-slate-400',
+                    };
+
+                    const openStayModal = async (mode: 'manage' | 'checkout') => {
+                      if (activeStay) {
+                        setCheckoutTarget({ stay: activeStay, mode });
+                        return;
+                      }
+                      const res = await checkInRoomStayApi({
+                        roomId: room.id,
+                        roomName: room.name,
+                        stayType: 'nightly',
+                        guestName: room.guestName || 'Walk-In Guest',
+                        checkInDate: room.checkInDate || localDateString(),
+                        nightlyRate: room.pricePerNight,
+                        nights: 1,
+                        createdBy: 'Manager',
+                      });
+                      if (res.success && res.stay) {
+                        await loadAllData();
+                        setCheckoutTarget({ stay: res.stay, mode });
+                      }
                     };
 
                     return (
@@ -804,17 +864,72 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
                             </div>
                           </div>
 
-                          {room.guestName && (
-                            <div className="mt-2 p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 text-xs">
-                              <span className="text-slate-400">Guest:</span>{' '}
-                              <span className="font-semibold text-white">{room.guestName}</span>
-                              {room.checkInDate && (
-                                <span className="text-slate-400 block text-[10px] mt-0.5">
-                                  Checked in: {room.checkInDate}
+                          {(activeStay || room.guestName) && (
+                            <div className="mt-2 p-2.5 rounded-lg bg-slate-800/60 border border-slate-700/60 text-xs space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <span className="text-slate-400">Guest:</span>{' '}
+                                  <span className="font-semibold text-white">
+                                    {activeStay?.guestName || room.guestName}
+                                  </span>
+                                </div>
+                                {activeStay && (
+                                  <span
+                                    className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                                      activeStay.stayType === 'short_stay'
+                                        ? 'bg-sky-500/20 text-sky-300'
+                                        : 'bg-amber-500/20 text-amber-300'
+                                    }`}
+                                  >
+                                    {activeStay.stayType === 'short_stay'
+                                      ? `Short ₹${activeStay.customStayPrice}`
+                                      : `₹${activeStay.nightlyRate}/N`}
+                                  </span>
+                                )}
+                              </div>
+                              {(activeStay?.checkInDate || room.checkInDate) && (
+                                <span className="text-slate-400 block text-[10px]">
+                                  Checked in: {activeStay?.checkInDate || room.checkInDate}
+                                  {activeStay && activeStay.advancePaid > 0
+                                    ? ` • Adv: ₹${activeStay.advancePaid}`
+                                    : ''}
                                 </span>
                               )}
                             </div>
                           )}
+
+                          {/* Primary Check-In / Checkout Actions */}
+                          <div className="mt-3 flex gap-2">
+                            {room.status === 'available' && (
+                              <button
+                                type="button"
+                                onClick={() => setCheckInRoomTarget(room)}
+                                className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow"
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                <span>Check In Guest</span>
+                              </button>
+                            )}
+                            {room.status === 'occupied' && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => openStayModal('manage')}
+                                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold"
+                                >
+                                  Extras / Rate
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openStayModal('checkout')}
+                                  className="flex-1 py-2 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 shadow"
+                                >
+                                  <Receipt className="w-3.5 h-3.5" />
+                                  <span>Check Out & Bill</span>
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
 
                         {/* Housekeeping Status Quick Selector */}
@@ -962,6 +1077,65 @@ export const HotelOperationsModal: React.FC<HotelOperationsModalProps> = ({
         )}
 
         <ChangePinModal isOpen={isChangePinOpen} onClose={() => setIsChangePinOpen(false)} />
+        <StaffManagementModal
+          isOpen={isStaffModalOpen}
+          onClose={() => setIsStaffModalOpen(false)}
+          initialTab="attendance"
+          skipPinGate={isUnlocked}
+          onDataChanged={onDataChanged}
+        />
+        {checkInRoomTarget && (
+          <RoomCheckInModal
+            room={checkInRoomTarget}
+            onClose={() => setCheckInRoomTarget(null)}
+            onConfirmCheckIn={async (stayInput) => {
+              const res = await checkInRoomStayApi(stayInput);
+              if (!res.success) {
+                alert(res.error || 'Could not check in guest.');
+                return false;
+              }
+              showNotification(`Checked in ${stayInput.guestName} to ${checkInRoomTarget.name}`);
+              await loadAllData();
+              onDataChanged?.();
+              return true;
+            }}
+          />
+        )}
+        {checkoutTarget && (
+          <RoomCheckoutModal
+            stay={checkoutTarget.stay}
+            mode={checkoutTarget.mode}
+            onClose={() => setCheckoutTarget(null)}
+            onSaveStay={async (updated) => {
+              const res = await saveRoomStayApi(updated);
+              if (!res.success) {
+                alert(res.error || 'Could not update stay.');
+                return false;
+              }
+              showNotification(`Updated stay for ${updated.roomName}`);
+              await loadAllData();
+              onDataChanged?.();
+              return true;
+            }}
+            onCheckoutStay={async (stay, payload) => {
+              const res = await checkoutRoomStayApi(stay, payload);
+              if (!res.success) {
+                alert(res.error || 'Checkout failed.');
+                return { success: false };
+              }
+              showNotification(`${stay.roomName} checked out & bill settled!`);
+              await loadAllData();
+              onDataChanged?.();
+              return res;
+            }}
+          />
+        )}
+        {isStayHistoryOpen && (
+          <RoomStayHistoryModal
+            stays={roomStays}
+            onClose={() => setIsStayHistoryOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

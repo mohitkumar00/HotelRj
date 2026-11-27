@@ -27,6 +27,11 @@ class HotelDatabase {
       auditLogs: [],
       expenses: [],
       banquetBookings: [],
+      staffMembers: [],
+      staffAttendance: [],
+      staffAdvances: [],
+      staffPayroll: [],
+      roomStays: [],
       menuCategories: JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES)),
       rooms: JSON.parse(JSON.stringify(DEFAULT_ROOMS)),
       tablesConfig: JSON.parse(JSON.stringify(DEFAULT_TABLES_CONFIG)),
@@ -59,6 +64,11 @@ class HotelDatabase {
             auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
             expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
             banquetBookings: Array.isArray(parsed.banquetBookings) ? parsed.banquetBookings : [],
+            staffMembers: Array.isArray(parsed.staffMembers) ? parsed.staffMembers : [],
+            staffAttendance: Array.isArray(parsed.staffAttendance) ? parsed.staffAttendance : [],
+            staffAdvances: Array.isArray(parsed.staffAdvances) ? parsed.staffAdvances : [],
+            staffPayroll: Array.isArray(parsed.staffPayroll) ? parsed.staffPayroll : [],
+            roomStays: Array.isArray(parsed.roomStays) ? parsed.roomStays : [],
             menuCategories: Array.isArray(parsed.menuCategories) && parsed.menuCategories.length > 0 
               ? parsed.menuCategories 
               : JSON.parse(JSON.stringify(DEFAULT_MENU_CATEGORIES)),
@@ -1099,6 +1109,710 @@ class HotelDatabase {
     this.recordPendingDeletion('banquet_bookings', id);
     this.persist();
     return { success: true, deletedId: id };
+  }
+
+  // -------------------------------------------------------------
+  // Staff Directory, Attendance, Advances & Payroll
+  // -------------------------------------------------------------
+  _localDateStr(d = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  _mapExpensePaidBy(paymentMode) {
+    if (paymentMode === 'UPI') return 'UPI';
+    if (paymentMode === 'Bank Transfer') return 'Bank Transfer';
+    return 'Cash Drawer';
+  }
+
+  getStaffMembers() {
+    return this.data.staffMembers || [];
+  }
+
+  saveStaffMember(member) {
+    if (!member || !String(member.name || '').trim()) {
+      return { success: false, error: 'Staff name is required' };
+    }
+    if (!this.data.staffMembers) this.data.staffMembers = [];
+    const nowIso = new Date().toISOString();
+    const id = member.id || `STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const record = {
+      id,
+      name: String(member.name).trim(),
+      phone: String(member.phone || '').trim(),
+      emergencyContact: member.emergencyContact ? String(member.emergencyContact).trim() : '',
+      role: member.role || 'Waiter',
+      department: member.department || 'restaurant',
+      shift: member.shift || 'full_day',
+      payType: member.payType === 'daily' ? 'daily' : 'monthly',
+      baseSalary: Number(member.baseSalary) || 0,
+      overtimeRate: Number(member.overtimeRate) || 0,
+      joinDate: member.joinDate || this._localDateStr(),
+      idProofNote: member.idProofNote ? String(member.idProofNote).trim() : '',
+      showInPos: member.showInPos !== false,
+      status: member.status || 'active',
+      notes: member.notes ? String(member.notes).trim() : '',
+      createdAt: member.createdAt || nowIso,
+      updatedAt: nowIso,
+      cloudSynced: false,
+      isLocalNew: true,
+    };
+
+    const idx = this.data.staffMembers.findIndex((s) => s.id === id);
+    if (idx >= 0) {
+      this.data.staffMembers[idx] = { ...this.data.staffMembers[idx], ...record };
+    } else {
+      this.data.staffMembers.unshift(record);
+    }
+
+    this.removePendingDeletion('staff_members', id);
+    this.persist();
+    return { success: true, staff: record };
+  }
+
+  deleteStaffMember(id) {
+    if (!id) return { success: false, error: 'Staff ID required' };
+    this.data.staffMembers = (this.data.staffMembers || []).filter((s) => s.id !== id);
+    this.recordPendingDeletion('staff_members', id);
+    this.persist();
+    return { success: true, deletedId: id };
+  }
+
+  getStaffAttendance(query = {}) {
+    let list = this.data.staffAttendance || [];
+    if (query.staffId) {
+      list = list.filter((a) => a.staffId === query.staffId);
+    }
+    if (query.dateStr) {
+      list = list.filter((a) => a.dateStr === query.dateStr);
+    } else if (query.monthStr) {
+      list = list.filter((a) => (a.dateStr || '').startsWith(query.monthStr));
+    }
+    return list;
+  }
+
+  saveStaffAttendance(payload) {
+    const records = Array.isArray(payload) ? payload : [payload];
+    if (!this.data.staffAttendance) this.data.staffAttendance = [];
+    if (!this.data.staffPayroll) this.data.staffPayroll = [];
+
+    const today = this._localDateStr();
+    const todayDate = new Date();
+    const nowIso = new Date().toISOString();
+    const saved = [];
+
+    for (const item of records) {
+      if (!item || !item.staffId || !item.dateStr) continue;
+      const monthStr = String(item.dateStr).slice(0, 7);
+      const locked = this.data.staffPayroll.find(
+        (p) => p.staffId === item.staffId && p.monthStr === monthStr && p.status === 'paid'
+      );
+      if (locked) {
+        return {
+          success: false,
+          error: `Payroll for ${monthStr} is already marked PAID. Unlock payroll before editing attendance.`,
+        };
+      }
+
+      const id = `${item.staffId}_${item.dateStr}`;
+      const record = {
+        id,
+        staffId: item.staffId,
+        dateStr: item.dateStr,
+        status: item.status || 'present',
+        checkIn: item.checkIn || '',
+        checkOut: item.checkOut || '',
+        overtimeHours: Number(item.overtimeHours) || 0,
+        notes: item.notes || '',
+        markedBy: item.markedBy || 'Manager',
+        updatedAt: nowIso,
+        cloudSynced: false,
+        isLocalNew: true,
+      };
+
+      const idx = this.data.staffAttendance.findIndex(
+        (a) => a.id === id || (a.staffId === item.staffId && a.dateStr === item.dateStr)
+      );
+      if (idx >= 0) {
+        this.data.staffAttendance[idx] = record;
+      } else {
+        this.data.staffAttendance.push(record);
+      }
+      this.removePendingDeletion('staff_attendance', id);
+      saved.push(record);
+
+      // Audit backdated attendance edits (> 3 days old)
+      if (item.dateStr < today) {
+        const [y, m, d] = item.dateStr.split('-').map(Number);
+        const recDate = new Date(y, (m || 1) - 1, d || 1);
+        const diffDays = Math.floor((todayDate.getTime() - recDate.getTime()) / (24 * 60 * 60 * 1000));
+        if (diffDays > 3) {
+          const staff = (this.data.staffMembers || []).find((s) => s.id === item.staffId);
+          this.saveAuditLog({
+            type: 'STAFF_ATTENDANCE_BACKDATED',
+            tableId: 'Staff-Attendance',
+            staffName: item.markedBy || 'Manager',
+            itemName: `${staff ? staff.name : item.staffId} (${item.dateStr} -> ${record.status})`,
+            itemPrice: 0,
+            quantity: 1,
+            reason: item.notes || `Backdated attendance edited (${diffDays}d ago)`,
+          });
+        }
+      }
+    }
+
+    this.persist();
+    return { success: true, records: saved };
+  }
+
+  getStaffAdvances(query = {}) {
+    let list = this.data.staffAdvances || [];
+    if (query.staffId) {
+      list = list.filter((a) => a.staffId === query.staffId);
+    }
+    if (query.monthStr) {
+      list = list.filter((a) => (a.dateStr || '').startsWith(query.monthStr));
+    }
+    return list.slice().sort((a, b) => (b.dateStr || '').localeCompare(a.dateStr || ''));
+  }
+
+  saveStaffAdvance(entry, options = {}) {
+    if (!entry || !entry.staffId || !(Number(entry.amount) > 0)) {
+      return { success: false, error: 'Staff ID and positive amount are required' };
+    }
+    if (!this.data.staffAdvances) this.data.staffAdvances = [];
+
+    const nowIso = new Date().toISOString();
+    const id = entry.id || `SADV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const dateStr = entry.dateStr || this._localDateStr();
+    const entryType = entry.entryType || 'advance';
+    const paymentMode = entry.paymentMode || 'Cash';
+    const staff = (this.data.staffMembers || []).find((s) => s.id === entry.staffId);
+    const staffName = staff ? staff.name : entry.staffId;
+
+    let linkedExpenseId = entry.linkedExpenseId || null;
+    const shouldLinkExpense =
+      options.recordInExpenses === true &&
+      (entryType === 'advance' || entryType === 'bonus') &&
+      paymentMode !== 'Adjustment';
+
+    if (shouldLinkExpense) {
+      const expId = linkedExpenseId || `EXP-${id}`;
+      const label = entryType === 'bonus' ? 'Bonus' : 'Advance (Kharchi)';
+      const expRecord = this.saveExpense({
+        id: expId,
+        title: `${staffName} - ${label}`,
+        category: entryType === 'bonus' ? 'Staff Bonus' : 'Staff Advance',
+        amount: Number(entry.amount),
+        paidBy: this._mapExpensePaidBy(paymentMode),
+        notes: entry.notes || `Staff ${label} recorded on ${dateStr}`,
+        recordedBy: entry.recordedBy || 'Manager',
+        timestamp: `${dateStr}T12:00:00`,
+      });
+      if (expRecord) {
+        expRecord.dateStr = dateStr;
+        linkedExpenseId = expRecord.id;
+      }
+    }
+
+    const record = {
+      id,
+      staffId: entry.staffId,
+      dateStr,
+      entryType,
+      amount: Number(entry.amount),
+      paymentMode,
+      notes: entry.notes || '',
+      linkedExpenseId,
+      recordedBy: entry.recordedBy || 'Manager',
+      createdAt: entry.createdAt || nowIso,
+      updatedAt: nowIso,
+      cloudSynced: false,
+      isLocalNew: true,
+    };
+
+    const idx = this.data.staffAdvances.findIndex((a) => a.id === id);
+    if (idx >= 0) {
+      this.data.staffAdvances[idx] = record;
+    } else {
+      this.data.staffAdvances.unshift(record);
+    }
+
+    this.saveAuditLog({
+      type: 'STAFF_ADVANCE_RECORDED',
+      tableId: 'Staff-Payroll',
+      staffName: record.recordedBy,
+      itemName: `${staffName} (${entryType})`,
+      itemPrice: record.amount,
+      quantity: 1,
+      reason: record.notes || `${entryType} via ${paymentMode}`,
+    });
+
+    this.removePendingDeletion('staff_advances', id);
+    this.persist();
+    return { success: true, advance: record };
+  }
+
+  deleteStaffAdvance(id, options = {}) {
+    if (!id) return { success: false, error: 'Advance ID required' };
+    const list = this.data.staffAdvances || [];
+    const target = list.find((a) => a.id === id);
+    if (!target) return { success: false, error: 'Advance record not found' };
+
+    const deletedExpenseId =
+      options.deleteLinkedExpense !== false && target.linkedExpenseId ? target.linkedExpenseId : null;
+
+    if (deletedExpenseId) {
+      this.deleteExpense(deletedExpenseId);
+    }
+
+    this.data.staffAdvances = list.filter((a) => a.id !== id);
+    this.recordPendingDeletion('staff_advances', id);
+
+    const staff = (this.data.staffMembers || []).find((s) => s.id === target.staffId);
+    this.saveAuditLog({
+      type: 'STAFF_ADVANCE_DELETED',
+      tableId: 'Staff-Payroll',
+      staffName: options.deletedBy || 'Manager',
+      itemName: `${staff ? staff.name : target.staffId} (${target.entryType})`,
+      itemPrice: Number(target.amount) || 0,
+      quantity: 1,
+      reason: options.reason || 'Advance/deduction entry deleted',
+    });
+
+    this.persist();
+    return { success: true, deletedId: id, deletedExpenseId };
+  }
+
+  getStaffPayroll(query = {}) {
+    let list = this.data.staffPayroll || [];
+    if (query.monthStr) {
+      list = list.filter((p) => p.monthStr === query.monthStr);
+    }
+    if (query.staffId) {
+      list = list.filter((p) => p.staffId === query.staffId);
+    }
+    return list;
+  }
+
+  settleStaffPayroll(record, options = {}) {
+    if (!record || !record.staffId || !record.monthStr) {
+      return { success: false, error: 'staffId and monthStr are required' };
+    }
+    if (!this.data.staffPayroll) this.data.staffPayroll = [];
+
+    const nowIso = new Date().toISOString();
+    const id = `${record.staffId}_${record.monthStr}`;
+    const staff = (this.data.staffMembers || []).find((s) => s.id === record.staffId);
+    const staffName = staff ? staff.name : record.staffId;
+    const paymentMode = record.paymentMode || 'Cash';
+    const paidDateStr = options.paidDateStr || this._localDateStr();
+
+    let linkedExpenseId = record.linkedExpenseId || null;
+    if (options.recordInExpenses === true && Number(record.netPayable) > 0 && paymentMode !== 'Adjustment') {
+      const expId = linkedExpenseId || `EXP-PAY-${id}`;
+      const expRecord = this.saveExpense({
+        id: expId,
+        title: `${staffName} - Salary (${record.monthStr})`,
+        category: 'Staff Salary',
+        amount: Number(record.netPayable),
+        paidBy: this._mapExpensePaidBy(paymentMode),
+        notes: record.notes || `Monthly salary settlement for ${record.monthStr}`,
+        recordedBy: record.paidBy || 'Manager',
+        timestamp: `${paidDateStr}T12:00:00`,
+      });
+      if (expRecord) {
+        expRecord.dateStr = paidDateStr;
+        linkedExpenseId = expRecord.id;
+      }
+    }
+
+    const saved = {
+      id,
+      staffId: record.staffId,
+      monthStr: record.monthStr,
+      payType: record.payType || 'monthly',
+      baseSalary: Number(record.baseSalary) || 0,
+      daysInMonth: Number(record.daysInMonth) || 30,
+      presentDays: Number(record.presentDays) || 0,
+      halfDays: Number(record.halfDays) || 0,
+      paidLeavesAndOffs: Number(record.paidLeavesAndOffs) || 0,
+      absentDays: Number(record.absentDays) || 0,
+      overtimeHours: Number(record.overtimeHours) || 0,
+      earnedBasePay: Number(record.earnedBasePay) || 0,
+      overtimePay: Number(record.overtimePay) || 0,
+      bonuses: Number(record.bonuses) || 0,
+      advancesDeducted: Number(record.advancesDeducted) || 0,
+      otherDeductions: Number(record.otherDeductions) || 0,
+      netPayable: Number(record.netPayable) || 0,
+      status: 'paid',
+      paymentMode,
+      paidAt: record.paidAt || nowIso,
+      paidBy: record.paidBy || 'Manager',
+      linkedExpenseId,
+      notes: record.notes || '',
+      updatedAt: nowIso,
+      cloudSynced: false,
+      isLocalNew: true,
+    };
+
+    const idx = this.data.staffPayroll.findIndex((p) => p.id === id);
+    if (idx >= 0) {
+      this.data.staffPayroll[idx] = saved;
+    } else {
+      this.data.staffPayroll.push(saved);
+    }
+
+    this.saveAuditLog({
+      type: 'STAFF_PAYROLL_PAID',
+      tableId: 'Staff-Payroll',
+      staffName: saved.paidBy,
+      itemName: `${staffName} (${record.monthStr})`,
+      itemPrice: saved.netPayable,
+      quantity: 1,
+      reason: `Salary settled via ${paymentMode}`,
+    });
+
+    this.removePendingDeletion('staff_payroll', id);
+    this.persist();
+    return { success: true, payroll: saved };
+  }
+
+  unlockStaffPayroll(id, options = {}) {
+    if (!id) return { success: false, error: 'Payroll ID required' };
+    const list = this.data.staffPayroll || [];
+    const target = list.find((p) => p.id === id);
+    if (!target) return { success: false, error: 'Payroll record not found' };
+
+    const deletedExpenseId =
+      options.deleteLinkedExpense === true && target.linkedExpenseId ? target.linkedExpenseId : null;
+    if (deletedExpenseId) {
+      this.deleteExpense(deletedExpenseId);
+      target.linkedExpenseId = null;
+    }
+
+    target.status = 'draft';
+    target.updatedAt = new Date().toISOString();
+    target.cloudSynced = false;
+    target.isLocalNew = true;
+
+    const staff = (this.data.staffMembers || []).find((s) => s.id === target.staffId);
+    this.saveAuditLog({
+      type: 'STAFF_PAYROLL_UNLOCKED',
+      tableId: 'Staff-Payroll',
+      staffName: options.unlockedBy || 'Manager',
+      itemName: `${staff ? staff.name : target.staffId} (${target.monthStr})`,
+      itemPrice: Number(target.netPayable) || 0,
+      quantity: 1,
+      reason: options.reason || 'Unlocked paid payroll for corrections',
+    });
+
+    this.persist();
+    return { success: true, payroll: target, deletedExpenseId };
+  }
+
+  // -------------------------------------------------------------
+  // Room Stays (Check-In, Short-Stay Custom Price & Checkout Billing)
+  // -------------------------------------------------------------
+  _findRoomById(roomId) {
+    const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-_]/g, '');
+    const target = norm(roomId);
+    return (this.data.rooms || []).find((r) => norm(r.id) === target || norm(r.name) === target);
+  }
+
+  getRoomStays(query = {}) {
+    let list = this.data.roomStays || [];
+    if (query.status && query.status !== 'all') {
+      list = list.filter((s) => s.status === query.status);
+    }
+    if (query.roomId) {
+      const norm = (s) => String(s || '').trim().toLowerCase().replace(/[\s-_]/g, '');
+      const target = norm(query.roomId);
+      list = list.filter((s) => norm(s.roomId) === target);
+    }
+    return list.slice().sort((a, b) => new Date(b.checkInAt || 0).getTime() - new Date(a.checkInAt || 0).getTime());
+  }
+
+  checkInRoomStay(stayData) {
+    if (!stayData || !stayData.roomId || !String(stayData.guestName || '').trim()) {
+      return { success: false, error: 'Room ID and guest name are required' };
+    }
+    if (!this.data.roomStays) this.data.roomStays = [];
+    const room = this._findRoomById(stayData.roomId);
+    const nowIso = new Date().toISOString();
+    const checkInDate = stayData.checkInDate || this._localDateStr();
+    const id = stayData.id || `STAY-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const stayType = stayData.stayType === 'short_stay' ? 'short_stay' : 'nightly';
+    const nightlyRate = Number(stayData.nightlyRate ?? room?.pricePerNight ?? 0) || 0;
+    const nights = stayType === 'short_stay' ? 1 : Math.max(1, Number(stayData.nights) || 1);
+    const customStayPrice = stayType === 'short_stay' ? Number(stayData.customStayPrice) || 0 : 0;
+    const extraCharges = Array.isArray(stayData.extraCharges) ? stayData.extraCharges : [];
+    const extrasTotal = extraCharges.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const roomCharge = stayType === 'short_stay' ? customStayPrice : nights * nightlyRate;
+    const totalAmount = Math.max(0, Math.round(roomCharge + extrasTotal - (Number(stayData.discount) || 0)));
+
+    const savedStay = {
+      id,
+      roomId: room ? room.id : stayData.roomId,
+      roomName: stayData.roomName || (room ? room.name : stayData.roomId),
+      stayType,
+      guestName: String(stayData.guestName).trim(),
+      guestPhone: stayData.guestPhone ? String(stayData.guestPhone).trim() : '',
+      numGuests: Math.max(1, Number(stayData.numGuests) || 1),
+      idProofNote: stayData.idProofNote ? String(stayData.idProofNote).trim() : '',
+      checkInAt: stayData.checkInAt || nowIso,
+      checkInDate,
+      expectedCheckOutDate: stayData.expectedCheckOutDate || '',
+      checkOutAt: null,
+      checkOutDate: null,
+      nightlyRate,
+      nights,
+      customStayPrice,
+      extraCharges,
+      advancePaid: Number(stayData.advancePaid) || 0,
+      advancePaymentMode: stayData.advancePaymentMode || 'Cash',
+      discount: Number(stayData.discount) || 0,
+      gstPercent: Number(stayData.gstPercent) || 0,
+      taxAmount: 0,
+      totalAmount,
+      status: 'active',
+      billId: null,
+      billNumber: null,
+      paymentMethod: null,
+      notes: stayData.notes ? String(stayData.notes).trim() : '',
+      createdBy: stayData.createdBy || 'Manager',
+      settledBy: null,
+      createdAt: stayData.createdAt || nowIso,
+      updatedAt: nowIso,
+      cloudSynced: false,
+      isLocalNew: true,
+    };
+
+    const idx = this.data.roomStays.findIndex((s) => s.id === id);
+    if (idx >= 0) this.data.roomStays[idx] = savedStay;
+    else this.data.roomStays.unshift(savedStay);
+
+    if (room) {
+      room.status = 'occupied';
+      room.guestName = savedStay.guestName;
+      room.checkInDate = savedStay.checkInDate;
+      room.checkOutDate = savedStay.expectedCheckOutDate || undefined;
+      room.folioAmount = savedStay.totalAmount;
+      room.notes = savedStay.notes || undefined;
+      room.updatedAt = Date.now();
+    }
+
+    this.saveAuditLog({
+      type: 'ROOM_CHECKIN',
+      tableId: savedStay.roomId,
+      staffName: savedStay.createdBy,
+      itemName: `${savedStay.guestName} (${stayType === 'short_stay' ? 'Short Stay' : `${nights}N`})`,
+      itemPrice: savedStay.totalAmount,
+      quantity: 1,
+      reason: savedStay.advancePaid > 0 ? `Check-in with advance ₹${savedStay.advancePaid}` : 'Guest check-in',
+    });
+
+    this.removePendingDeletion('room_stays', id);
+    this.persist();
+    return { success: true, stay: savedStay, room };
+  }
+
+  saveRoomStay(stayData) {
+    if (!stayData || !stayData.id) return { success: false, error: 'Stay ID required' };
+    if (!this.data.roomStays) this.data.roomStays = [];
+    const idx = this.data.roomStays.findIndex((s) => s.id === stayData.id);
+    if (idx < 0) return { success: false, error: 'Room stay not found' };
+
+    const existing = this.data.roomStays[idx];
+    const stayType = stayData.stayType === 'short_stay' ? 'short_stay' : 'nightly';
+    const nightlyRate = Number(stayData.nightlyRate ?? existing.nightlyRate) || 0;
+    const nights = stayType === 'short_stay' ? 1 : Math.max(1, Number(stayData.nights ?? existing.nights) || 1);
+    const customStayPrice = stayType === 'short_stay' ? Number(stayData.customStayPrice ?? existing.customStayPrice) || 0 : 0;
+    const extraCharges = Array.isArray(stayData.extraCharges) ? stayData.extraCharges : existing.extraCharges || [];
+    const extrasTotal = extraCharges.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const roomCharge = stayType === 'short_stay' ? customStayPrice : nights * nightlyRate;
+    const discount = Math.max(0, Number(stayData.discount ?? existing.discount) || 0);
+    const gstPercent = Math.max(0, Number(stayData.gstPercent ?? existing.gstPercent) || 0);
+    const taxable = Math.max(0, Math.round(roomCharge + extrasTotal - discount));
+    const taxAmount = gstPercent > 0 ? Math.round((taxable * gstPercent) / 100) : 0;
+    const totalAmount = Math.round(taxable + taxAmount);
+
+    const updated = {
+      ...existing,
+      ...stayData,
+      stayType,
+      nightlyRate,
+      nights,
+      customStayPrice,
+      extraCharges,
+      discount,
+      gstPercent,
+      taxAmount,
+      totalAmount,
+      updatedAt: new Date().toISOString(),
+      cloudSynced: false,
+      isLocalNew: true,
+    };
+    this.data.roomStays[idx] = updated;
+
+    if (updated.status === 'active') {
+      const room = this._findRoomById(updated.roomId);
+      if (room) {
+        room.guestName = updated.guestName;
+        room.checkInDate = updated.checkInDate;
+        room.checkOutDate = updated.expectedCheckOutDate || undefined;
+        room.folioAmount = updated.totalAmount;
+        room.notes = updated.notes || undefined;
+        room.updatedAt = Date.now();
+      }
+    }
+
+    this.persist();
+    return { success: true, stay: updated };
+  }
+
+  checkoutRoomStay(payload) {
+    if (!payload || !payload.stayId) return { success: false, error: 'stayId is required' };
+    if (!this.data.roomStays) this.data.roomStays = [];
+    const idx = this.data.roomStays.findIndex((s) => s.id === payload.stayId);
+    if (idx < 0) return { success: false, error: 'Active stay not found' };
+
+    const existing = this.data.roomStays[idx];
+    if (existing.status === 'checked_out') {
+      return { success: false, error: 'Stay is already checked out' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const checkOutDate = payload.checkOutDate || this._localDateStr();
+    const stayType = payload.stayType === 'short_stay' ? 'short_stay' : 'nightly';
+    const nightlyRate = Number(payload.nightlyRate ?? existing.nightlyRate) || 0;
+    const nights = stayType === 'short_stay' ? 1 : Math.max(1, Number(payload.nights ?? existing.nights) || 1);
+    const customStayPrice = stayType === 'short_stay' ? Number(payload.customStayPrice ?? existing.customStayPrice) || 0 : 0;
+    const extraCharges = Array.isArray(payload.extraCharges) ? payload.extraCharges : existing.extraCharges || [];
+    const roomCharge = stayType === 'short_stay' ? customStayPrice : Math.round(nights * nightlyRate);
+    const extrasTotal = extraCharges.reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const subtotal = Math.round(roomCharge + extrasTotal);
+    const discount = Math.min(subtotal, Math.max(0, Number(payload.discount ?? existing.discount) || 0));
+    const taxable = Math.max(0, subtotal - discount);
+    const gstPercent = Math.max(0, Number(payload.gstPercent ?? existing.gstPercent) || 0);
+    const taxAmount = gstPercent > 0 ? Math.round((taxable * gstPercent) / 100) : 0;
+    const totalAmount = Math.round(taxable + taxAmount);
+
+    const billItems = [
+      {
+        name:
+          stayType === 'short_stay'
+            ? `${existing.roomName || existing.roomId} (Short Stay / Custom)`
+            : `${existing.roomName || existing.roomId} (${nights} Night${nights === 1 ? '' : 's'})`,
+        quantity: stayType === 'short_stay' ? 1 : nights,
+        price: stayType === 'short_stay' ? customStayPrice : nightlyRate,
+        isCustom: stayType === 'short_stay',
+      },
+      ...extraCharges.map((ex) => ({
+        name: ex.label,
+        quantity: 1,
+        price: Number(ex.amount) || 0,
+        isCustom: true,
+      })),
+    ];
+
+    const billRecord = this.saveSettledBill({
+      department: 'rooms',
+      tableId: existing.roomId,
+      orderType: 'room-stay',
+      roomNumber: existing.roomId,
+      serverName: 'Front Desk',
+      settledBy: payload.settledBy || 'Manager',
+      customerPhone: existing.guestPhone || null,
+      customerName: existing.guestName,
+      items: billItems,
+      subtotal,
+      tax: taxAmount,
+      discount,
+      total: totalAmount,
+      paymentMethod: payload.paymentMethod || 'cash',
+      paymentDetails: payload.paymentDetails || {},
+      timestamp: nowIso,
+    });
+    if (billRecord) {
+      billRecord.dateStr = checkOutDate;
+    }
+
+    const updatedStay = {
+      ...existing,
+      stayType,
+      nightlyRate,
+      nights,
+      customStayPrice,
+      extraCharges,
+      discount,
+      gstPercent,
+      taxAmount,
+      totalAmount,
+      status: 'checked_out',
+      checkOutAt: nowIso,
+      checkOutDate,
+      billId: billRecord ? billRecord.id : null,
+      billNumber: billRecord ? billRecord.billNumber : null,
+      paymentMethod: payload.paymentMethod || 'cash',
+      settledBy: payload.settledBy || 'Manager',
+      notes: payload.notes !== undefined ? payload.notes : existing.notes,
+      updatedAt: nowIso,
+      cloudSynced: false,
+      isLocalNew: true,
+    };
+    this.data.roomStays[idx] = updatedStay;
+
+    const room = this._findRoomById(existing.roomId);
+    if (room) {
+      room.status = 'dirty';
+      room.guestName = undefined;
+      room.checkInDate = undefined;
+      room.checkOutDate = undefined;
+      room.folioAmount = 0;
+      room.notes = undefined;
+      room.updatedAt = Date.now();
+    }
+
+    this.saveAuditLog({
+      type: 'ROOM_CHECKOUT',
+      tableId: existing.roomId,
+      staffName: updatedStay.settledBy,
+      itemName: `${existing.guestName} (Bill #${billRecord ? billRecord.billNumber : ''})`,
+      itemPrice: totalAmount,
+      quantity: 1,
+      reason: `Room checkout settled via ${(updatedStay.paymentMethod || 'cash').toUpperCase()}`,
+    });
+
+    this.persist();
+    return { success: true, stay: updatedStay, bill: billRecord, room };
+  }
+
+  cancelRoomStay(stayId, reason = 'Cancelled by manager') {
+    if (!stayId) return { success: false, error: 'stayId required' };
+    const idx = (this.data.roomStays || []).findIndex((s) => s.id === stayId);
+    if (idx < 0) return { success: false, error: 'Stay not found' };
+    const stay = this.data.roomStays[idx];
+    stay.status = 'cancelled';
+    stay.notes = reason;
+    stay.updatedAt = new Date().toISOString();
+    stay.cloudSynced = false;
+    stay.isLocalNew = true;
+
+    const room = this._findRoomById(stay.roomId);
+    if (room && room.status === 'occupied') {
+      room.status = 'available';
+      room.guestName = undefined;
+      room.checkInDate = undefined;
+      room.checkOutDate = undefined;
+      room.folioAmount = 0;
+      room.notes = undefined;
+      room.updatedAt = Date.now();
+    }
+
+    this.persist();
+    return { success: true, stay };
   }
 
   // -------------------------------------------------------------
