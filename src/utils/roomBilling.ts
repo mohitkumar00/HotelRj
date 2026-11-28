@@ -147,18 +147,18 @@ export function generateRoomBillThermalHtml(
     .join('');
 
   return `
-    <div style="text-align:center; border-bottom:1px dashed #000; padding-bottom:6px; margin-bottom:6px;">
-      <div style="font-weight:bold; font-size:14px;">${escapeHtml(hotelName)}</div>
-      <div style="font-size:11px; font-weight:bold;">ROOM STAY INVOICE</div>
-      <div style="font-size:10px;">Bill #${escapeHtml(String(billNumber))} • ${escapeHtml(stay.roomName || stay.roomId)}</div>
+    <div style="text-align:center; border-bottom:1.5px dashed #000; padding-bottom:6px; margin-bottom:6px; font-weight:700; color:#000;">
+      <div style="font-weight:900; font-size:15px;">${escapeHtml(hotelName)}</div>
+      <div style="font-size:12px; font-weight:900;">ROOM STAY INVOICE</div>
+      <div style="font-size:11px; font-weight:700;">Bill #${escapeHtml(String(billNumber))} • ${escapeHtml(stay.roomName || stay.roomId)}</div>
     </div>
-    <div style="font-size:11px; margin-bottom:6px;">
+    <div style="font-size:11.5px; font-weight:700; margin-bottom:6px; color:#000;">
       <div><strong>Guest:</strong> ${escapeHtml(stay.guestName)}</div>
       ${stay.guestPhone ? `<div><strong>Phone:</strong> ${escapeHtml(stay.guestPhone)}</div>` : ''}
       <div><strong>Check-In:</strong> ${escapeHtml(stay.checkInDate)}</div>
       ${stay.checkOutDate ? `<div><strong>Check-Out:</strong> ${escapeHtml(stay.checkOutDate)}</div>` : ''}
     </div>
-    <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:4px 0; font-size:11px;">
+    <div style="border-top:1.5px dashed #000; border-bottom:1.5px dashed #000; padding:4px 0; font-size:11.5px; font-weight:700; color:#000;">
       <div style="display:flex; justify-content:space-between;">
         <span>${escapeHtml(stayDesc)}</span>
         <span>Rs.${totals.roomCharge}</span>

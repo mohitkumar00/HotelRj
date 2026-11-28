@@ -380,12 +380,17 @@ function printViaAndroidSpooler(htmlContent: string) {
           top: 0 !important;
           width: 58mm !important;
           margin: 0 !important;
-          padding: 4px !important;
-          font-family: 'Courier New', Courier, monospace !important;
-          font-size: 11px !important;
+          padding: 4px 6px !important;
+          font-family: 'Arial', 'Segoe UI', Tahoma, sans-serif !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
           line-height: 1.35 !important;
           color: #000 !important;
           background: #fff !important;
+          -webkit-print-color-adjust: exact !important;
+        }
+        #thermal-print-area * {
+          color: #000 !important;
         }
         @page {
           size: 58mm auto;
@@ -414,35 +419,35 @@ export function generateKOTHtml(data: KOTPrintData): string {
   const itemsHtml = data.items
     .map(
       (it) => `
-    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 13px; margin: 3px 0;">
+    <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 13px; margin: 3px 0; color: #000;">
       <span>${it.quantity}x ${it.name}</span>
     </div>
-    ${it.notes ? `<div style="font-size: 11px; font-style: italic; color: #333; padding-left: 8px;">👉 Note: <strong>${it.notes}</strong></div>` : ''}
+    ${it.notes ? `<div style="font-size: 11px; font-weight: 700; font-style: italic; color: #000; padding-left: 8px;">Note: ${it.notes}</div>` : ''}
   `
     )
     .join('');
 
   return `
-    <div style="text-align: center; font-weight: bold; font-size: 16px; letter-spacing: 1px;">K. O. T.</div>
-    <div style="text-align: center; font-weight: bold; font-size: 12px;">HOTEL RJ RESTAURANT</div>
-    ${isTakeaway ? `<div style="text-align: center; background: #000; color: #fff; font-weight: bold; padding: 2px; font-size: 12px; margin: 4px 0;">*** TAKEAWAY / PARCEL ***</div>` : ''}
-    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
-    <div style="font-size: 16px; font-weight: bold; text-align: center; margin: 2px 0;">TABLE: ${data.tableNumber}</div>
-    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+    <div style="text-align: center; font-weight: 900; font-size: 16px; letter-spacing: 1px;">K. O. T.</div>
+    <div style="text-align: center; font-weight: 800; font-size: 12px;">HOTEL RJ RESTAURANT</div>
+    ${isTakeaway ? `<div style="text-align: center; background: #000; color: #fff !important; font-weight: 900; padding: 2px; font-size: 12px; margin: 4px 0;">*** TAKEAWAY / PARCEL ***</div>` : ''}
+    <div style="border-top: 1.5px solid #000; margin: 4px 0;"></div>
+    <div style="font-size: 16px; font-weight: 900; text-align: center; margin: 2px 0;">TABLE: ${data.tableNumber}</div>
+    <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700;">
       <span>KOT #: ${data.kotNumber}</span>
-      <span>${data.timestamp}</span>
+      <span style="white-space: nowrap;">${data.timestamp}</span>
     </div>
-    <div style="font-size: 11px;">Server: <strong>${data.serverName}</strong></div>
-    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
-    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 11px;">
+    <div style="font-size: 11px; font-weight: 700;">Server: <strong>${data.serverName}</strong></div>
+    <div style="border-top: 1.5px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 11px;">
       <span>ITEMS TO COOK</span>
       <span>QTY</span>
     </div>
-    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    <div style="border-top: 1.5px dashed #000; margin: 4px 0;"></div>
     ${itemsHtml}
-    <div style="border-top: 1px dashed #000; margin: 5px 0;"></div>
-    ${data.orderNote ? `<div style="margin: 4px 0; font-size: 11px;"><strong>SPECIAL NOTE:</strong> ${data.orderNote}</div><div style="border-top: 1px dashed #000; margin: 4px 0;"></div>` : ''}
-    <div style="text-align: center; font-size: 10px; margin-top: 6px;">--- Sent to Kitchen ---</div>
+    <div style="border-top: 1.5px dashed #000; margin: 5px 0;"></div>
+    ${data.orderNote ? `<div style="margin: 4px 0; font-size: 11px; font-weight: 700;"><strong>SPECIAL NOTE:</strong> ${data.orderNote}</div><div style="border-top: 1.5px dashed #000; margin: 4px 0;"></div>` : ''}
+    <div style="text-align: center; font-size: 11px; font-weight: 700; margin-top: 6px;">--- Sent to Kitchen ---</div>
   `;
 }
 
@@ -453,11 +458,11 @@ export function generateBillHtml(data: BillPrintData): string {
     .map((it) => {
       const amt = ((it.price || 0) * it.quantity).toFixed(2);
       return `
-      <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 11px;">
-        <span>${it.name} x${it.quantity}</span>
-        <span>₹${amt}</span>
+      <div style="display: flex; justify-content: space-between; gap: 6px; margin: 3px 0; font-size: 11.5px; font-weight: 700; color: #000;">
+        <span style="flex: 1;">${it.name} x${it.quantity}</span>
+        <span style="white-space: nowrap;">₹${amt}</span>
       </div>
-      ${it.notes ? `<div style="font-size: 9.5px; font-style: italic; color: #555; padding-left: 8px;">(${it.notes})</div>` : ''}
+      ${it.notes ? `<div style="font-size: 10.5px; font-weight: 700; font-style: italic; color: #000; padding-left: 8px;">(${it.notes})</div>` : ''}
     `;
     })
     .join('');
@@ -467,39 +472,39 @@ export function generateBillHtml(data: BillPrintData): string {
   const gstAmt = data.gstRate ? (taxableAmt * data.gstRate) / 100 : 0;
 
   return `
-    <div style="text-align: center; font-weight: bold; font-size: 16px;">HOTEL RJ</div>
-    <div style="text-align: center; font-size: 9px;">Where Comfort Meets Great Taste</div>
-    <div style="text-align: center; font-size: 9px;">Suriya Road, Bagodar, Giridih (Jharkhand)</div>
-    <div style="text-align: center; font-size: 9px;">Tel: 7004865824 / 7004153034</div>
-    <div style="text-align: center; font-size: 10px; font-weight: bold; margin-top: 2px; letter-spacing: 0.5px;">GSTIN: 20BGPPJ2962J1ZA</div>
-    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
-    <div style="text-align: center; font-weight: bold; font-size: 12px;">${(data.gstRate && data.gstRate > 0) ? 'TAX INVOICE' : 'RETAIL INVOICE / GUEST BILL'}</div>
-    ${isTakeaway ? `<div style="text-align: center; font-weight: bold; font-size: 11px; margin: 2px 0;">[ TAKEAWAY PACKING ]</div>` : ''}
-    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
-    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+    <div style="text-align: center; font-weight: 900; font-size: 17px; letter-spacing: 0.5px;">HOTEL RJ</div>
+    <div style="text-align: center; font-size: 10.5px; font-weight: 700;">Where Comfort Meets Great Taste</div>
+    <div style="text-align: center; font-size: 10.5px; font-weight: 700;">Suriya Road, Bagodar, Giridih (Jharkhand)</div>
+    <div style="text-align: center; font-size: 10.5px; font-weight: 700;">Tel: 7004865824 / 7004153034</div>
+    <div style="text-align: center; font-size: 11px; font-weight: 900; margin-top: 2px; letter-spacing: 0.5px;">GSTIN: 20BGPPJ2962J1ZA</div>
+    <div style="border-top: 1.5px solid #000; margin: 4px 0;"></div>
+    <div style="text-align: center; font-weight: 900; font-size: 12px;">${(data.gstRate && data.gstRate > 0) ? 'TAX INVOICE' : 'RETAIL INVOICE / GUEST BILL'}</div>
+    ${isTakeaway ? `<div style="text-align: center; font-weight: 900; font-size: 11px; margin: 2px 0;">[ TAKEAWAY PACKING ]</div>` : ''}
+    <div style="border-top: 1.5px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; gap: 4px; flex-wrap: wrap; font-size: 11px; font-weight: 700;">
       <span>Table: <strong>${data.tableNumber}</strong></span>
-      <span>Bill #: ${data.billNumber}</span>
+      <span>Bill #: <strong>${data.billNumber}</strong></span>
     </div>
-    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+    <div style="display: flex; justify-content: space-between; gap: 4px; flex-wrap: wrap; font-size: 11px; font-weight: 700; margin-top: 1px;">
       <span>Date: ${data.timestamp}</span>
       <span>Staff: ${data.serverName}</span>
     </div>
-    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
-    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 11px;">
+    <div style="border-top: 1.5px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 11.5px;">
       <span>ITEM</span>
       <span>AMOUNT</span>
     </div>
-    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
+    <div style="border-top: 1.5px dashed #000; margin: 4px 0;"></div>
     ${itemsHtml}
-    <div style="border-top: 1px dashed #000; margin: 4px 0;"></div>
-    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+    <div style="border-top: 1.5px dashed #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700;">
       <span>Subtotal:</span>
       <span>₹${data.subtotal.toFixed(2)}</span>
     </div>
     ${
       discountAmt > 0
         ? `
-    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #16a34a; font-weight: 600;">
+    <div style="display: flex; justify-content: space-between; font-size: 11.5px; color: #000; font-weight: 800;">
       <span>Discount ${data.discountPercent ? `(${data.discountPercent}%)` : ''}:</span>
       <span>-₹${discountAmt.toFixed(2)}</span>
     </div>`
@@ -508,33 +513,33 @@ export function generateBillHtml(data: BillPrintData): string {
     ${
       data.gstRate
         ? `
-    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+    <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700;">
       <span>GST (${data.gstRate}%):</span>
       <span>₹${gstAmt.toFixed(2)}</span>
     </div>`
         : ''
     }
-    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
-    <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px;">
+    <div style="border-top: 1.5px solid #000; margin: 4px 0;"></div>
+    <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 15px;">
       <span>TOTAL:</span>
       <span>₹${data.grandTotal.toFixed(2)}</span>
     </div>
     ${
       data.paymentMode
         ? `
-    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px;">
+    <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 700; margin-top: 2px;">
       <span>Paid via:</span>
-      <span style="font-weight: bold;">${data.paymentMode}</span>
+      <span style="font-weight: 900;">${data.paymentMode}</span>
     </div>`
         : ''
     }
-    <div style="border-top: 1px solid #000; margin: 4px 0;"></div>
-    <div style="text-align: center; margin-top: 6px; font-size: 10px;">
+    <div style="border-top: 1.5px solid #000; margin: 4px 0;"></div>
+    <div style="text-align: center; margin-top: 6px; font-size: 11px; font-weight: 700;">
       <strong>Scan & Pay via UPI:</strong><br/>
-      hotelrj.info@okaxis<br/>
+      <strong>hotelrj.info@okaxis</strong><br/>
       (PhonePe / Google Pay / Paytm)
     </div>
-    <div style="text-align: center; margin-top: 8px; font-size: 10px; font-weight: bold;">
+    <div style="text-align: center; margin-top: 8px; font-size: 11px; font-weight: 900;">
       Thank You! Visit Again Hotel RJ!
     </div>
   `;
@@ -634,6 +639,7 @@ function generateBillEscPos(data: BillPrintData): Uint8Array {
   s += CMD.BOLD_OFF;
 
   s += CMD.ALIGN_LEFT;
+  s += CMD.BOLD_ON;
   s += line32(`Bill: ${data.billNumber}`, `Table: ${data.tableNumber}`);
   s += line32(`Date: ${data.timestamp}`, `Staff: ${data.serverName}`);
   s += '--------------------------------\n';

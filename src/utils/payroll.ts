@@ -172,17 +172,17 @@ export function generatePayslipThermalHtml(
   hotelName = 'HOTEL RJ'
 ): string {
   return `
-    <div style="text-align:center; border-bottom:1px dashed #000; padding-bottom:6px; margin-bottom:6px;">
-      <div style="font-weight:bold; font-size:14px;">${escapeHtml(hotelName)}</div>
-      <div style="font-size:11px; font-weight:bold;">STAFF SALARY SLIP</div>
-      <div style="font-size:10px;">Month: ${escapeHtml(payroll.monthStr)}</div>
+    <div style="text-align:center; border-bottom:1.5px dashed #000; padding-bottom:6px; margin-bottom:6px; font-weight:700; color:#000;">
+      <div style="font-weight:900; font-size:15px;">${escapeHtml(hotelName)}</div>
+      <div style="font-size:12px; font-weight:900;">STAFF SALARY SLIP</div>
+      <div style="font-size:11px; font-weight:700;">Month: ${escapeHtml(payroll.monthStr)}</div>
     </div>
-    <div style="font-size:11px; margin-bottom:6px;">
+    <div style="font-size:11.5px; font-weight:700; margin-bottom:6px; color:#000;">
       <div><strong>Name:</strong> ${escapeHtml(member.name)}</div>
       <div><strong>Role:</strong> ${escapeHtml(member.role)} (${escapeHtml(member.department)})</div>
       <div><strong>Basis:</strong> ${payroll.payType === 'daily' ? `Daily ₹${payroll.baseSalary}` : `Monthly ₹${payroll.baseSalary}`}</div>
     </div>
-    <div style="border-top:1px dashed #000; border-bottom:1px dashed #000; padding:4px 0; font-size:11px;">
+    <div style="border-top:1.5px dashed #000; border-bottom:1.5px dashed #000; padding:4px 0; font-size:11.5px; font-weight:700; color:#000;">
       <div style="display:flex; justify-content:space-between;"><span>Present / Leave+WO:</span><span>${payroll.presentDays}d / ${payroll.paidLeavesAndOffs}d</span></div>
       <div style="display:flex; justify-content:space-between;"><span>Half-Day / Absent:</span><span>${payroll.halfDays}d / ${payroll.absentDays}d</span></div>
       ${payroll.overtimeHours > 0 ? `<div style="display:flex; justify-content:space-between;"><span>Overtime:</span><span>${payroll.overtimeHours} hrs</span></div>` : ''}

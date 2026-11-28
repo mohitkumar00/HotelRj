@@ -125,15 +125,22 @@ ipcMain.handle('print-thermal', async (event, { html, deviceName }) => {
             <meta charset="utf-8" />
             <style>
               @page { size: 58mm auto; margin: 0; }
+              * {
+                box-sizing: border-box;
+                color: #000 !important;
+                -webkit-print-color-adjust: exact;
+              }
               body {
                 width: 58mm;
                 margin: 0;
-                padding: 4px;
-                font-family: 'Courier New', Courier, monospace;
-                font-size: 11px;
+                padding: 4px 6px;
+                font-family: 'Arial', 'Segoe UI', Tahoma, sans-serif;
+                font-size: 12px;
+                font-weight: 700;
                 line-height: 1.35;
                 color: #000;
                 background: #fff;
+                -webkit-font-smoothing: none;
               }
             </style>
           </head>
